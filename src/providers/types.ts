@@ -50,6 +50,28 @@ export interface CEModelParams {
     qaly_comparator: number;
   };
   output_format?: OutputFormat;
+
+  // New fields for advanced model selection
+  model_type?: "markov" | "partsa" | "decision_tree";  // default "markov"
+  states?: string[];           // custom state names for Markov
+  run_psa?: boolean;           // default true
+  psa_iterations?: number;     // 1-10000, default 1000
+  run_owsa?: boolean;          // default true
+  parameter_uncertainty?: {
+    transition_probabilities?: Record<string, { mean: number; ci_lower: number; ci_upper: number }>;
+    utilities?: Record<string, { mean: number; ci_lower: number; ci_upper: number }>;
+    costs?: Record<string, { mean: number; sd: number }>;
+  };
+
+  // PartSA fields (used when model_type === "partsa")
+  survival_inputs?: {
+    os_median_months?: number;
+    pfs_median_months?: number;
+    os_median_months_comparator?: number;
+    pfs_median_months_comparator?: number;
+    survival_distribution?: "exponential" | "weibull";
+    weibull_shape?: number;
+  };
 }
 
 export interface DossierParams {
@@ -67,13 +89,62 @@ export interface ToolResult {
   audit: AuditRecord;
 }
 
-export interface CEModelResult {
-  icer: number;
+export interface WTPAssessment {
+  threshold_low: number;
+  threshold_high: number;
   currency: string;
-  interpretation: string;
-  sensitivity_range: { low: number; high: number };
-  model_structure: string;
-  disclaimer: string;
+  symbol: string;
+  verdict: "cost_effective" | "borderline" | "not_cost_effective" | "dominated";
+}
+
+export interface PSASummary {
+  iterations: number;
+  mean_icer: number;
+  ci_icer_lower: number;
+  ci_icer_upper: number;
+  prob_cost_effective: Record<string, number>;
+  ceac: Array<{ wtp: number; prob_ce: number }>;
+  evpi: number;
+  scatter: Array<{ delta_cost: number; delta_qaly: number }>;
+}
+
+export interface OWSASummary {
+  parameter: string;
+  low_value: number;
+  high_value: number;
+  icer_low: number;
+  icer_high: number;
+  impact: number;
+}
+
+export interface CEModelResult {
+  base_case: {
+    icer: number;
+    delta_cost: number;
+    delta_qaly: number;
+    incremental_lys: number;
+    total_cost_intervention: number;
+    total_cost_comparator: number;
+    total_qaly_intervention: number;
+    total_qaly_comparator: number;
+  };
+  psa?: PSASummary;
+  owsa?: OWSASummary[];
+  wtp_analysis: {
+    nhs: WTPAssessment;
+    us_payer: WTPAssessment;
+    societal: WTPAssessment;
+  };
+  model_metadata: {
+    model_type: string;
+    states: string[];
+    cycles: number;
+    cycle_length: string;
+    discount_rate_costs: number;
+    discount_rate_outcomes: number;
+    time_horizon_years: number;
+  };
+  audit: AuditRecord;
 }
 
 export interface DossierSection {

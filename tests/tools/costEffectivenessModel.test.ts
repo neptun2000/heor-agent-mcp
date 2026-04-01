@@ -45,4 +45,18 @@ describe("handleCostEffectivenessModel", () => {
     const result = await handleCostEffectivenessModel(validParams);
     expect(result.audit.assumptions.length).toBeGreaterThan(0);
   });
+
+  it("ICER direction is correct when intervention costs more than comparator", async () => {
+    // drug_cost_annual=800 > comparator_cost_annual=400, so delta_cost must be > 0
+    // With positive efficacy_delta, intervention also has better QALYs → ICER > 0
+    const result = await handleCostEffectivenessModel({
+      ...validParams,
+      output_format: "json",
+    });
+    const modelResult = result.content as {
+      base_case: { delta_cost: number; delta_qaly: number; icer: number };
+    };
+    expect(modelResult.base_case.delta_cost).toBeGreaterThan(0);
+    expect(modelResult.base_case.icer).toBeGreaterThan(0);
+  });
 });

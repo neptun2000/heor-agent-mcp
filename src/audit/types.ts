@@ -16,11 +16,14 @@ export interface ExclusionRecord {
 
 export interface AuditRecord {
   tool: string;
+  /** ISO 8601 timestamp when the tool invocation began (query start time, not completion time) */
   timestamp: string;
   query: Record<string, unknown>;
   sources_queried: SourceAudit[];
   methodology: string;
+  /** Running total of results included across all sources — incremented by addSource() */
   inclusions: number;
+  /** Individual exclusion records with reasons — use .length for count. Exclusions track WHY items were dropped; inclusions are just counted since the results array IS the included set */
   exclusions: ExclusionRecord[];
   assumptions: string[];
   warnings: string[];

@@ -1,4 +1,9 @@
-import type { CEModelParams, ToolResult } from "../providers/types.js";
+import type { CEModelParams, ToolResult, CEModelResult, WTPAssessment, PSASummary, OWSASummary } from "../providers/types.js";
+import { runMarkovModel } from "../models/markov.js";
+import { runPartSA } from "../models/partsa.js";
+import { runPSA } from "../models/psa.js";
+import { runOWSA, buildDefaultOWSAParameters } from "../models/owsa.js";
+import { buildMarkovParamsFromCE, runMarkovAndComputeICER } from "../models/modelUtils.js";
 import { createAuditRecord, addAssumption, setMethodology } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
 
@@ -17,43 +22,44 @@ function getTimeHorizonYears(horizon: CEModelParams["time_horizon"]): number {
   return Number(horizon);
 }
 
+function wtpVerdict(
+  icer: number,
+  threshold: { low: number; high: number }
+): WTPAssessment["verdict"] {
+  if (!isFinite(icer) && icer < 0) return "dominated";
+  if (!isFinite(icer)) return "not_cost_effective";
+  if (icer < threshold.low) return "cost_effective";
+  if (icer < threshold.high) return "borderline";
+  return "not_cost_effective";
+}
+
+function buildWTPAssessment(
+  icer: number,
+  perspective: keyof typeof WTP_THRESHOLDS
+): WTPAssessment {
+  const threshold = WTP_THRESHOLDS[perspective];
+  return {
+    threshold_low: threshold.low,
+    threshold_high: threshold.high,
+    currency: threshold.currency,
+    symbol: threshold.symbol,
+    verdict: wtpVerdict(icer, threshold),
+  };
+}
+
 export async function handleCostEffectivenessModel(params: CEModelParams): Promise<ToolResult> {
   const outputFormat = params.output_format ?? "text";
   let audit = createAuditRecord("cost_effectiveness_model", params as unknown as Record<string, unknown>, outputFormat);
-  audit = setMethodology(audit, "Markov model (2-state: on-treatment, off-treatment) with annual cycles");
 
+  const modelType = params.model_type ?? "markov";
   const years = getTimeHorizonYears(params.time_horizon);
   const threshold = WTP_THRESHOLDS[params.perspective];
   const { symbol } = threshold;
 
-  const incrementalCostAnnual =
-    (params.cost_inputs.drug_cost_annual + (params.cost_inputs.admin_cost ?? 0)) -
-    (params.cost_inputs.comparator_cost_annual + (params.cost_inputs.admin_cost ?? 0));
-
-  let discountedCost = 0;
-  let discountedQaly = 0;
-  for (let t = 0; t < years; t++) {
-    const discountFactor = 1 / Math.pow(1 + DISCOUNT_RATE, t);
-    discountedCost += incrementalCostAnnual * discountFactor;
-    if (params.utility_inputs) {
-      discountedQaly += (params.utility_inputs.qaly_on_treatment - params.utility_inputs.qaly_comparator) * discountFactor;
-    } else {
-      discountedQaly += params.clinical_inputs.efficacy_delta * 0.1 * discountFactor;
-    }
-  }
-
-  const icer = discountedQaly > 0 ? discountedCost / discountedQaly : Infinity;
-  const icerFormatted = isFinite(icer) ? Math.round(icer).toLocaleString() : "Dominated";
-  const sensitivityLow = isFinite(icer) ? Math.round(icer * 0.8).toLocaleString() : "N/A";
-  const sensitivityHigh = isFinite(icer) ? Math.round(icer * 1.5).toLocaleString() : "N/A";
-
-  const interpretation = isFinite(icer)
-    ? icer < threshold.low
-      ? `${symbol}${icerFormatted}/QALY — likely cost-effective (below NICE threshold of ${symbol}${threshold.low.toLocaleString()})`
-      : icer < threshold.high
-        ? `${symbol}${icerFormatted}/QALY — borderline cost-effective (within ${symbol}${threshold.low.toLocaleString()}–${symbol}${threshold.high.toLocaleString()} threshold range)`
-        : `${symbol}${icerFormatted}/QALY — not cost-effective at standard threshold`
-    : "Dominated — intervention costs more and provides less benefit than comparator";
+  audit = setMethodology(
+    audit,
+    `Markov model (multi-state) with half-cycle correction and PSA — ${modelType === "partsa" ? "Partitioned Survival Analysis" : "2-state Markov"}`
+  );
 
   audit = addAssumption(audit, `Discount rate: ${DISCOUNT_RATE * 100}% (NICE reference case)`);
   audit = addAssumption(audit, `Time horizon: ${years} years (${params.time_horizon})`);
@@ -61,6 +67,196 @@ export async function handleCostEffectivenessModel(params: CEModelParams): Promi
   audit = addAssumption(audit, `Markov cycle length: 1 year`);
   if (!params.utility_inputs) {
     audit = addAssumption(audit, `QALY estimate derived from efficacy delta (utility inputs not provided) — use with caution`);
+  }
+
+  // --- Base case ---
+  let delta_cost: number;
+  let delta_qaly: number;
+  let icer: number;
+  let intervention_cost: number;
+  let comparator_cost: number;
+  let intervention_qaly: number;
+  let comparator_qaly: number;
+  let intervention_lys: number;
+  let comparator_lys: number;
+  let stateNames: string[];
+  let nCycles: number;
+
+  if (modelType === "partsa" && params.survival_inputs) {
+    const si = params.survival_inputs;
+    const partSAResult = runPartSA({
+      intervention_survival: {
+        os_median_months: si.os_median_months ?? 24,
+        pfs_median_months: si.pfs_median_months ?? 12,
+        distribution: si.survival_distribution ?? "exponential",
+        weibull_shape: si.weibull_shape,
+      },
+      comparator_survival: {
+        os_median_months: si.os_median_months_comparator ?? 18,
+        pfs_median_months: si.pfs_median_months_comparator ?? 9,
+        distribution: si.survival_distribution ?? "exponential",
+        weibull_shape: si.weibull_shape,
+      },
+      states: ["PFS", "PD", "Dead"],
+      utility_pfs: params.utility_inputs?.qaly_on_treatment ?? 0.75,
+      utility_pd: params.utility_inputs?.qaly_comparator ?? 0.55,
+      cost_pfs_annual: params.cost_inputs.drug_cost_annual,
+      cost_pd_annual: params.cost_inputs.comparator_cost_annual,
+      n_cycles: years,
+      cycle_length_years: 1,
+      discount_rate_costs: DISCOUNT_RATE,
+      discount_rate_outcomes: DISCOUNT_RATE,
+    });
+
+    delta_cost = partSAResult.intervention.total_cost - partSAResult.comparator.total_cost;
+    delta_qaly = partSAResult.intervention.total_qaly - partSAResult.comparator.total_qaly;
+    icer = delta_qaly > 0 ? delta_cost / delta_qaly : (delta_qaly < 0 ? -Infinity : Infinity);
+    intervention_cost = partSAResult.intervention.total_cost;
+    comparator_cost = partSAResult.comparator.total_cost;
+    intervention_qaly = partSAResult.intervention.total_qaly;
+    comparator_qaly = partSAResult.comparator.total_qaly;
+    intervention_lys = partSAResult.intervention.total_lys;
+    comparator_lys = partSAResult.comparator.total_lys;
+    stateNames = ["PFS", "PD", "Dead"];
+    nCycles = years;
+  } else {
+    // Default: Markov
+    const markovResult = runMarkovAndComputeICER(params);
+    delta_cost = markovResult.delta_cost;
+    delta_qaly = markovResult.delta_qaly;
+    icer = markovResult.icer;
+    intervention_cost = markovResult.intervention_cost;
+    comparator_cost = markovResult.comparator_cost;
+    intervention_qaly = markovResult.intervention_qaly;
+    comparator_qaly = markovResult.comparator_qaly;
+    intervention_lys = markovResult.intervention_lys;
+    comparator_lys = markovResult.comparator_lys;
+    stateNames = params.states ?? ["On-Treatment", "Off-Treatment"];
+    nCycles = years;
+  }
+
+  const incremental_lys = intervention_lys - comparator_lys;
+
+  // --- PSA ---
+  let psaSummary: PSASummary | undefined;
+  if (params.run_psa !== false && modelType !== "partsa") {
+    const n_iterations = Math.min(10000, Math.max(1, params.psa_iterations ?? 1000));
+    const psaResult = runPSA({
+      base_params: params,
+      n_iterations,
+      seed: 12345,
+    });
+
+    psaSummary = {
+      iterations: n_iterations,
+      mean_icer: psaResult.mean_icer,
+      ci_icer_lower: psaResult.ci_icer_lower,
+      ci_icer_upper: psaResult.ci_icer_upper,
+      prob_cost_effective: psaResult.prob_cost_effective,
+      ceac: psaResult.ceac,
+      evpi: psaResult.evpi,
+      scatter: psaResult.scatter_sample.map(it => ({ delta_cost: it.delta_cost, delta_qaly: it.delta_qaly })),
+    };
+  }
+
+  // --- OWSA ---
+  let owsaResults: OWSASummary[] | undefined;
+  if (params.run_owsa !== false) {
+    const owsaParams = buildDefaultOWSAParameters(params);
+    const rawOWSA = runOWSA(params, owsaParams, (p) => runMarkovAndComputeICER(p));
+    owsaResults = rawOWSA.map(r => ({
+      parameter: r.parameter,
+      low_value: r.low_value,
+      high_value: r.high_value,
+      icer_low: r.icer_low,
+      icer_high: r.icer_high,
+      impact: r.impact,
+    }));
+  }
+
+  // --- WTP Analysis ---
+  const wtp_analysis = {
+    nhs: buildWTPAssessment(icer, "nhs"),
+    us_payer: buildWTPAssessment(icer, "us_payer"),
+    societal: buildWTPAssessment(icer, "societal"),
+  };
+
+  // --- Build result ---
+  const modelResult: CEModelResult = {
+    base_case: {
+      icer,
+      delta_cost,
+      delta_qaly,
+      incremental_lys,
+      total_cost_intervention: intervention_cost,
+      total_cost_comparator: comparator_cost,
+      total_qaly_intervention: intervention_qaly,
+      total_qaly_comparator: comparator_qaly,
+    },
+    psa: psaSummary,
+    owsa: owsaResults,
+    wtp_analysis,
+    model_metadata: {
+      model_type: modelType,
+      states: stateNames,
+      cycles: nCycles,
+      cycle_length: "1 year",
+      discount_rate_costs: DISCOUNT_RATE,
+      discount_rate_outcomes: DISCOUNT_RATE,
+      time_horizon_years: years,
+    },
+    audit,
+  };
+
+  if (outputFormat === "json") {
+    return { content: modelResult, audit };
+  }
+
+  // --- Text output (backwards-compatible) ---
+  const icerFormatted = isFinite(icer) ? Math.round(icer).toLocaleString() : "Dominated";
+  const perspectiveVerdict = wtp_analysis[params.perspective];
+
+  const interpretation = isFinite(icer) && icer >= 0
+    ? icer < threshold.low
+      ? `${symbol}${icerFormatted}/QALY — likely cost-effective (below NICE threshold of ${symbol}${threshold.low.toLocaleString()})`
+      : icer < threshold.high
+        ? `${symbol}${icerFormatted}/QALY — borderline cost-effective (within ${symbol}${threshold.low.toLocaleString()}–${symbol}${threshold.high.toLocaleString()} threshold range)`
+        : `${symbol}${icerFormatted}/QALY — not cost-effective at standard threshold`
+    : "Dominated — intervention costs more and provides less benefit than comparator";
+
+  // PSA section
+  const psaSection: string[] = [];
+  if (psaSummary) {
+    const pcePerspective = perspectiveVerdict.currency === "GBP"
+      ? psaSummary.prob_cost_effective["nhs_low"] ?? 0
+      : psaSummary.prob_cost_effective["us_payer_low"] ?? 0;
+    const pcePercent = Math.round((pcePerspective) * 100);
+
+    psaSection.push(
+      `### Probabilistic Sensitivity Analysis (PSA)`,
+      `Based on ${psaSummary.iterations.toLocaleString()} Monte Carlo iterations:`,
+      `- **Mean ICER:** ${symbol}${Math.round(psaSummary.mean_icer).toLocaleString()}/QALY`,
+      `- **95% CI:** ${symbol}${Math.round(psaSummary.ci_icer_lower).toLocaleString()} – ${symbol}${Math.round(psaSummary.ci_icer_upper).toLocaleString()}/QALY`,
+      `- **Probability cost-effective** at ${params.perspective} threshold: **${pcePercent}%**`,
+      `- **EVPI:** ${symbol}${Math.round(psaSummary.evpi).toLocaleString()} (expected value of perfect information)`,
+      ``
+    );
+  }
+
+  // OWSA section (top 5)
+  const owsaSection: string[] = [];
+  if (owsaResults && owsaResults.length > 0) {
+    owsaSection.push(`### One-Way Sensitivity Analysis (Tornado)`);
+    owsaSection.push(`Top ${Math.min(5, owsaResults.length)} parameters by ICER impact:`);
+    owsaSection.push(`| Parameter | Low ICER | High ICER | Impact |`);
+    owsaSection.push(`|-----------|----------|-----------|--------|`);
+    for (const r of owsaResults.slice(0, 5)) {
+      const low = isFinite(r.icer_low) ? `${symbol}${Math.round(r.icer_low).toLocaleString()}` : "N/A";
+      const high = isFinite(r.icer_high) ? `${symbol}${Math.round(r.icer_high).toLocaleString()}` : "N/A";
+      const impact = isFinite(r.impact) ? `${symbol}${Math.round(r.impact).toLocaleString()}` : "N/A";
+      owsaSection.push(`| ${r.parameter} | ${low} | ${high} | ${impact} |`);
+    }
+    owsaSection.push(``);
   }
 
   const content = [
@@ -72,12 +268,18 @@ export async function handleCostEffectivenessModel(params: CEModelParams): Promi
     ``,
     `**Interpretation:** ${interpretation}`,
     ``,
-    `### Sensitivity Analysis`,
-    `One-way sensitivity (±20–50% key parameters): ${symbol}${sensitivityLow} – ${symbol}${sensitivityHigh} per QALY`,
+    `### Base Case Summary`,
+    `| Metric | ${params.intervention} | ${params.comparator} | Incremental |`,
+    `|--------|${"-".repeat(params.intervention.length + 2)}|${"-".repeat(params.comparator.length + 2)}|-------------|`,
+    `| Total Cost | ${symbol}${Math.round(intervention_cost).toLocaleString()} | ${symbol}${Math.round(comparator_cost).toLocaleString()} | ${symbol}${Math.round(delta_cost).toLocaleString()} |`,
+    `| Total QALYs | ${intervention_qaly.toFixed(3)} | ${comparator_qaly.toFixed(3)} | ${delta_qaly.toFixed(3)} |`,
+    `| Life Years | ${intervention_lys.toFixed(2)} | ${comparator_lys.toFixed(2)} | ${incremental_lys.toFixed(2)} |`,
     ``,
+    ...psaSection,
+    ...owsaSection,
     `### Model Structure`,
-    `Two-state Markov model with annual cycles. Discounted at ${DISCOUNT_RATE * 100}% per NICE reference case.`,
-    `Incremental annual cost: ${symbol}${Math.round(incrementalCostAnnual).toLocaleString()}`,
+    `Multi-state Markov model with half-cycle correction. Discounted at ${DISCOUNT_RATE * 100}% per NICE reference case.`,
+    `States: ${stateNames.join(", ")} | Cycles: ${nCycles} annual cycles`,
     ``,
     `---`,
     `> ⚠️ **Disclaimer:** This is a preliminary model for orientation purposes only. Results require validation by a qualified health economist before use in any HTA submission or payer negotiation.`,

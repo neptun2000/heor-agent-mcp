@@ -1,6 +1,7 @@
 {
   "name": "heor-agent-mcp",
   "version": "0.1.0",
+  "engines": { "node": ">=20.0.0" },
   "description": "HEOR AI agent as an MCP server for Claude.ai",
   "type": "module",
   "main": "dist/server.js",

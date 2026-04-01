@@ -27,22 +27,34 @@ export function buildMarkovParamsFromCE(params: CEModelParams): MarkovParams {
 
   // Utility values
   const utilityOn = params.utility_inputs?.qaly_on_treatment ?? 0.75;
-  const utilityOff = params.utility_inputs?.qaly_comparator ?? 0.70;
+  const utilityOff = params.utility_inputs?.qaly_comparator ?? 0.7;
 
   // Costs
-  const costIntervention = params.cost_inputs.drug_cost_annual + (params.cost_inputs.admin_cost ?? 0);
-  const costComparator = params.cost_inputs.comparator_cost_annual + (params.cost_inputs.admin_cost ?? 0);
+  const costIntervention =
+    params.cost_inputs.drug_cost_annual + (params.cost_inputs.admin_cost ?? 0);
+  const costComparator =
+    params.cost_inputs.comparator_cost_annual +
+    (params.cost_inputs.admin_cost ?? 0);
 
   // Efficacy delta used to derive annual probability of staying on treatment
   // Higher efficacy → more cycles on treatment → better health
-  const efficacyDelta = Math.max(0, Math.min(0.999, params.clinical_inputs.efficacy_delta));
+  const efficacyDelta = Math.max(
+    0,
+    Math.min(0.999, params.clinical_inputs.efficacy_delta),
+  );
   const mortalityReduction = params.clinical_inputs.mortality_reduction ?? 0;
 
   // Transition: prob of staying in On-Treatment state for intervention
   // Base: driven by efficacy (0.4 efficacy → ~0.8 prob of staying on treatment, modulated)
-  const probStayOnIntervention = Math.max(0.05, Math.min(0.95, 0.5 + efficacyDelta * 0.5));
+  const probStayOnIntervention = Math.max(
+    0.05,
+    Math.min(0.95, 0.5 + efficacyDelta * 0.5),
+  );
   // For comparator: lower stay probability (baseline)
-  const baselineProbStayOn = Math.max(0.05, Math.min(0.90, probStayOnIntervention * 0.7));
+  const baselineProbStayOn = Math.max(
+    0.05,
+    Math.min(0.9, probStayOnIntervention * 0.7),
+  );
 
   // Mortality reduction affects off-treatment → death transition
   // (simplified: mortality reduction lowers probability of going to off-treatment)
@@ -61,7 +73,10 @@ export function buildMarkovParamsFromCE(params: CEModelParams): MarkovParams {
   const transition_matrix_intervention: TransitionMatrix = {
     "On-Treatment": {
       "On-Treatment": Math.min(0.95, probStayOnIntervention + mortalityEffect),
-      "Off-Treatment": Math.max(0.05, 1 - probStayOnIntervention - mortalityEffect),
+      "Off-Treatment": Math.max(
+        0.05,
+        1 - probStayOnIntervention - mortalityEffect,
+      ),
     },
     "Off-Treatment": {
       "On-Treatment": 0.05,
@@ -71,8 +86,8 @@ export function buildMarkovParamsFromCE(params: CEModelParams): MarkovParams {
 
   const transition_matrix_comparator: TransitionMatrix = {
     "On-Treatment": {
-      "On-Treatment": Math.min(0.90, baselineProbStayOn),
-      "Off-Treatment": Math.max(0.10, 1 - baselineProbStayOn),
+      "On-Treatment": Math.min(0.9, baselineProbStayOn),
+      "Off-Treatment": Math.max(0.1, 1 - baselineProbStayOn),
     },
     "Off-Treatment": {
       "On-Treatment": 0.05,
@@ -94,6 +109,9 @@ export function buildMarkovParamsFromCE(params: CEModelParams): MarkovParams {
 
 /**
  * Run Markov model from CEModelParams and return delta_cost, delta_qaly, ICER.
+ *
+ * Runs the model twice — once with intervention state costs and once with
+ * comparator state costs — so each arm uses the correct drug cost.
  */
 export function runMarkovAndComputeICER(params: CEModelParams): {
   delta_cost: number;
@@ -106,12 +124,55 @@ export function runMarkovAndComputeICER(params: CEModelParams): {
   intervention_lys: number;
   comparator_lys: number;
 } {
-  const markovParams = buildMarkovParamsFromCE(params);
-  const { intervention, comparator } = runMarkovModel(markovParams);
+  const baseParams = buildMarkovParamsFromCE(params);
+
+  // Utility values (shared across arms)
+  const utilityOn = params.utility_inputs?.qaly_on_treatment ?? 0.75;
+  const utilityOff = params.utility_inputs?.qaly_comparator ?? 0.7;
+
+  // Costs per arm
+  const costIntervention =
+    params.cost_inputs.drug_cost_annual + (params.cost_inputs.admin_cost ?? 0);
+  const costComparator =
+    params.cost_inputs.comparator_cost_annual +
+    (params.cost_inputs.admin_cost ?? 0);
+
+  const statesIntervention: MarkovState[] = [
+    { name: "On-Treatment", utility: utilityOn, cost_annual: costIntervention },
+    { name: "Off-Treatment", utility: utilityOff, cost_annual: 0 },
+  ];
+
+  const statesComparator: MarkovState[] = [
+    { name: "On-Treatment", utility: utilityOn, cost_annual: costComparator },
+    { name: "Off-Treatment", utility: utilityOff, cost_annual: 0 },
+  ];
+
+  // Run intervention arm: use intervention states + intervention transition matrix.
+  // We pass intervention states in both arms' params; we only use the intervention
+  // arm result from this call.
+  const interventionRun = runMarkovModel({
+    ...baseParams,
+    states: statesIntervention,
+  });
+
+  // Run comparator arm: use comparator states + comparator transition matrix.
+  // We only use the comparator arm result from this call.
+  const comparatorRun = runMarkovModel({
+    ...baseParams,
+    states: statesComparator,
+  });
+
+  const intervention = interventionRun.intervention;
+  const comparator = comparatorRun.comparator;
 
   const delta_cost = intervention.total_cost - comparator.total_cost;
   const delta_qaly = intervention.total_qaly - comparator.total_qaly;
-  const icer = delta_qaly > 0 ? delta_cost / delta_qaly : (delta_qaly < 0 ? -Infinity : Infinity);
+  const icer =
+    delta_qaly > 0
+      ? delta_cost / delta_qaly
+      : delta_qaly < 0
+        ? -Infinity
+        : Infinity;
 
   return {
     delta_cost,

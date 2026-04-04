@@ -3,11 +3,13 @@ import * as pubmed from "../../../src/providers/direct/pubmed.js";
 import * as ct from "../../../src/providers/direct/clinicalTrials.js";
 import * as biorxiv from "../../../src/providers/direct/biorxiv.js";
 import * as chembl from "../../../src/providers/direct/chembl.js";
+import * as embase from "../../../src/providers/direct/embase.js";
 
 jest.mock("../../../src/providers/direct/pubmed.js");
 jest.mock("../../../src/providers/direct/clinicalTrials.js");
 jest.mock("../../../src/providers/direct/biorxiv.js");
 jest.mock("../../../src/providers/direct/chembl.js");
+jest.mock("../../../src/providers/direct/embase.js");
 
 const mockResult = {
   id: "pubmed_123",
@@ -26,6 +28,7 @@ describe("DirectProvider.searchLiterature", () => {
     jest.mocked(ct.fetchClinicalTrials).mockResolvedValue([]);
     jest.mocked(biorxiv.fetchBiorxiv).mockResolvedValue([]);
     jest.mocked(chembl.fetchChembl).mockResolvedValue([]);
+    jest.mocked(embase.fetchEmbase).mockResolvedValue([]);
   });
 
   afterEach(() => jest.clearAllMocks());
@@ -41,7 +44,10 @@ describe("DirectProvider.searchLiterature", () => {
 
   it("queries only specified sources", async () => {
     const provider = new DirectProvider();
-    await provider.searchLiterature({ query: "semaglutide", sources: ["pubmed"] });
+    await provider.searchLiterature({
+      query: "semaglutide",
+      sources: ["pubmed"],
+    });
     expect(pubmed.fetchPubMed).toHaveBeenCalledTimes(1);
     expect(ct.fetchClinicalTrials).not.toHaveBeenCalled();
   });
@@ -49,7 +55,31 @@ describe("DirectProvider.searchLiterature", () => {
   it("includes warning when a source fails", async () => {
     jest.mocked(pubmed.fetchPubMed).mockRejectedValue(new Error("fail"));
     const provider = new DirectProvider();
-    const result = await provider.searchLiterature({ query: "semaglutide", sources: ["pubmed"] });
+    const result = await provider.searchLiterature({
+      query: "semaglutide",
+      sources: ["pubmed"],
+    });
     expect(result.audit.warnings.length).toBeGreaterThan(0);
+  });
+
+  it("warns when embase requested but no API key", async () => {
+    delete process.env.ELSEVIER_API_KEY;
+    const provider = new DirectProvider();
+    const result = await provider.searchLiterature({
+      query: "semaglutide",
+      sources: ["embase"],
+    });
+    expect(
+      result.audit.warnings.some((w) => w.includes("ELSEVIER_API_KEY")),
+    ).toBe(true);
+  });
+
+  it("does not include embase in default sources when no API key", async () => {
+    delete process.env.ELSEVIER_API_KEY;
+    const provider = new DirectProvider();
+    const result = await provider.searchLiterature({ query: "test" });
+    expect(result.audit.sources_queried.map((s) => s.source)).not.toContain(
+      "embase",
+    );
   });
 });

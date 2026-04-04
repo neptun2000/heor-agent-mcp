@@ -17,14 +17,14 @@ import { fetchPubMed } from "./pubmed.js";
 import { fetchClinicalTrials } from "./clinicalTrials.js";
 import { fetchBiorxiv } from "./biorxiv.js";
 import { fetchChembl } from "./chembl.js";
+import { fetchEmbase } from "./embase.js";
 import { resultsToMarkdown } from "../../formatters/markdown.js";
 
-const ALL_SOURCES: DataSource[] = [
-  "pubmed",
-  "clinicaltrials",
-  "biorxiv",
-  "chembl",
-];
+function getAllSources(): DataSource[] {
+  const base: DataSource[] = ["pubmed", "clinicaltrials", "biorxiv", "chembl"];
+  if (process.env.ELSEVIER_API_KEY) base.push("embase");
+  return base;
+}
 
 const FETCHERS: Record<
   DataSource,
@@ -34,11 +34,12 @@ const FETCHERS: Record<
   clinicaltrials: fetchClinicalTrials,
   biorxiv: fetchBiorxiv,
   chembl: fetchChembl,
+  embase: fetchEmbase,
 };
 
 export class DirectProvider implements IProvider {
   async searchLiterature(params: LiteratureSearchParams): Promise<ToolResult> {
-    const sources = params.sources ?? ALL_SOURCES;
+    const sources = params.sources ?? getAllSources();
     const maxPerSource = Math.ceil((params.max_results ?? 20) / sources.length);
     const outputFormat = params.output_format ?? "text";
 
@@ -48,6 +49,13 @@ export class DirectProvider implements IProvider {
       outputFormat,
     );
     audit = setMethodology(audit, "PRISMA-style multi-database search");
+
+    if (sources.includes("embase") && !process.env.ELSEVIER_API_KEY) {
+      audit = addWarning(
+        audit,
+        "Embase requested but ELSEVIER_API_KEY is not set — Embase results will be empty. Set ELSEVIER_API_KEY to enable Embase search.",
+      );
+    }
 
     const allResults: LiteratureResult[] = [];
 

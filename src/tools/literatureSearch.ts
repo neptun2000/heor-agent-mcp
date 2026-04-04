@@ -4,14 +4,20 @@ import type { ToolResult } from "../providers/types.js";
 
 const LiteratureSearchSchema = z.object({
   query: z.string().min(1, "query is required"),
-  sources: z.array(z.enum(["pubmed", "clinicaltrials", "biorxiv", "chembl"])).optional(),
+  sources: z
+    .array(z.enum(["pubmed", "clinicaltrials", "biorxiv", "chembl", "embase"]))
+    .optional(),
   max_results: z.number().int().min(1).max(100).optional(),
   date_from: z.string().optional(),
-  study_types: z.array(z.enum(["rct", "meta_analysis", "observational", "review"])).optional(),
+  study_types: z
+    .array(z.enum(["rct", "meta_analysis", "observational", "review"]))
+    .optional(),
   output_format: z.enum(["text", "json", "docx"]).optional(),
 });
 
-export async function handleLiteratureSearch(rawParams: unknown): Promise<ToolResult> {
+export async function handleLiteratureSearch(
+  rawParams: unknown,
+): Promise<ToolResult> {
   const params = LiteratureSearchSchema.parse(rawParams);
   const provider = createProvider();
   return provider.searchLiterature(params);
@@ -19,15 +25,39 @@ export async function handleLiteratureSearch(rawParams: unknown): Promise<ToolRe
 
 export const literatureSearchToolSchema = {
   name: "literature_search",
-  description: "Search PubMed, ClinicalTrials.gov, bioRxiv/medRxiv, and ChEMBL for evidence on a drug or indication. Returns structured results with a full audit trail suitable for HTA submissions.",
+  description:
+    "Search PubMed, ClinicalTrials.gov, bioRxiv/medRxiv, and ChEMBL for evidence on a drug or indication. Returns structured results with a full audit trail suitable for HTA submissions.",
   inputSchema: {
     type: "object",
     properties: {
-      query: { type: "string", description: "Research question (e.g. 'semaglutide type 2 diabetes cost-effectiveness')" },
-      sources: { type: "array", items: { type: "string", enum: ["pubmed", "clinicaltrials", "biorxiv", "chembl"] }, description: "Data sources to query. Default: all." },
-      max_results: { type: "number", description: "Maximum results to return (default: 20, max: 100)" },
-      date_from: { type: "string", description: "Exclude results before this date (ISO format: YYYY-MM-DD)" },
-      output_format: { type: "string", enum: ["text", "json", "docx"], description: "Output format. 'docx' requires hosted tier." },
+      query: {
+        type: "string",
+        description:
+          "Research question (e.g. 'semaglutide type 2 diabetes cost-effectiveness')",
+      },
+      sources: {
+        type: "array",
+        items: {
+          type: "string",
+          enum: ["pubmed", "clinicaltrials", "biorxiv", "chembl", "embase"],
+        },
+        description:
+          "Data sources to query. Default: all available. Embase requires ELSEVIER_API_KEY.",
+      },
+      max_results: {
+        type: "number",
+        description: "Maximum results to return (default: 20, max: 100)",
+      },
+      date_from: {
+        type: "string",
+        description:
+          "Exclude results before this date (ISO format: YYYY-MM-DD)",
+      },
+      output_format: {
+        type: "string",
+        enum: ["text", "json", "docx"],
+        description: "Output format. 'docx' requires hosted tier.",
+      },
     },
     required: ["query"],
   },

@@ -38,6 +38,12 @@ describe("handleHtaDossierPrep", () => {
 
   it("records template version in audit assumptions", async () => {
     const result = await handleHtaDossierPrep(baseParams);
-    expect(result.audit.assumptions.some((a) => a.includes("NICE STA"))).toBe(true);
+    expect(result.audit.assumptions.some((a) => a.includes("NICE STA"))).toBe(
+      true,
+    );
+  });
+
+  it("throws on missing required field", async () => {
+    await expect(handleHtaDossierPrep({})).rejects.toThrow();
   });
 });

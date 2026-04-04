@@ -1,10 +1,58 @@
-import type { CEModelParams, ToolResult, CEModelResult, WTPAssessment, PSASummary, OWSASummary } from "../providers/types.js";
+import { z } from "zod";
+import type {
+  CEModelParams,
+  ToolResult,
+  CEModelResult,
+  WTPAssessment,
+  PSASummary,
+  OWSASummary,
+} from "../providers/types.js";
 import { runMarkovModel } from "../models/markov.js";
+
+const CEModelSchema = z.object({
+  intervention: z.string().min(1),
+  comparator: z.string().min(1),
+  indication: z.string().min(1),
+  time_horizon: z.union([
+    z.enum(["lifetime", "5yr", "10yr"]),
+    z.number().positive(),
+  ]),
+  perspective: z.enum(["nhs", "us_payer", "societal"]),
+  model_type: z.enum(["markov", "partsa", "decision_tree"]).optional(),
+  clinical_inputs: z.object({
+    efficacy_delta: z.number().min(0).max(1),
+    mortality_reduction: z.number().min(0).max(1).optional(),
+    ae_rate: z.number().min(0).max(1).optional(),
+  }),
+  cost_inputs: z.object({
+    drug_cost_annual: z.number().nonnegative(),
+    admin_cost: z.number().nonnegative().optional(),
+    ae_cost: z.number().nonnegative().optional(),
+    comparator_cost_annual: z.number().nonnegative(),
+  }),
+  utility_inputs: z
+    .object({
+      qaly_on_treatment: z.number().min(0).max(1),
+      qaly_comparator: z.number().min(0).max(1),
+    })
+    .optional(),
+  run_psa: z.boolean().optional(),
+  psa_iterations: z.number().int().min(1).max(10000).optional(),
+  run_owsa: z.boolean().optional(),
+  output_format: z.enum(["text", "json", "docx"]).optional(),
+});
 import { runPartSA } from "../models/partsa.js";
 import { runPSA } from "../models/psa.js";
 import { runOWSA, buildDefaultOWSAParameters } from "../models/owsa.js";
-import { buildMarkovParamsFromCE, runMarkovAndComputeICER } from "../models/modelUtils.js";
-import { createAuditRecord, addAssumption, setMethodology } from "../audit/builder.js";
+import {
+  buildMarkovParamsFromCE,
+  runMarkovAndComputeICER,
+} from "../models/modelUtils.js";
+import {
+  createAuditRecord,
+  addAssumption,
+  setMethodology,
+} from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
 
 const WTP_THRESHOLDS = {
@@ -24,7 +72,7 @@ function getTimeHorizonYears(horizon: CEModelParams["time_horizon"]): number {
 
 function wtpVerdict(
   icer: number,
-  threshold: { low: number; high: number }
+  threshold: { low: number; high: number },
 ): WTPAssessment["verdict"] {
   if (!isFinite(icer) && icer < 0) return "dominated";
   if (!isFinite(icer)) return "not_cost_effective";
@@ -35,7 +83,7 @@ function wtpVerdict(
 
 function buildWTPAssessment(
   icer: number,
-  perspective: keyof typeof WTP_THRESHOLDS
+  perspective: keyof typeof WTP_THRESHOLDS,
 ): WTPAssessment {
   const threshold = WTP_THRESHOLDS[perspective];
   return {
@@ -47,9 +95,16 @@ function buildWTPAssessment(
   };
 }
 
-export async function handleCostEffectivenessModel(params: CEModelParams): Promise<ToolResult> {
+export async function handleCostEffectivenessModel(
+  rawParams: unknown,
+): Promise<ToolResult> {
+  const params = CEModelSchema.parse(rawParams) as CEModelParams;
   const outputFormat = params.output_format ?? "text";
-  let audit = createAuditRecord("cost_effectiveness_model", params as unknown as Record<string, unknown>, outputFormat);
+  let audit = createAuditRecord(
+    "cost_effectiveness_model",
+    params as unknown as Record<string, unknown>,
+    outputFormat,
+  );
 
   const modelType = params.model_type ?? "markov";
   const years = getTimeHorizonYears(params.time_horizon);
@@ -58,15 +113,24 @@ export async function handleCostEffectivenessModel(params: CEModelParams): Promi
 
   audit = setMethodology(
     audit,
-    `Markov model (multi-state) with half-cycle correction and PSA — ${modelType === "partsa" ? "Partitioned Survival Analysis" : "2-state Markov"}`
+    `Markov model (multi-state) with half-cycle correction and PSA — ${modelType === "partsa" ? "Partitioned Survival Analysis" : "2-state Markov"}`,
   );
 
-  audit = addAssumption(audit, `Discount rate: ${DISCOUNT_RATE * 100}% (NICE reference case)`);
-  audit = addAssumption(audit, `Time horizon: ${years} years (${params.time_horizon})`);
+  audit = addAssumption(
+    audit,
+    `Discount rate: ${DISCOUNT_RATE * 100}% (NICE reference case)`,
+  );
+  audit = addAssumption(
+    audit,
+    `Time horizon: ${years} years (${params.time_horizon})`,
+  );
   audit = addAssumption(audit, `Perspective: ${params.perspective}`);
   audit = addAssumption(audit, `Markov cycle length: 1 year`);
   if (!params.utility_inputs) {
-    audit = addAssumption(audit, `QALY estimate derived from efficacy delta (utility inputs not provided) — use with caution`);
+    audit = addAssumption(
+      audit,
+      `QALY estimate derived from efficacy delta (utility inputs not provided) — use with caution`,
+    );
   }
 
   // --- Base case ---
@@ -108,9 +172,16 @@ export async function handleCostEffectivenessModel(params: CEModelParams): Promi
       discount_rate_outcomes: DISCOUNT_RATE,
     });
 
-    delta_cost = partSAResult.intervention.total_cost - partSAResult.comparator.total_cost;
-    delta_qaly = partSAResult.intervention.total_qaly - partSAResult.comparator.total_qaly;
-    icer = delta_qaly > 0 ? delta_cost / delta_qaly : (delta_qaly < 0 ? -Infinity : Infinity);
+    delta_cost =
+      partSAResult.intervention.total_cost - partSAResult.comparator.total_cost;
+    delta_qaly =
+      partSAResult.intervention.total_qaly - partSAResult.comparator.total_qaly;
+    icer =
+      delta_qaly > 0
+        ? delta_cost / delta_qaly
+        : delta_qaly < 0
+          ? -Infinity
+          : Infinity;
     intervention_cost = partSAResult.intervention.total_cost;
     comparator_cost = partSAResult.comparator.total_cost;
     intervention_qaly = partSAResult.intervention.total_qaly;
@@ -140,7 +211,10 @@ export async function handleCostEffectivenessModel(params: CEModelParams): Promi
   // --- PSA ---
   let psaSummary: PSASummary | undefined;
   if (params.run_psa !== false && modelType !== "partsa") {
-    const n_iterations = Math.min(10000, Math.max(1, params.psa_iterations ?? 1000));
+    const n_iterations = Math.min(
+      10000,
+      Math.max(1, params.psa_iterations ?? 1000),
+    );
     const psaResult = runPSA({
       base_params: params,
       n_iterations,
@@ -155,7 +229,10 @@ export async function handleCostEffectivenessModel(params: CEModelParams): Promi
       prob_cost_effective: psaResult.prob_cost_effective,
       ceac: psaResult.ceac,
       evpi: psaResult.evpi,
-      scatter: psaResult.scatter_sample.map(it => ({ delta_cost: it.delta_cost, delta_qaly: it.delta_qaly })),
+      scatter: psaResult.scatter_sample.map((it) => ({
+        delta_cost: it.delta_cost,
+        delta_qaly: it.delta_qaly,
+      })),
     };
   }
 
@@ -163,8 +240,10 @@ export async function handleCostEffectivenessModel(params: CEModelParams): Promi
   let owsaResults: OWSASummary[] | undefined;
   if (params.run_owsa !== false) {
     const owsaParams = buildDefaultOWSAParameters(params);
-    const rawOWSA = runOWSA(params, owsaParams, (p) => runMarkovAndComputeICER(p));
-    owsaResults = rawOWSA.map(r => ({
+    const rawOWSA = runOWSA(params, owsaParams, (p) =>
+      runMarkovAndComputeICER(p),
+    );
+    owsaResults = rawOWSA.map((r) => ({
       parameter: r.parameter,
       low_value: r.low_value,
       high_value: r.high_value,
@@ -213,24 +292,28 @@ export async function handleCostEffectivenessModel(params: CEModelParams): Promi
   }
 
   // --- Text output (backwards-compatible) ---
-  const icerFormatted = isFinite(icer) ? Math.round(icer).toLocaleString() : "Dominated";
+  const icerFormatted = isFinite(icer)
+    ? Math.round(icer).toLocaleString()
+    : "Dominated";
   const perspectiveVerdict = wtp_analysis[params.perspective];
 
-  const interpretation = isFinite(icer) && icer >= 0
-    ? icer < threshold.low
-      ? `${symbol}${icerFormatted}/QALY — likely cost-effective (below NICE threshold of ${symbol}${threshold.low.toLocaleString()})`
-      : icer < threshold.high
-        ? `${symbol}${icerFormatted}/QALY — borderline cost-effective (within ${symbol}${threshold.low.toLocaleString()}–${symbol}${threshold.high.toLocaleString()} threshold range)`
-        : `${symbol}${icerFormatted}/QALY — not cost-effective at standard threshold`
-    : "Dominated — intervention costs more and provides less benefit than comparator";
+  const interpretation =
+    isFinite(icer) && icer >= 0
+      ? icer < threshold.low
+        ? `${symbol}${icerFormatted}/QALY — likely cost-effective (below NICE threshold of ${symbol}${threshold.low.toLocaleString()})`
+        : icer < threshold.high
+          ? `${symbol}${icerFormatted}/QALY — borderline cost-effective (within ${symbol}${threshold.low.toLocaleString()}–${symbol}${threshold.high.toLocaleString()} threshold range)`
+          : `${symbol}${icerFormatted}/QALY — not cost-effective at standard threshold`
+      : "Dominated — intervention costs more and provides less benefit than comparator";
 
   // PSA section
   const psaSection: string[] = [];
   if (psaSummary) {
-    const pcePerspective = perspectiveVerdict.currency === "GBP"
-      ? psaSummary.prob_cost_effective["nhs_low"] ?? 0
-      : psaSummary.prob_cost_effective["us_payer_low"] ?? 0;
-    const pcePercent = Math.round((pcePerspective) * 100);
+    const pcePerspective =
+      perspectiveVerdict.currency === "GBP"
+        ? (psaSummary.prob_cost_effective["nhs_low"] ?? 0)
+        : (psaSummary.prob_cost_effective["us_payer_low"] ?? 0);
+    const pcePercent = Math.round(pcePerspective * 100);
 
     psaSection.push(
       `### Probabilistic Sensitivity Analysis (PSA)`,
@@ -239,7 +322,7 @@ export async function handleCostEffectivenessModel(params: CEModelParams): Promi
       `- **95% CI:** ${symbol}${Math.round(psaSummary.ci_icer_lower).toLocaleString()} – ${symbol}${Math.round(psaSummary.ci_icer_upper).toLocaleString()}/QALY`,
       `- **Probability cost-effective** at ${params.perspective} threshold: **${pcePercent}%**`,
       `- **EVPI:** ${symbol}${Math.round(psaSummary.evpi).toLocaleString()} (expected value of perfect information)`,
-      ``
+      ``,
     );
   }
 
@@ -247,13 +330,21 @@ export async function handleCostEffectivenessModel(params: CEModelParams): Promi
   const owsaSection: string[] = [];
   if (owsaResults && owsaResults.length > 0) {
     owsaSection.push(`### One-Way Sensitivity Analysis (Tornado)`);
-    owsaSection.push(`Top ${Math.min(5, owsaResults.length)} parameters by ICER impact:`);
+    owsaSection.push(
+      `Top ${Math.min(5, owsaResults.length)} parameters by ICER impact:`,
+    );
     owsaSection.push(`| Parameter | Low ICER | High ICER | Impact |`);
     owsaSection.push(`|-----------|----------|-----------|--------|`);
     for (const r of owsaResults.slice(0, 5)) {
-      const low = isFinite(r.icer_low) ? `${symbol}${Math.round(r.icer_low).toLocaleString()}` : "N/A";
-      const high = isFinite(r.icer_high) ? `${symbol}${Math.round(r.icer_high).toLocaleString()}` : "N/A";
-      const impact = isFinite(r.impact) ? `${symbol}${Math.round(r.impact).toLocaleString()}` : "N/A";
+      const low = isFinite(r.icer_low)
+        ? `${symbol}${Math.round(r.icer_low).toLocaleString()}`
+        : "N/A";
+      const high = isFinite(r.icer_high)
+        ? `${symbol}${Math.round(r.icer_high).toLocaleString()}`
+        : "N/A";
+      const impact = isFinite(r.impact)
+        ? `${symbol}${Math.round(r.impact).toLocaleString()}`
+        : "N/A";
       owsaSection.push(`| ${r.parameter} | ${low} | ${high} | ${impact} |`);
     }
     owsaSection.push(``);
@@ -289,3 +380,75 @@ export async function handleCostEffectivenessModel(params: CEModelParams): Promi
 
   return { content, audit };
 }
+
+export const costEffectivenessModelToolSchema = {
+  name: "cost_effectiveness_model",
+  description:
+    "Build a cost-utility analysis (ICER, QALY, PSA, sensitivity analysis) for a drug vs comparator. Follows ISPOR good practice guidelines and NICE reference case. Includes probabilistic sensitivity analysis (PSA), one-way sensitivity, and cost-effectiveness acceptability curve (CEAC).",
+  inputSchema: {
+    type: "object",
+    properties: {
+      intervention: { type: "string", description: "Drug or treatment name" },
+      comparator: {
+        type: "string",
+        description: "Comparator (standard of care)",
+      },
+      indication: { type: "string", description: "Disease or condition" },
+      time_horizon: {
+        type: "string",
+        description:
+          "Modelling horizon: 'lifetime', '5yr', '10yr', or years as number",
+      },
+      perspective: { type: "string", enum: ["nhs", "us_payer", "societal"] },
+      model_type: {
+        type: "string",
+        enum: ["markov", "partsa", "decision_tree"],
+        description: "Model type. Default: markov. Use 'partsa' for oncology.",
+      },
+      clinical_inputs: {
+        type: "object",
+        properties: {
+          efficacy_delta: { type: "number" },
+          mortality_reduction: { type: "number" },
+          ae_rate: { type: "number" },
+        },
+        required: ["efficacy_delta"],
+      },
+      cost_inputs: {
+        type: "object",
+        properties: {
+          drug_cost_annual: { type: "number" },
+          admin_cost: { type: "number" },
+          ae_cost: { type: "number" },
+          comparator_cost_annual: { type: "number" },
+        },
+        required: ["drug_cost_annual", "comparator_cost_annual"],
+      },
+      utility_inputs: {
+        type: "object",
+        properties: {
+          qaly_on_treatment: { type: "number" },
+          qaly_comparator: { type: "number" },
+        },
+      },
+      run_psa: {
+        type: "boolean",
+        description: "Run probabilistic sensitivity analysis (default: true)",
+      },
+      psa_iterations: {
+        type: "number",
+        description: "PSA iterations (default: 1000, max: 10000)",
+      },
+      output_format: { type: "string", enum: ["text", "json", "docx"] },
+    },
+    required: [
+      "intervention",
+      "comparator",
+      "indication",
+      "time_horizon",
+      "perspective",
+      "clinical_inputs",
+      "cost_inputs",
+    ],
+  },
+};

@@ -59,4 +59,13 @@ describe("handleCostEffectivenessModel", () => {
     expect(modelResult.base_case.delta_cost).toBeGreaterThan(0);
     expect(modelResult.base_case.icer).toBeGreaterThan(0);
   });
+
+  it("throws on missing required field", async () => {
+    await expect(handleCostEffectivenessModel({})).rejects.toThrow();
+  });
+
+  it("accepts valid params as unknown input", async () => {
+    const result = await handleCostEffectivenessModel(validParams as unknown);
+    expect(result.audit.tool).toBe("cost_effectiveness_model");
+  });
 });

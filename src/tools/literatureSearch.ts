@@ -5,7 +5,17 @@ import type { ToolResult } from "../providers/types.js";
 const LiteratureSearchSchema = z.object({
   query: z.string().min(1, "query is required"),
   sources: z
-    .array(z.enum(["pubmed", "clinicaltrials", "biorxiv", "chembl", "embase"]))
+    .array(
+      z.enum([
+        "pubmed",
+        "clinicaltrials",
+        "biorxiv",
+        "chembl",
+        "embase",
+        "who_gho",
+        "world_bank",
+      ]),
+    )
     .optional(),
   max_results: z.number().int().min(1).max(100).optional(),
   date_from: z.string().optional(),
@@ -39,10 +49,18 @@ export const literatureSearchToolSchema = {
         type: "array",
         items: {
           type: "string",
-          enum: ["pubmed", "clinicaltrials", "biorxiv", "chembl", "embase"],
+          enum: [
+            "pubmed",
+            "clinicaltrials",
+            "biorxiv",
+            "chembl",
+            "embase",
+            "who_gho",
+            "world_bank",
+          ],
         },
         description:
-          "Data sources to query. Default: all available. Embase requires ELSEVIER_API_KEY.",
+          "Data sources to query. Default: pubmed, clinicaltrials, biorxiv, chembl (+ embase if ELSEVIER_API_KEY set). Use 'who_gho' and 'world_bank' for epidemiology and demographic data.",
       },
       max_results: {
         type: "number",

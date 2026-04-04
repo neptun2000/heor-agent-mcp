@@ -14,7 +14,9 @@ export type DataSource =
   | "clinicaltrials"
   | "biorxiv"
   | "chembl"
-  | "embase";
+  | "embase"
+  | "who_gho"
+  | "world_bank";
 export type StudyType = "rct" | "meta_analysis" | "observational" | "review";
 export type TimeHorizon = "lifetime" | "5yr" | "10yr" | number;
 export type Perspective = "nhs" | "us_payer" | "societal";

@@ -18,6 +18,8 @@ import { fetchClinicalTrials } from "./clinicalTrials.js";
 import { fetchBiorxiv } from "./biorxiv.js";
 import { fetchChembl } from "./chembl.js";
 import { fetchEmbase } from "./embase.js";
+import { fetchWhoGho } from "./whoGho.js";
+import { fetchWorldBank } from "./worldBank.js";
 import { resultsToMarkdown } from "../../formatters/markdown.js";
 
 function getAllSources(): DataSource[] {
@@ -35,6 +37,8 @@ const FETCHERS: Record<
   biorxiv: fetchBiorxiv,
   chembl: fetchChembl,
   embase: fetchEmbase,
+  who_gho: fetchWhoGho,
+  world_bank: fetchWorldBank,
 };
 
 export class DirectProvider implements IProvider {

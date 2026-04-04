@@ -39,6 +39,7 @@ import {
   setMethodology,
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
+import { contentToDocx } from "../formatters/docx.js";
 
 const NICE_STA_SECTIONS = [
   "Population",
@@ -364,6 +365,21 @@ async function handleJCADossier(
   }
 
   lines.push(auditToMarkdown(audit));
+
+  const outputFormat = params.output_format ?? "text";
+  if (outputFormat === "docx") {
+    const textContent = lines.join("\n");
+    const base64 = await contentToDocx(
+      `JCA ${params.submission_type.toUpperCase()} Dossier`,
+      textContent,
+      audit,
+    );
+    return {
+      content: `[DOCX Report Generated]\n\nBase64-encoded DOCX (${Math.round(base64.length / 1024)}KB):\n${base64}`,
+      audit,
+    };
+  }
+
   return { content: lines.join("\n"), audit };
 }
 
@@ -433,6 +449,20 @@ export async function handleHtaDossierPrep(
   }
 
   lines.push(auditToMarkdown(audit));
+
+  if (outputFormat === "docx") {
+    const textContent = lines.join("\n");
+    const base64 = await contentToDocx(
+      `${params.hta_body.toUpperCase()} ${params.submission_type.toUpperCase()} Dossier`,
+      textContent,
+      audit,
+    );
+    return {
+      content: `[DOCX Report Generated]\n\nBase64-encoded DOCX (${Math.round(base64.length / 1024)}KB):\n${base64}`,
+      audit,
+    };
+  }
+
   return { content: lines.join("\n"), audit };
 }
 

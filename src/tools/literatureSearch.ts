@@ -14,6 +14,7 @@ const LiteratureSearchSchema = z.object({
         "embase",
         "who_gho",
         "world_bank",
+        "all_of_us",
       ]),
     )
     .optional(),
@@ -57,6 +58,7 @@ export const literatureSearchToolSchema = {
             "embase",
             "who_gho",
             "world_bank",
+            "all_of_us",
           ],
         },
         description:

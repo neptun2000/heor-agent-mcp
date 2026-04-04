@@ -16,7 +16,8 @@ export type DataSource =
   | "chembl"
   | "embase"
   | "who_gho"
-  | "world_bank";
+  | "world_bank"
+  | "all_of_us";
 export type StudyType = "rct" | "meta_analysis" | "observational" | "review";
 export type TimeHorizon = "lifetime" | "5yr" | "10yr" | number;
 export type Perspective = "nhs" | "us_payer" | "societal";

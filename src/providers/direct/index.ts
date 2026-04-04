@@ -20,8 +20,13 @@ import { fetchChembl } from "./chembl.js";
 import { fetchEmbase } from "./embase.js";
 import { fetchWhoGho } from "./whoGho.js";
 import { fetchWorldBank } from "./worldBank.js";
+import { fetchAllOfUs } from "./allOfUs.js";
 import { resultsToMarkdown } from "../../formatters/markdown.js";
 import { resultsToDocx } from "../../formatters/docx.js";
+import {
+  analyzeMetabolicProfile,
+  profileToMarkdown,
+} from "../../tools/metabolicProfile.js";
 
 function getAllSources(): DataSource[] {
   const base: DataSource[] = ["pubmed", "clinicaltrials", "biorxiv", "chembl"];
@@ -40,6 +45,7 @@ const FETCHERS: Record<
   embase: fetchEmbase,
   who_gho: fetchWhoGho,
   world_bank: fetchWorldBank,
+  all_of_us: fetchAllOfUs,
 };
 
 export class DirectProvider implements IProvider {
@@ -97,14 +103,18 @@ export class DirectProvider implements IProvider {
       }
     }
 
+    const profile = analyzeMetabolicProfile(allResults, params.query);
+
     let content: string | object;
     if (outputFormat === "json") {
-      content = allResults;
+      content = { results: allResults, population_profile: profile };
     } else if (outputFormat === "docx") {
       const base64 = await resultsToDocx(allResults, audit);
       content = `[DOCX Report Generated - ${allResults.length} results]\n\nBase64-encoded DOCX (${Math.round(base64.length / 1024)}KB):\n${base64}`;
     } else {
-      content = resultsToMarkdown(allResults, audit);
+      const markdownContent = resultsToMarkdown(allResults, audit);
+      const profileMarkdown = profileToMarkdown(profile);
+      content = markdownContent + "\n" + profileMarkdown;
     }
 
     return { content, audit };

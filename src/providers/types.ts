@@ -1,8 +1,14 @@
 import type { AuditRecord } from "../audit/types.js";
 
 export type OutputFormat = "text" | "json" | "docx";
-export type HtaBody = "nice" | "ema" | "fda" | "iqwig" | "has";
-export type SubmissionType = "sta" | "mta" | "early_access";
+export type HtaBody = "nice" | "ema" | "fda" | "iqwig" | "has" | "jca";
+export type SubmissionType =
+  | "sta"
+  | "mta"
+  | "early_access"
+  | "initial"
+  | "renewal"
+  | "variation";
 export type DataSource = "pubmed" | "clinicaltrials" | "biorxiv" | "chembl";
 export type StudyType = "rct" | "meta_analysis" | "observational" | "review";
 export type TimeHorizon = "lifetime" | "5yr" | "10yr" | number;
@@ -52,14 +58,20 @@ export interface CEModelParams {
   output_format?: OutputFormat;
 
   // New fields for advanced model selection
-  model_type?: "markov" | "partsa" | "decision_tree";  // default "markov"
-  states?: string[];           // custom state names for Markov
-  run_psa?: boolean;           // default true
-  psa_iterations?: number;     // 1-10000, default 1000
-  run_owsa?: boolean;          // default true
+  model_type?: "markov" | "partsa" | "decision_tree"; // default "markov"
+  states?: string[]; // custom state names for Markov
+  run_psa?: boolean; // default true
+  psa_iterations?: number; // 1-10000, default 1000
+  run_owsa?: boolean; // default true
   parameter_uncertainty?: {
-    transition_probabilities?: Record<string, { mean: number; ci_lower: number; ci_upper: number }>;
-    utilities?: Record<string, { mean: number; ci_lower: number; ci_upper: number }>;
+    transition_probabilities?: Record<
+      string,
+      { mean: number; ci_lower: number; ci_upper: number }
+    >;
+    utilities?: Record<
+      string,
+      { mean: number; ci_lower: number; ci_upper: number }
+    >;
     costs?: Record<string, { mean: number; sd: number }>;
   };
 
@@ -74,6 +86,13 @@ export interface CEModelParams {
   };
 }
 
+export interface PicoDefinition {
+  id: string; // e.g. "PICO-1"
+  population: string; // specific subpopulation
+  comparator: string; // comparator for this PICO
+  outcomes: string[]; // relevant outcomes for this PICO
+}
+
 export interface DossierParams {
   hta_body: HtaBody;
   submission_type: SubmissionType;
@@ -82,6 +101,7 @@ export interface DossierParams {
   evidence_summary?: string | LiteratureResult[];
   model_results?: CEModelResult;
   output_format?: OutputFormat;
+  picos?: PicoDefinition[]; // JCA: list of PICOs. If omitted, single default PICO is generated.
 }
 
 export interface ToolResult {

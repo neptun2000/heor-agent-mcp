@@ -2,11 +2,28 @@
   "name": "heor-agent-mcp",
   "version": "0.1.0",
   "engines": { "node": ">=20.0.0" },
-  "description": "HEOR AI agent as an MCP server for Claude.ai",
+  "description": "HEOR AI agent as an MCP server for Claude.ai — literature search, cost-effectiveness modeling, HTA dossier prep",
   "type": "module",
   "main": "dist/server.js",
   "bin": {
     "heor-agent-mcp": "dist/server.js"
+  },
+  "keywords": [
+    "heor",
+    "health-economics",
+    "hta",
+    "cost-effectiveness",
+    "mcp",
+    "claude",
+    "pubmed",
+    "nice",
+    "icer",
+    "pharmacoeconomics"
+  ],
+  "homepage": "https://github.com/mnaumov/HEORAgent",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mnaumov/HEORAgent.git"
   },
   "scripts": {
     "build": "tsc",

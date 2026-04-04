@@ -3,15 +3,33 @@ import type {
   DossierParams,
   ToolResult,
   LiteratureResult,
+  PicoDefinition,
 } from "../providers/types.js";
 
 const DossierSchema = z.object({
-  hta_body: z.enum(["nice", "ema", "fda", "iqwig", "has"]),
-  submission_type: z.enum(["sta", "mta", "early_access"]),
+  hta_body: z.enum(["nice", "ema", "fda", "iqwig", "has", "jca"]),
+  submission_type: z.enum([
+    "sta",
+    "mta",
+    "early_access",
+    "initial",
+    "renewal",
+    "variation",
+  ]),
   drug_name: z.string().min(1),
   indication: z.string().min(1),
   evidence_summary: z.union([z.string(), z.array(z.any())]).optional(),
   model_results: z.any().optional(),
+  picos: z
+    .array(
+      z.object({
+        id: z.string(),
+        population: z.string(),
+        comparator: z.string(),
+        outcomes: z.array(z.string()),
+      }),
+    )
+    .optional(),
   output_format: z.enum(["text", "json", "docx"]).optional(),
 });
 import {
@@ -49,12 +67,26 @@ const FDA_SECTIONS = [
   "Clinical Pharmacology",
 ];
 
+const JCA_SECTIONS = [
+  "Scope Confirmation",
+  "Population and Disease Context",
+  "Intervention",
+  "Comparators",
+  "Outcomes",
+  "Comparative Clinical Effectiveness",
+  "Indirect Treatment Comparison",
+  "Comparative Safety",
+  "Evidence Certainty (GRADE)",
+  "Evidence Gaps and Uncertainty",
+];
+
 const SECTIONS_BY_BODY: Record<string, string[]> = {
   nice: NICE_STA_SECTIONS,
   ema: EMA_SECTIONS,
   fda: FDA_SECTIONS,
   iqwig: NICE_STA_SECTIONS,
   has: NICE_STA_SECTIONS,
+  jca: JCA_SECTIONS,
 };
 
 const METHODOLOGY_BY_BODY: Record<string, string> = {
@@ -63,6 +95,7 @@ const METHODOLOGY_BY_BODY: Record<string, string> = {
   fda: "FDA Prescribing Information format",
   iqwig: "IQWiG Methods v6.1",
   has: "HAS transparency committee dossier format",
+  jca: "EUHTA Regulation (EU) 2021/2282 — Joint Clinical Assessment",
 };
 
 function buildSection(
@@ -121,6 +154,219 @@ function buildSection(
   }
 }
 
+function buildJCASection(
+  name: string,
+  drugName: string,
+  indication: string,
+  pico: PicoDefinition,
+  evidenceSummary?: string | LiteratureResult[],
+): { content: string; status: "complete" | "partial" | "missing" } {
+  const evidence =
+    typeof evidenceSummary === "string"
+      ? evidenceSummary
+      : Array.isArray(evidenceSummary) && evidenceSummary.length > 0
+        ? evidenceSummary
+            .map((r) => `- ${r.title} (${r.source}, ${r.date})`)
+            .join("\n")
+        : null;
+
+  switch (name) {
+    case "Scope Confirmation":
+      return {
+        content:
+          `**PICO ${pico.id}** — Scope as confirmed by HTA Coordination Group.\n` +
+          `Population: ${pico.population}\nIntervention: ${drugName}\nComparator: ${pico.comparator}\n` +
+          `Outcomes: ${pico.outcomes.join(", ")}`,
+        status: "complete",
+      };
+    case "Population and Disease Context":
+      return {
+        content:
+          `${pico.population} with ${indication}.\n` +
+          `⚠️ Provide epidemiology, disease burden, and unmet need across relevant EU member states.`,
+        status: "partial",
+      };
+    case "Intervention":
+      return {
+        content:
+          `${drugName} as per EMA-approved Summary of Product Characteristics (SmPC).\n` +
+          `⚠️ Reference the exact label wording — scope is tied to the approved indication.`,
+        status: "complete",
+      };
+    case "Comparators":
+      return {
+        content:
+          `**Primary comparator:** ${pico.comparator}\n` +
+          `⚠️ Verify comparator relevance across all 27 EU member states. Include all nationally relevant alternatives identified during scoping.`,
+        status: "partial",
+      };
+    case "Outcomes":
+      return {
+        content:
+          pico.outcomes.length > 0
+            ? `Assessed outcomes:\n${pico.outcomes.map((o) => `- ${o}`).join("\n")}`
+            : `⚠️ No outcomes specified for this PICO. Provide primary and secondary endpoints as per scoping decision.`,
+        status: pico.outcomes.length > 0 ? "complete" : "missing",
+      };
+    case "Comparative Clinical Effectiveness":
+      return evidence
+        ? {
+            content:
+              `Relative effects of ${drugName} vs ${pico.comparator}:\n${evidence}\n` +
+              `⚠️ Express results as relative risk (RR), hazard ratio (HR), or mean difference (MD) with 95% CI.`,
+            status: "partial",
+          }
+        : {
+            content: `⚠️ No clinical evidence provided. Pipe output from literature_search to populate relative effects for ${pico.comparator}.`,
+            status: "missing",
+          };
+    case "Indirect Treatment Comparison":
+      return {
+        content:
+          `**ITC Feasibility Assessment:**\n` +
+          `⚠️ Assess whether a connected evidence network exists between ${drugName} and ${pico.comparator}.\n` +
+          `- If direct head-to-head evidence exists: state this and provide summary.\n` +
+          `- If only indirect evidence: specify method (MAIC, STC, or NMA) and justify selection.\n` +
+          `- JCA strongly prefers anchored indirect comparisons. Unanchored MAIC requires explicit justification.\n` +
+          `- Note any heterogeneity in effect modifiers across included studies.`,
+        status: "missing",
+      };
+    case "Comparative Safety":
+      return {
+        content:
+          `Comparative safety of ${drugName} vs ${pico.comparator}:\n` +
+          `⚠️ Provide: serious adverse events (SAEs), treatment discontinuations, adverse events of special interest (AESIs).\n` +
+          `Express as relative risk with 95% CI where possible.`,
+        status: "missing",
+      };
+    case "Evidence Certainty (GRADE)":
+      return {
+        content:
+          `GRADE certainty assessment for ${pico.id}:\n` +
+          `| Outcome | Certainty | Rationale |\n` +
+          `|---|---|---|\n` +
+          pico.outcomes
+            .map(
+              (o) =>
+                `| ${o} | ⚠️ TBC | Assess risk of bias, inconsistency, indirectness, imprecision |`,
+            )
+            .join("\n") +
+          `\n\n⚠️ Complete GRADE table with clinical advisor.`,
+        status: "missing",
+      };
+    case "Evidence Gaps and Uncertainty":
+      return {
+        content:
+          `Known evidence gaps for PICO ${pico.id}:\n` +
+          `- ⚠️ List data limitations (immature survival data, missing subgroups, short follow-up)\n` +
+          `- ⚠️ Flag patient populations not represented in trials\n` +
+          `- ⚠️ Note impact of evidence gaps on certainty of results\n` +
+          `This section will be referenced by national HTA bodies conducting cost-effectiveness analyses.`,
+        status: "missing",
+      };
+    default:
+      return {
+        content: `⚠️ ${name} — populate with JCA submission-specific content for PICO ${pico.id}.`,
+        status: "missing",
+      };
+  }
+}
+
+async function handleJCADossier(
+  params: DossierParams,
+  audit: ReturnType<typeof createAuditRecord>,
+): Promise<ToolResult> {
+  // Default single PICO if none provided
+  const picos: PicoDefinition[] =
+    params.picos && params.picos.length > 0
+      ? params.picos
+      : [
+          {
+            id: "PICO-1",
+            population: `Adults with ${params.indication}`,
+            comparator: "Current standard of care",
+            outcomes: [
+              "Overall survival",
+              "Progression-free survival",
+              "Quality of life (EQ-5D)",
+              "Adverse events",
+            ],
+          },
+        ];
+
+  audit = addAssumption(
+    audit,
+    `EUHTA Regulation (EU) 2021/2282 — Joint Clinical Assessment`,
+  );
+  audit = addAssumption(audit, `${picos.length} PICO(s) assessed`);
+  audit = addAssumption(
+    audit,
+    `JCA covers comparative clinical effectiveness and safety only. National cost-effectiveness assessment remains at member state level.`,
+  );
+  if (picos.length === 1 && (!params.picos || params.picos.length === 0)) {
+    audit = addWarning(
+      audit,
+      `No PICOs provided — generated default PICO. Provide picos[] array for accurate JCA structure reflecting actual scoping decisions.`,
+    );
+  }
+  if (picos.length > 10) {
+    audit = addWarning(
+      audit,
+      `${picos.length} PICOs — complex submission. Ensure each PICO has dedicated evidence package.`,
+    );
+  }
+
+  const lines: string[] = [];
+  lines.push(`## EU Joint Clinical Assessment (JCA) Dossier Draft`);
+  lines.push(
+    `**Drug:** ${params.drug_name} | **Indication:** ${params.indication}`,
+  );
+  lines.push(
+    `**Regulation:** EUHTA (EU) 2021/2282 | **PICOs:** ${picos.length}`,
+  );
+  lines.push(`**Submission type:** ${params.submission_type.toUpperCase()}`);
+  lines.push(
+    `\n> ⚠️ JCA covers comparative clinical effectiveness and safety **only**. Economic evaluation (cost-effectiveness) remains at national level.\n`,
+  );
+
+  const allGaps: string[] = [];
+
+  for (const pico of picos) {
+    lines.push(`---\n## ${pico.id}: ${pico.population} vs ${pico.comparator}`);
+    for (const sectionName of JCA_SECTIONS) {
+      const { content, status } = buildJCASection(
+        sectionName,
+        params.drug_name,
+        params.indication,
+        pico,
+        params.evidence_summary,
+      );
+      lines.push(`### ${sectionName}`);
+      lines.push(content);
+      lines.push("");
+      if (status === "missing") {
+        const gap = `[${pico.id}] ${sectionName}`;
+        allGaps.push(gap);
+        audit = addWarning(
+          audit,
+          `Section "${sectionName}" (${pico.id}) requires additional input`,
+        );
+      }
+    }
+  }
+
+  if (allGaps.length > 0) {
+    lines.push(
+      `---\n## Gap Analysis (${allGaps.length} sections require input)`,
+    );
+    allGaps.forEach((g) => lines.push(`- ⚠️ ${g}`));
+    lines.push("");
+  }
+
+  lines.push(auditToMarkdown(audit));
+  return { content: lines.join("\n"), audit };
+}
+
 export async function handleHtaDossierPrep(
   rawParams: unknown,
 ): Promise<ToolResult> {
@@ -139,6 +385,11 @@ export async function handleHtaDossierPrep(
     audit,
     `Submission type: ${params.submission_type.toUpperCase()}`,
   );
+
+  // JCA: generate per-PICO sections
+  if (params.hta_body === "jca") {
+    return handleJCADossier(params, audit);
+  }
 
   const sections = SECTIONS_BY_BODY[params.hta_body] ?? NICE_STA_SECTIONS;
   const lines: string[] = [];
@@ -188,15 +439,22 @@ export async function handleHtaDossierPrep(
 export const htaDossierPrepToolSchema = {
   name: "hta_dossier_prep",
   description:
-    "Structure evidence into HTA body-specific submission format (NICE STA, EMA, FDA, IQWIG, HAS). Produces draft sections with gap analysis. Accepts output from literature_search and cost_effectiveness_model.",
+    "Structure evidence into HTA body-specific submission format (NICE STA, EMA, FDA, IQWiG, HAS, EU JCA). Produces draft sections with gap analysis. Accepts output from literature_search and cost_effectiveness_model.",
   inputSchema: {
     type: "object",
     properties: {
       hta_body: {
         type: "string",
-        enum: ["nice", "ema", "fda", "iqwig", "has"],
+        enum: ["nice", "ema", "fda", "iqwig", "has", "jca"],
+        description:
+          "HTA body. Use 'jca' for EU Joint Clinical Assessment (EUHTA Reg. 2021/2282).",
       },
-      submission_type: { type: "string", enum: ["sta", "mta", "early_access"] },
+      submission_type: {
+        type: "string",
+        enum: ["sta", "mta", "early_access", "initial", "renewal", "variation"],
+        description:
+          "Submission type. Use 'initial'/'renewal'/'variation' for JCA.",
+      },
       drug_name: { type: "string" },
       indication: { type: "string" },
       evidence_summary: {
@@ -204,6 +462,24 @@ export const htaDossierPrepToolSchema = {
       },
       model_results: {
         description: "JSON output from cost_effectiveness_model",
+      },
+      picos: {
+        type: "array",
+        description:
+          "JCA: list of PICOs from the scoping decision. If omitted, a default PICO is generated.",
+        items: {
+          type: "object",
+          properties: {
+            id: {
+              type: "string",
+              description: "PICO identifier, e.g. 'PICO-1'",
+            },
+            population: { type: "string" },
+            comparator: { type: "string" },
+            outcomes: { type: "array", items: { type: "string" } },
+          },
+          required: ["id", "population", "comparator", "outcomes"],
+        },
       },
       output_format: { type: "string", enum: ["text", "json", "docx"] },
     },

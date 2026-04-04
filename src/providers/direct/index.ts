@@ -21,6 +21,7 @@ import { fetchEmbase } from "./embase.js";
 import { fetchWhoGho } from "./whoGho.js";
 import { fetchWorldBank } from "./worldBank.js";
 import { resultsToMarkdown } from "../../formatters/markdown.js";
+import { resultsToDocx } from "../../formatters/docx.js";
 
 function getAllSources(): DataSource[] {
   const base: DataSource[] = ["pubmed", "clinicaltrials", "biorxiv", "chembl"];
@@ -96,10 +97,15 @@ export class DirectProvider implements IProvider {
       }
     }
 
-    const content =
-      outputFormat === "json"
-        ? allResults
-        : resultsToMarkdown(allResults, audit);
+    let content: string | object;
+    if (outputFormat === "json") {
+      content = allResults;
+    } else if (outputFormat === "docx") {
+      const base64 = await resultsToDocx(allResults, audit);
+      content = `[DOCX Report Generated - ${allResults.length} results]\n\nBase64-encoded DOCX (${Math.round(base64.length / 1024)}KB):\n${base64}`;
+    } else {
+      content = resultsToMarkdown(allResults, audit);
+    }
 
     return { content, audit };
   }

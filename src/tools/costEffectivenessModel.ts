@@ -54,6 +54,7 @@ import {
   setMethodology,
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
+import { contentToDocx } from "../formatters/docx.js";
 
 const WTP_THRESHOLDS = {
   nhs: { low: 20000, high: 30000, currency: "GBP", symbol: "£" },
@@ -350,7 +351,7 @@ export async function handleCostEffectivenessModel(
     owsaSection.push(``);
   }
 
-  const content = [
+  const textLines = [
     `## Cost-Effectiveness Analysis: ${params.intervention} vs ${params.comparator}`,
     `**Indication:** ${params.indication} | **Perspective:** ${params.perspective.toUpperCase()} | **Horizon:** ${params.time_horizon}`,
     ``,
@@ -378,6 +379,17 @@ export async function handleCostEffectivenessModel(
     auditToMarkdown(audit),
   ].join("\n");
 
+  if (outputFormat === "docx") {
+    const base64 = await contentToDocx(
+      "Cost-Effectiveness Analysis Report",
+      textLines,
+      audit,
+    );
+    const content = `[DOCX Report Generated]\n\nBase64-encoded DOCX (${Math.round(base64.length / 1024)}KB):\n${base64}`;
+    return { content, audit };
+  }
+
+  const content = textLines;
   return { content, audit };
 }
 

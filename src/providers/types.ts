@@ -26,7 +26,12 @@ export type DataSource =
   | "citeline"
   | "pharmapendium"
   | "cortellis"
-  | "google_scholar";
+  | "google_scholar"
+  | "cms_nadac"
+  | "pssru"
+  | "nhs_costs"
+  | "bnf"
+  | "pbs_schedule";
 export type StudyType = "rct" | "meta_analysis" | "observational" | "review";
 export type TimeHorizon = "lifetime" | "5yr" | "10yr" | number;
 export type Perspective = "nhs" | "us_payer" | "societal";

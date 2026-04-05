@@ -38,7 +38,17 @@ export type DataSource =
   | "paho"
   | "iets"
   | "fonasa"
-  | "hitap";
+  | "hitap"
+  | "nice_ta"
+  | "cadth_reviews"
+  | "icer_reports"
+  | "pbac_psd"
+  | "gba_decisions"
+  | "has_tc"
+  | "iqwig"
+  | "aifa"
+  | "tlv"
+  | "inesss";
 export type StudyType = "rct" | "meta_analysis" | "observational" | "review";
 export type TimeHorizon = "lifetime" | "5yr" | "10yr" | number;
 export type Perspective = "nhs" | "us_payer" | "societal";

@@ -17,6 +17,22 @@ import {
   handleHtaDossierPrep,
   htaDossierPrepToolSchema,
 } from "./tools/htaDossierPrep.js";
+import {
+  handleKnowledgeSearch,
+  knowledgeSearchToolSchema,
+} from "./tools/knowledgeSearch.js";
+import {
+  handleKnowledgeRead,
+  knowledgeReadToolSchema,
+} from "./tools/knowledgeRead.js";
+import {
+  handleKnowledgeWrite,
+  knowledgeWriteToolSchema,
+} from "./tools/knowledgeWrite.js";
+import {
+  handleProjectCreate,
+  projectCreateToolSchema,
+} from "./tools/projectCreate.js";
 
 const server = new Server(
   { name: "heor-agent-mcp", version: "0.1.0" },
@@ -28,6 +44,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     literatureSearchToolSchema,
     costEffectivenessModelToolSchema,
     htaDossierPrepToolSchema,
+    knowledgeSearchToolSchema,
+    knowledgeReadToolSchema,
+    knowledgeWriteToolSchema,
+    projectCreateToolSchema,
   ],
 }));
 
@@ -45,6 +65,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case "hta_dossier_prep":
         result = await handleHtaDossierPrep(args);
+        break;
+      case "knowledge_search":
+        result = await handleKnowledgeSearch(args);
+        break;
+      case "knowledge_read":
+        result = await handleKnowledgeRead(args);
+        break;
+      case "knowledge_write":
+        result = await handleKnowledgeWrite(args);
+        break;
+      case "project_create":
+        result = await handleProjectCreate(args);
         break;
       default:
         return {

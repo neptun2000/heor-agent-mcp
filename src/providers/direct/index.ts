@@ -32,6 +32,11 @@ import { fetchCiteline } from "./citeline.js";
 import { fetchPharmapendium } from "./pharmapendium.js";
 import { fetchCortellis } from "./cortellis.js";
 import { fetchGoogleScholar } from "./googleScholar.js";
+import { fetchCmsNadac } from "./cmsNadac.js";
+import { fetchPssru } from "./pssru.js";
+import { fetchNhsCosts } from "./nhsCosts.js";
+import { fetchBnf } from "./bnf.js";
+import { fetchPbsSchedule } from "./pbsSchedule.js";
 import { getProxyUrl } from "./proxyClient.js";
 import { resultsToMarkdown } from "../../formatters/markdown.js";
 import { resultsToDocx } from "../../formatters/docx.js";
@@ -67,6 +72,11 @@ const FETCHERS: Record<
   pharmapendium: fetchPharmapendium,
   cortellis: fetchCortellis,
   google_scholar: fetchGoogleScholar,
+  cms_nadac: fetchCmsNadac,
+  pssru: fetchPssru,
+  nhs_costs: fetchNhsCosts,
+  bnf: fetchBnf,
+  pbs_schedule: fetchPbsSchedule,
 };
 
 export class DirectProvider implements IProvider {

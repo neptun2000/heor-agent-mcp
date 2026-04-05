@@ -54,6 +54,7 @@ import { fetchIqwig } from "./iqwig.js";
 import { fetchAifa } from "./aifa.js";
 import { fetchTlv } from "./tlv.js";
 import { fetchInesss } from "./inesss.js";
+import { fetchIspor } from "./ispor.js";
 import { getProxyUrl } from "./proxyClient.js";
 import { resultsToMarkdown } from "../../formatters/markdown.js";
 import { resultsToDocx } from "../../formatters/docx.js";
@@ -111,6 +112,7 @@ const FETCHERS: Record<
   aifa: fetchAifa,
   tlv: fetchTlv,
   inesss: fetchInesss,
+  ispor: fetchIspor,
 };
 
 export class DirectProvider implements IProvider {

@@ -46,6 +46,7 @@ const LiteratureSearchSchema = z.object({
         "aifa",
         "tlv",
         "inesss",
+        "ispor",
       ]),
     )
     .optional(),
@@ -122,6 +123,7 @@ export const literatureSearchToolSchema = {
             "aifa",
             "tlv",
             "inesss",
+            "ispor",
           ],
         },
         description:

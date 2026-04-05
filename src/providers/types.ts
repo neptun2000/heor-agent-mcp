@@ -31,7 +31,14 @@ export type DataSource =
   | "pssru"
   | "nhs_costs"
   | "bnf"
-  | "pbs_schedule";
+  | "pbs_schedule"
+  | "datasus"
+  | "conitec"
+  | "anvisa"
+  | "paho"
+  | "iets"
+  | "fonasa"
+  | "hitap";
 export type StudyType = "rct" | "meta_analysis" | "observational" | "review";
 export type TimeHorizon = "lifetime" | "5yr" | "10yr" | number;
 export type Perspective = "nhs" | "us_payer" | "societal";

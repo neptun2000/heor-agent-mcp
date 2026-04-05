@@ -29,6 +29,13 @@ const LiteratureSearchSchema = z.object({
         "nhs_costs",
         "bnf",
         "pbs_schedule",
+        "datasus",
+        "conitec",
+        "anvisa",
+        "paho",
+        "iets",
+        "fonasa",
+        "hitap",
       ]),
     )
     .optional(),
@@ -52,7 +59,7 @@ export async function handleLiteratureSearch(
 export const literatureSearchToolSchema = {
   name: "literature_search",
   description:
-    "Search PubMed, ClinicalTrials.gov, bioRxiv/medRxiv, ChEMBL, FDA Orange Book, FDA Purple Book, enterprise sources (Cochrane, Citeline, Pharmapendium, Cortellis), and HTA cost reference sources (CMS NADAC, PSSRU, NHS National Cost Collection, BNF, PBS Schedule) for evidence on a drug or indication. Returns structured results with a full audit trail suitable for HTA submissions.",
+    "Search PubMed, ClinicalTrials.gov, bioRxiv/medRxiv, ChEMBL, FDA Orange Book, FDA Purple Book, enterprise sources (Cochrane, Citeline, Pharmapendium, Cortellis), HTA cost reference sources (CMS NADAC, PSSRU, NHS National Cost Collection, BNF, PBS Schedule), LATAM sources (DATASUS, CONITEC, ANVISA, PAHO, IETS, FONASA), and APAC sources (HITAP) for evidence on a drug or indication. Returns structured results with a full audit trail suitable for HTA submissions.",
   inputSchema: {
     type: "object",
     properties: {
@@ -88,10 +95,17 @@ export const literatureSearchToolSchema = {
             "nhs_costs",
             "bnf",
             "pbs_schedule",
+            "datasus",
+            "conitec",
+            "anvisa",
+            "paho",
+            "iets",
+            "fonasa",
+            "hitap",
           ],
         },
         description:
-          "Data sources to query. Default: pubmed, clinicaltrials, biorxiv, chembl (+ embase if ELSEVIER_API_KEY set). Use 'who_gho' and 'world_bank' for epidemiology and demographic data. Use 'oecd' for OECD health statistics (expenditure, hospital beds, physicians, life expectancy). Use 'ihme_gbd' for Global Burden of Disease estimates (DALYs, prevalence, mortality across 204 countries). Use 'orange_book' for FDA drug approvals and therapeutic equivalence. Use 'purple_book' for FDA-licensed biologics and biosimilars. Enterprise (require API key): 'cochrane' (COCHRANE_API_KEY), 'citeline' (CITELINE_API_KEY), 'pharmapendium' (PHARMAPENDIUM_API_KEY), 'cortellis' (CORTELLIS_API_KEY). HTA cost reference sources: 'cms_nadac' (US drug acquisition costs via CMS API), 'pssru' (UK unit costs, reference links), 'nhs_costs' (NHS National Cost Collection, reference links), 'bnf' (UK drug pricing, reference links), 'pbs_schedule' (Australia PBS/MBS pricing, reference links).",
+          "Data sources to query. Default: pubmed, clinicaltrials, biorxiv, chembl (+ embase if ELSEVIER_API_KEY set). Use 'who_gho' and 'world_bank' for epidemiology and demographic data. Use 'oecd' for OECD health statistics (expenditure, hospital beds, physicians, life expectancy). Use 'ihme_gbd' for Global Burden of Disease estimates (DALYs, prevalence, mortality across 204 countries). Use 'orange_book' for FDA drug approvals and therapeutic equivalence. Use 'purple_book' for FDA-licensed biologics and biosimilars. Enterprise (require API key): 'cochrane' (COCHRANE_API_KEY), 'citeline' (CITELINE_API_KEY), 'pharmapendium' (PHARMAPENDIUM_API_KEY), 'cortellis' (CORTELLIS_API_KEY). HTA cost reference sources: 'cms_nadac' (US drug acquisition costs via CMS API), 'pssru' (UK unit costs, reference links), 'nhs_costs' (NHS National Cost Collection, reference links), 'bnf' (UK drug pricing, reference links), 'pbs_schedule' (Australia PBS/MBS pricing, reference links). LATAM sources (explicit request only): 'datasus' (Brazil SUS hospital/ambulatory data), 'conitec' (Brazil HTA reports), 'anvisa' (Brazil drug pricing/registry), 'paho' (Pan American regional health statistics), 'iets' (Colombia HTA reports), 'fonasa' (Chile public health insurance data). APAC sources (explicit request only): 'hitap' (Thailand HTA reports and methodology).",
       },
       max_results: {
         type: "number",

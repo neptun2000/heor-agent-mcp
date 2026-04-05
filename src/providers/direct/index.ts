@@ -37,6 +37,13 @@ import { fetchPssru } from "./pssru.js";
 import { fetchNhsCosts } from "./nhsCosts.js";
 import { fetchBnf } from "./bnf.js";
 import { fetchPbsSchedule } from "./pbsSchedule.js";
+import { fetchDatasus } from "./datasus.js";
+import { fetchConitec } from "./conitec.js";
+import { fetchAnvisa } from "./anvisa.js";
+import { fetchPaho } from "./paho.js";
+import { fetchIets } from "./iets.js";
+import { fetchFonasa } from "./fonasa.js";
+import { fetchHitap } from "./hitap.js";
 import { getProxyUrl } from "./proxyClient.js";
 import { resultsToMarkdown } from "../../formatters/markdown.js";
 import { resultsToDocx } from "../../formatters/docx.js";
@@ -77,6 +84,13 @@ const FETCHERS: Record<
   nhs_costs: fetchNhsCosts,
   bnf: fetchBnf,
   pbs_schedule: fetchPbsSchedule,
+  datasus: fetchDatasus,
+  conitec: fetchConitec,
+  anvisa: fetchAnvisa,
+  paho: fetchPaho,
+  iets: fetchIets,
+  fonasa: fetchFonasa,
+  hitap: fetchHitap,
 };
 
 export class DirectProvider implements IProvider {

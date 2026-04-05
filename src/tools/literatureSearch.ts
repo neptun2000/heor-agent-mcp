@@ -36,6 +36,16 @@ const LiteratureSearchSchema = z.object({
         "iets",
         "fonasa",
         "hitap",
+        "nice_ta",
+        "cadth_reviews",
+        "icer_reports",
+        "pbac_psd",
+        "gba_decisions",
+        "has_tc",
+        "iqwig",
+        "aifa",
+        "tlv",
+        "inesss",
       ]),
     )
     .optional(),
@@ -59,7 +69,7 @@ export async function handleLiteratureSearch(
 export const literatureSearchToolSchema = {
   name: "literature_search",
   description:
-    "Search PubMed, ClinicalTrials.gov, bioRxiv/medRxiv, ChEMBL, FDA Orange Book, FDA Purple Book, enterprise sources (Cochrane, Citeline, Pharmapendium, Cortellis), HTA cost reference sources (CMS NADAC, PSSRU, NHS National Cost Collection, BNF, PBS Schedule), LATAM sources (DATASUS, CONITEC, ANVISA, PAHO, IETS, FONASA), and APAC sources (HITAP) for evidence on a drug or indication. Returns structured results with a full audit trail suitable for HTA submissions.",
+    "Search PubMed, ClinicalTrials.gov, bioRxiv/medRxiv, ChEMBL, FDA Orange Book, FDA Purple Book, enterprise sources (Cochrane, Citeline, Pharmapendium, Cortellis), HTA cost reference sources (CMS NADAC, PSSRU, NHS National Cost Collection, BNF, PBS Schedule), LATAM sources (DATASUS, CONITEC, ANVISA, PAHO, IETS, FONASA), APAC sources (HITAP), and HTA appraisal/guidance sources (NICE TAs, CADTH CDR/pCODR, ICER, PBAC PSDs, G-BA AMNOG, HAS Transparency Committee, IQWiG, AIFA, TLV Sweden, INESSS Quebec) for evidence on a drug or indication. Returns structured results including HTA precedents and appraisal decisions with a full audit trail suitable for HTA submissions.",
   inputSchema: {
     type: "object",
     properties: {
@@ -102,10 +112,20 @@ export const literatureSearchToolSchema = {
             "iets",
             "fonasa",
             "hitap",
+            "nice_ta",
+            "cadth_reviews",
+            "icer_reports",
+            "pbac_psd",
+            "gba_decisions",
+            "has_tc",
+            "iqwig",
+            "aifa",
+            "tlv",
+            "inesss",
           ],
         },
         description:
-          "Data sources to query. Default: pubmed, clinicaltrials, biorxiv, chembl (+ embase if ELSEVIER_API_KEY set). Use 'who_gho' and 'world_bank' for epidemiology and demographic data. Use 'oecd' for OECD health statistics (expenditure, hospital beds, physicians, life expectancy). Use 'ihme_gbd' for Global Burden of Disease estimates (DALYs, prevalence, mortality across 204 countries). Use 'orange_book' for FDA drug approvals and therapeutic equivalence. Use 'purple_book' for FDA-licensed biologics and biosimilars. Enterprise (require API key): 'cochrane' (COCHRANE_API_KEY), 'citeline' (CITELINE_API_KEY), 'pharmapendium' (PHARMAPENDIUM_API_KEY), 'cortellis' (CORTELLIS_API_KEY). HTA cost reference sources: 'cms_nadac' (US drug acquisition costs via CMS API), 'pssru' (UK unit costs, reference links), 'nhs_costs' (NHS National Cost Collection, reference links), 'bnf' (UK drug pricing, reference links), 'pbs_schedule' (Australia PBS/MBS pricing, reference links). LATAM sources (explicit request only): 'datasus' (Brazil SUS hospital/ambulatory data), 'conitec' (Brazil HTA reports), 'anvisa' (Brazil drug pricing/registry), 'paho' (Pan American regional health statistics), 'iets' (Colombia HTA reports), 'fonasa' (Chile public health insurance data). APAC sources (explicit request only): 'hitap' (Thailand HTA reports and methodology).",
+          "Data sources to query. Default: pubmed, clinicaltrials, biorxiv, chembl (+ embase if ELSEVIER_API_KEY set). Use 'who_gho' and 'world_bank' for epidemiology and demographic data. Use 'oecd' for OECD health statistics (expenditure, hospital beds, physicians, life expectancy). Use 'ihme_gbd' for Global Burden of Disease estimates (DALYs, prevalence, mortality across 204 countries). Use 'orange_book' for FDA drug approvals and therapeutic equivalence. Use 'purple_book' for FDA-licensed biologics and biosimilars. Enterprise (require API key): 'cochrane' (COCHRANE_API_KEY), 'citeline' (CITELINE_API_KEY), 'pharmapendium' (PHARMAPENDIUM_API_KEY), 'cortellis' (CORTELLIS_API_KEY). HTA cost reference sources: 'cms_nadac' (US drug acquisition costs via CMS API), 'pssru' (UK unit costs, reference links), 'nhs_costs' (NHS National Cost Collection, reference links), 'bnf' (UK drug pricing, reference links), 'pbs_schedule' (Australia PBS/MBS pricing, reference links). LATAM sources (explicit request only): 'datasus' (Brazil SUS hospital/ambulatory data), 'conitec' (Brazil HTA reports), 'anvisa' (Brazil drug pricing/registry), 'paho' (Pan American regional health statistics), 'iets' (Colombia HTA reports), 'fonasa' (Chile public health insurance data). APAC sources (explicit request only): 'hitap' (Thailand HTA reports and methodology). HTA appraisal/precedent sources (explicit request only): 'nice_ta' (NICE Technology Appraisals, UK), 'cadth_reviews' (CADTH CDR/pCODR, Canada), 'icer_reports' (ICER evidence reports and HBPBs, US), 'pbac_psd' (PBAC Public Summary Documents, Australia), 'gba_decisions' (G-BA AMNOG benefit assessments, Germany), 'has_tc' (HAS Transparency Committee opinions, France), 'iqwig' (IQWiG systematic reviews and dossier assessments, Germany), 'aifa' (AIFA reimbursement decisions, Italy), 'tlv' (TLV value-based pricing decisions, Sweden), 'inesss' (INESSS drug evaluations, Quebec Canada).",
       },
       max_results: {
         type: "number",

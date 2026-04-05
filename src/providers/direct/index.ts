@@ -44,6 +44,16 @@ import { fetchPaho } from "./paho.js";
 import { fetchIets } from "./iets.js";
 import { fetchFonasa } from "./fonasa.js";
 import { fetchHitap } from "./hitap.js";
+import { fetchNiceTa } from "./niceTa.js";
+import { fetchCadthReviews } from "./cadthReviews.js";
+import { fetchIcerReports } from "./icerReports.js";
+import { fetchPbacPsd } from "./pbacPsd.js";
+import { fetchGbaDecisions } from "./gbaDecisions.js";
+import { fetchHasTc } from "./hasTc.js";
+import { fetchIqwig } from "./iqwig.js";
+import { fetchAifa } from "./aifa.js";
+import { fetchTlv } from "./tlv.js";
+import { fetchInesss } from "./inesss.js";
 import { getProxyUrl } from "./proxyClient.js";
 import { resultsToMarkdown } from "../../formatters/markdown.js";
 import { resultsToDocx } from "../../formatters/docx.js";
@@ -91,6 +101,16 @@ const FETCHERS: Record<
   iets: fetchIets,
   fonasa: fetchFonasa,
   hitap: fetchHitap,
+  nice_ta: fetchNiceTa,
+  cadth_reviews: fetchCadthReviews,
+  icer_reports: fetchIcerReports,
+  pbac_psd: fetchPbacPsd,
+  gba_decisions: fetchGbaDecisions,
+  has_tc: fetchHasTc,
+  iqwig: fetchIqwig,
+  aifa: fetchAifa,
+  tlv: fetchTlv,
+  inesss: fetchInesss,
 };
 
 export class DirectProvider implements IProvider {

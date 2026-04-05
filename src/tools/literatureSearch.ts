@@ -17,6 +17,12 @@ const LiteratureSearchSchema = z.object({
         "all_of_us",
         "oecd",
         "ihme_gbd",
+        "orange_book",
+        "purple_book",
+        "cochrane",
+        "citeline",
+        "pharmapendium",
+        "cortellis",
       ]),
     )
     .optional(),
@@ -40,7 +46,7 @@ export async function handleLiteratureSearch(
 export const literatureSearchToolSchema = {
   name: "literature_search",
   description:
-    "Search PubMed, ClinicalTrials.gov, bioRxiv/medRxiv, and ChEMBL for evidence on a drug or indication. Returns structured results with a full audit trail suitable for HTA submissions.",
+    "Search PubMed, ClinicalTrials.gov, bioRxiv/medRxiv, ChEMBL, FDA Orange Book, FDA Purple Book, and enterprise sources (Cochrane, Citeline, Pharmapendium, Cortellis) for evidence on a drug or indication. Returns structured results with a full audit trail suitable for HTA submissions.",
   inputSchema: {
     type: "object",
     properties: {
@@ -64,10 +70,16 @@ export const literatureSearchToolSchema = {
             "all_of_us",
             "oecd",
             "ihme_gbd",
+            "orange_book",
+            "purple_book",
+            "cochrane",
+            "citeline",
+            "pharmapendium",
+            "cortellis",
           ],
         },
         description:
-          "Data sources to query. Default: pubmed, clinicaltrials, biorxiv, chembl (+ embase if ELSEVIER_API_KEY set). Use 'who_gho' and 'world_bank' for epidemiology and demographic data. Use 'oecd' for OECD health statistics (expenditure, hospital beds, physicians, life expectancy). Use 'ihme_gbd' for Global Burden of Disease estimates (DALYs, prevalence, mortality across 204 countries).",
+          "Data sources to query. Default: pubmed, clinicaltrials, biorxiv, chembl (+ embase if ELSEVIER_API_KEY set). Use 'who_gho' and 'world_bank' for epidemiology and demographic data. Use 'oecd' for OECD health statistics (expenditure, hospital beds, physicians, life expectancy). Use 'ihme_gbd' for Global Burden of Disease estimates (DALYs, prevalence, mortality across 204 countries). Use 'orange_book' for FDA drug approvals and therapeutic equivalence. Use 'purple_book' for FDA-licensed biologics and biosimilars. Enterprise (require API key): 'cochrane' (COCHRANE_API_KEY), 'citeline' (CITELINE_API_KEY), 'pharmapendium' (PHARMAPENDIUM_API_KEY), 'cortellis' (CORTELLIS_API_KEY).",
       },
       max_results: {
         type: "number",

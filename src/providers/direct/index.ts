@@ -31,6 +31,8 @@ import { fetchCochrane } from "./cochrane.js";
 import { fetchCiteline } from "./citeline.js";
 import { fetchPharmapendium } from "./pharmapendium.js";
 import { fetchCortellis } from "./cortellis.js";
+import { fetchGoogleScholar } from "./googleScholar.js";
+import { getProxyUrl } from "./proxyClient.js";
 import { resultsToMarkdown } from "../../formatters/markdown.js";
 import { resultsToDocx } from "../../formatters/docx.js";
 import {
@@ -64,6 +66,7 @@ const FETCHERS: Record<
   citeline: fetchCiteline,
   pharmapendium: fetchPharmapendium,
   cortellis: fetchCortellis,
+  google_scholar: fetchGoogleScholar,
 };
 
 export class DirectProvider implements IProvider {
@@ -79,18 +82,24 @@ export class DirectProvider implements IProvider {
     );
     audit = setMethodology(audit, "PRISMA-style multi-database search");
 
+    const proxyActive = getProxyUrl() !== null;
     const enterpriseKeys: Record<string, string> = {
       embase: "ELSEVIER_API_KEY",
       cochrane: "COCHRANE_API_KEY",
       citeline: "CITELINE_API_KEY",
       pharmapendium: "PHARMAPENDIUM_API_KEY",
       cortellis: "CORTELLIS_API_KEY",
+      google_scholar: "SERPAPI_KEY",
     };
     for (const [src, envVar] of Object.entries(enterpriseKeys)) {
-      if (sources.includes(src as DataSource) && !process.env[envVar]) {
+      if (
+        sources.includes(src as DataSource) &&
+        !process.env[envVar] &&
+        !proxyActive
+      ) {
         audit = addWarning(
           audit,
-          `${src} requested but ${envVar} is not set — ${src} results will be empty. Set ${envVar} to enable.`,
+          `${src} requested but ${envVar} is not set and HEOR_PROXY_URL is not configured — ${src} results will be empty.`,
         );
       }
     }

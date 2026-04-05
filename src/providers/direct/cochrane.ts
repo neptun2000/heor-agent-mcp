@@ -1,4 +1,5 @@
 import type { LiteratureResult } from "../types.js";
+import { fetchViaProxy, getProxyUrl } from "./proxyClient.js";
 
 // Wiley Online Library API — Cochrane Library is published by Wiley
 const BASE = "https://api.wiley.com/onlinelibrary/tdm/v1/articles";
@@ -16,7 +17,17 @@ interface CochraneResponse {
   items?: CochraneArticle[];
 }
 
-export async function fetchCochrane(query: string, maxResults: number): Promise<LiteratureResult[]> {
+export async function fetchCochrane(
+  query: string,
+  maxResults: number,
+): Promise<LiteratureResult[]> {
+  // Try proxy first (user has Teva access via proxy)
+  if (getProxyUrl()) {
+    const proxyResults = await fetchViaProxy("cochrane", query, maxResults);
+    if (proxyResults.length > 0) return proxyResults;
+  }
+
+  // Fall back to direct API call if key is set
   const apiKey = process.env.COCHRANE_API_KEY;
   if (!apiKey) return [];
 
@@ -25,7 +36,7 @@ export async function fetchCochrane(query: string, maxResults: number): Promise<
     const res = await fetch(url, {
       headers: {
         "Wiley-TDM-Client-Token": apiKey,
-        "Accept": "application/json",
+        Accept: "application/json",
       },
     });
     if (!res.ok) return [];
@@ -38,9 +49,13 @@ export async function fetchCochrane(query: string, maxResults: number): Promise<
       title: item.title ?? "Untitled Cochrane Review",
       authors: item.authors ?? [],
       date: item.publicationDate ?? "",
-      study_type: item.reviewType?.toLowerCase().includes("meta") ? "meta_analysis" : "review",
+      study_type: item.reviewType?.toLowerCase().includes("meta")
+        ? "meta_analysis"
+        : "review",
       abstract: item.abstract ?? "",
-      url: item.doi ? `https://doi.org/${item.doi}` : "https://www.cochranelibrary.com/",
+      url: item.doi
+        ? `https://doi.org/${item.doi}`
+        : "https://www.cochranelibrary.com/",
     }));
   } catch {
     return [];

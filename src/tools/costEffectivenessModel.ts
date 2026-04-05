@@ -40,6 +40,7 @@ const CEModelSchema = z.object({
   psa_iterations: z.number().int().min(1).max(10000).optional(),
   run_owsa: z.boolean().optional(),
   output_format: z.enum(["text", "json", "docx"]).optional(),
+  project: z.string().optional(),
 });
 import { runPartSA } from "../models/partsa.js";
 import { runPSA } from "../models/psa.js";
@@ -55,6 +56,7 @@ import {
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
 import { contentToDocx } from "../formatters/docx.js";
+import { saveModelRun } from "../knowledge/index.js";
 
 const WTP_THRESHOLDS = {
   nhs: { low: 20000, high: 30000, currency: "GBP", symbol: "£" },
@@ -379,6 +381,21 @@ export async function handleCostEffectivenessModel(
     auditToMarkdown(audit),
   ].join("\n");
 
+  if (params.project) {
+    try {
+      const metadata = {
+        intervention: params.intervention,
+        comparator: params.comparator,
+        indication: params.indication,
+        perspective: params.perspective,
+        model_type: params.model_type ?? "markov",
+      };
+      await saveModelRun(params.project, metadata, textLines);
+    } catch {
+      // fail silently — don't break the tool
+    }
+  }
+
   if (outputFormat === "docx") {
     const base64 = await contentToDocx(
       "Cost-Effectiveness Analysis Report",
@@ -452,6 +469,11 @@ export const costEffectivenessModelToolSchema = {
         description: "PSA iterations (default: 1000, max: 10000)",
       },
       output_format: { type: "string", enum: ["text", "json", "docx"] },
+      project: {
+        type: "string",
+        description:
+          "Project ID for knowledge base persistence. When set, model run is saved to ~/.heor-agent/projects/{project}/raw/models/",
+      },
     },
     required: [
       "intervention",

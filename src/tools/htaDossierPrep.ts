@@ -31,6 +31,7 @@ const DossierSchema = z.object({
     )
     .optional(),
   output_format: z.enum(["text", "json", "docx"]).optional(),
+  project: z.string().optional(),
 });
 import {
   createAuditRecord,
@@ -40,6 +41,7 @@ import {
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
 import { contentToDocx } from "../formatters/docx.js";
+import { saveDossier } from "../knowledge/index.js";
 
 const NICE_STA_SECTIONS = [
   "Population",
@@ -367,11 +369,24 @@ async function handleJCADossier(
   lines.push(auditToMarkdown(audit));
 
   const outputFormat = params.output_format ?? "text";
+  const jcaTextContent = lines.join("\n");
+
+  if (params.project) {
+    try {
+      await saveDossier(
+        params.project,
+        params.hta_body,
+        params.submission_type,
+        { drug_name: params.drug_name, indication: params.indication },
+        jcaTextContent,
+      );
+    } catch {}
+  }
+
   if (outputFormat === "docx") {
-    const textContent = lines.join("\n");
     const base64 = await contentToDocx(
       `JCA ${params.submission_type.toUpperCase()} Dossier`,
-      textContent,
+      jcaTextContent,
       audit,
     );
     return {
@@ -380,7 +395,7 @@ async function handleJCADossier(
     };
   }
 
-  return { content: lines.join("\n"), audit };
+  return { content: jcaTextContent, audit };
 }
 
 export async function handleHtaDossierPrep(
@@ -450,11 +465,24 @@ export async function handleHtaDossierPrep(
 
   lines.push(auditToMarkdown(audit));
 
+  const dossierTextContent = lines.join("\n");
+
+  if (params.project) {
+    try {
+      await saveDossier(
+        params.project,
+        params.hta_body,
+        params.submission_type,
+        { drug_name: params.drug_name, indication: params.indication },
+        dossierTextContent,
+      );
+    } catch {}
+  }
+
   if (outputFormat === "docx") {
-    const textContent = lines.join("\n");
     const base64 = await contentToDocx(
       `${params.hta_body.toUpperCase()} ${params.submission_type.toUpperCase()} Dossier`,
-      textContent,
+      dossierTextContent,
       audit,
     );
     return {
@@ -463,7 +491,7 @@ export async function handleHtaDossierPrep(
     };
   }
 
-  return { content: lines.join("\n"), audit };
+  return { content: dossierTextContent, audit };
 }
 
 export const htaDossierPrepToolSchema = {
@@ -512,6 +540,11 @@ export const htaDossierPrepToolSchema = {
         },
       },
       output_format: { type: "string", enum: ["text", "json", "docx"] },
+      project: {
+        type: "string",
+        description:
+          "Project ID for knowledge base persistence. When set, dossier draft is saved to ~/.heor-agent/projects/{project}/raw/dossiers/",
+      },
     },
     required: ["hta_body", "submission_type", "drug_name", "indication"],
   },

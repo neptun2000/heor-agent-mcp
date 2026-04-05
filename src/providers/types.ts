@@ -17,7 +17,9 @@ export type DataSource =
   | "embase"
   | "who_gho"
   | "world_bank"
-  | "all_of_us";
+  | "all_of_us"
+  | "oecd"
+  | "ihme_gbd";
 export type StudyType = "rct" | "meta_analysis" | "observational" | "review";
 export type TimeHorizon = "lifetime" | "5yr" | "10yr" | number;
 export type Perspective = "nhs" | "us_payer" | "societal";
@@ -40,6 +42,7 @@ export interface LiteratureSearchParams {
   date_from?: string;
   study_types?: StudyType[];
   output_format?: OutputFormat;
+  project?: string;
 }
 
 export interface CEModelParams {
@@ -83,6 +86,8 @@ export interface CEModelParams {
     costs?: Record<string, { mean: number; sd: number }>;
   };
 
+  project?: string;
+
   // PartSA fields (used when model_type === "partsa")
   survival_inputs?: {
     os_median_months?: number;
@@ -110,6 +115,7 @@ export interface DossierParams {
   model_results?: CEModelResult;
   output_format?: OutputFormat;
   picos?: PicoDefinition[]; // JCA: list of PICOs. If omitted, single default PICO is generated.
+  project?: string;
 }
 
 export interface ToolResult {

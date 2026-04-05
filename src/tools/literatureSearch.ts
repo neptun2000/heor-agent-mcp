@@ -15,6 +15,8 @@ const LiteratureSearchSchema = z.object({
         "who_gho",
         "world_bank",
         "all_of_us",
+        "oecd",
+        "ihme_gbd",
       ]),
     )
     .optional(),
@@ -24,6 +26,7 @@ const LiteratureSearchSchema = z.object({
     .array(z.enum(["rct", "meta_analysis", "observational", "review"]))
     .optional(),
   output_format: z.enum(["text", "json", "docx"]).optional(),
+  project: z.string().optional(),
 });
 
 export async function handleLiteratureSearch(
@@ -59,10 +62,12 @@ export const literatureSearchToolSchema = {
             "who_gho",
             "world_bank",
             "all_of_us",
+            "oecd",
+            "ihme_gbd",
           ],
         },
         description:
-          "Data sources to query. Default: pubmed, clinicaltrials, biorxiv, chembl (+ embase if ELSEVIER_API_KEY set). Use 'who_gho' and 'world_bank' for epidemiology and demographic data.",
+          "Data sources to query. Default: pubmed, clinicaltrials, biorxiv, chembl (+ embase if ELSEVIER_API_KEY set). Use 'who_gho' and 'world_bank' for epidemiology and demographic data. Use 'oecd' for OECD health statistics (expenditure, hospital beds, physicians, life expectancy). Use 'ihme_gbd' for Global Burden of Disease estimates (DALYs, prevalence, mortality across 204 countries).",
       },
       max_results: {
         type: "number",
@@ -77,6 +82,11 @@ export const literatureSearchToolSchema = {
         type: "string",
         enum: ["text", "json", "docx"],
         description: "Output format. 'docx' requires hosted tier.",
+      },
+      project: {
+        type: "string",
+        description:
+          "Project ID for knowledge base persistence. When set, results are saved to ~/.heor-agent/projects/{project}/raw/literature/",
       },
     },
     required: ["query"],

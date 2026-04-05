@@ -7,10 +7,12 @@ import type {
   LiteratureResult,
   DataSource,
 } from "../types.js";
+import { saveLiteratureResult } from "../../knowledge/index.js";
 import {
   createAuditRecord,
   addSource,
   addWarning,
+  addAssumption,
   setMethodology,
 } from "../../audit/builder.js";
 import { fetchPubMed } from "./pubmed.js";
@@ -21,6 +23,8 @@ import { fetchEmbase } from "./embase.js";
 import { fetchWhoGho } from "./whoGho.js";
 import { fetchWorldBank } from "./worldBank.js";
 import { fetchAllOfUs } from "./allOfUs.js";
+import { fetchOecd } from "./oecd.js";
+import { fetchIhmeGbd } from "./ihmeGbd.js";
 import { resultsToMarkdown } from "../../formatters/markdown.js";
 import { resultsToDocx } from "../../formatters/docx.js";
 import {
@@ -46,6 +50,8 @@ const FETCHERS: Record<
   who_gho: fetchWhoGho,
   world_bank: fetchWorldBank,
   all_of_us: fetchAllOfUs,
+  oecd: fetchOecd,
+  ihme_gbd: fetchIhmeGbd,
 };
 
 export class DirectProvider implements IProvider {
@@ -101,6 +107,23 @@ export class DirectProvider implements IProvider {
           `Source ${source} failed: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
+    }
+
+    if (params.project && allResults.length > 0) {
+      let savedCount = 0;
+      let errors = 0;
+      for (const result of allResults) {
+        try {
+          await saveLiteratureResult(params.project, result, params.query);
+          savedCount++;
+        } catch {
+          errors++;
+        }
+      }
+      audit = addAssumption(
+        audit,
+        `Auto-saved ${savedCount} results to project "${params.project}"${errors > 0 ? ` (${errors} errors)` : ""}`,
+      );
     }
 
     const profile = analyzeMetabolicProfile(allResults, params.query);

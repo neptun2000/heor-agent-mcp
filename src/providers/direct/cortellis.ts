@@ -1,4 +1,5 @@
 import type { LiteratureResult } from "../types.js";
+import { fetchViaProxy, getProxyUrl } from "./proxyClient.js";
 
 // Clarivate Cortellis Competitive Intelligence API
 const BASE = "https://api.cortellis.com/v2/search/ci";
@@ -18,14 +19,27 @@ interface CortellisResponse {
   results?: CortellisDrug[];
 }
 
-export async function fetchCortellis(query: string, maxResults: number): Promise<LiteratureResult[]> {
+export async function fetchCortellis(
+  query: string,
+  maxResults: number,
+): Promise<LiteratureResult[]> {
+  // Try proxy first (user has Teva access via proxy)
+  if (getProxyUrl()) {
+    const proxyResults = await fetchViaProxy("cortellis", query, maxResults);
+    if (proxyResults.length > 0) return proxyResults;
+  }
+
+  // Fall back to direct API call if key is set
   const apiKey = process.env.CORTELLIS_API_KEY;
   if (!apiKey) return [];
 
   try {
     const url = `${BASE}?q=${encodeURIComponent(query)}&limit=${maxResults}`;
     const res = await fetch(url, {
-      headers: { "Authorization": `Bearer ${apiKey}`, "Accept": "application/json" },
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: "application/json",
+      },
     });
     if (!res.ok) return [];
     const data = (await res.json()) as CortellisResponse;
@@ -43,8 +57,12 @@ export async function fetchCortellis(query: string, maxResults: number): Promise
         `Sponsor: ${d.sponsor ?? "N/A"}`,
         `Indications: ${(d.indications ?? []).join(", ") || "N/A"}`,
         `MoA: ${d.mechanismOfAction ?? "N/A"}`,
-        d.consensusForecast ? `Consensus forecast: ${d.consensusForecast}` : null,
-      ].filter(Boolean).join(" | "),
+        d.consensusForecast
+          ? `Consensus forecast: ${d.consensusForecast}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" | "),
       url: `https://www.cortellis.com/`,
     }));
   } catch {

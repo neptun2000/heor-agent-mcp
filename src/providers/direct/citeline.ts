@@ -1,4 +1,5 @@
 import type { LiteratureResult } from "../types.js";
+import { fetchViaProxy, getProxyUrl } from "./proxyClient.js";
 
 // Citeline TrialTrove API (Informa/Citeline)
 const BASE = "https://api.citeline.com/trialtrove/v1/trials";
@@ -19,14 +20,27 @@ interface CitelineResponse {
   trials?: CitelineTrial[];
 }
 
-export async function fetchCiteline(query: string, maxResults: number): Promise<LiteratureResult[]> {
+export async function fetchCiteline(
+  query: string,
+  maxResults: number,
+): Promise<LiteratureResult[]> {
+  // Try proxy first (user has Teva access via proxy)
+  if (getProxyUrl()) {
+    const proxyResults = await fetchViaProxy("citeline", query, maxResults);
+    if (proxyResults.length > 0) return proxyResults;
+  }
+
+  // Fall back to direct API call if key is set
   const apiKey = process.env.CITELINE_API_KEY;
   if (!apiKey) return [];
 
   try {
     const url = `${BASE}?q=${encodeURIComponent(query)}&limit=${maxResults}`;
     const res = await fetch(url, {
-      headers: { "Authorization": `Bearer ${apiKey}`, "Accept": "application/json" },
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: "application/json",
+      },
     });
     if (!res.ok) return [];
     const data = (await res.json()) as CitelineResponse;
@@ -45,7 +59,9 @@ export async function fetchCiteline(query: string, maxResults: number): Promise<
         `Indication: ${t.indication ?? "N/A"}`,
         `Therapeutic area: ${t.therapeuticArea ?? "N/A"}`,
         t.primaryOutcome ? `Primary outcome: ${t.primaryOutcome}` : null,
-      ].filter(Boolean).join(" | "),
+      ]
+        .filter(Boolean)
+        .join(" | "),
       url: `https://citeline.informa.com/trial/${t.trialId ?? ""}`,
     }));
   } catch {

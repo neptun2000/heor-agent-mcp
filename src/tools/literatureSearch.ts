@@ -23,6 +23,7 @@ const LiteratureSearchSchema = z.object({
         "citeline",
         "pharmapendium",
         "cortellis",
+        "google_scholar",
       ]),
     )
     .optional(),
@@ -76,6 +77,7 @@ export const literatureSearchToolSchema = {
             "citeline",
             "pharmapendium",
             "cortellis",
+            "google_scholar",
           ],
         },
         description:

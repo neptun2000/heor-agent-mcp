@@ -1,31 +1,52 @@
 {
   "name": "heor-agent-mcp",
   "version": "0.1.0",
+  "license": "MIT",
+  "author": "mnaumov",
   "engines": {
     "node": ">=20.0.0"
   },
-  "description": "HEOR AI agent as an MCP server for Claude.ai — literature search, cost-effectiveness modeling, HTA dossier prep",
+  "description": "HEOR AI agent as an MCP server for Claude.ai — 7 tools across literature search (39 data sources incl. PubMed/ClinicalTrials.gov/Cochrane/NICE/CADTH), state-of-the-art cost-effectiveness modeling (Markov/PartSA/PSA/EVPI), HTA dossier prep (NICE/EMA/FDA/IQWiG/HAS/EU JCA), and persistent project knowledge base",
   "type": "module",
   "main": "dist/server.js",
   "bin": {
     "heor-agent-mcp": "dist/server.js"
   },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
   "keywords": [
     "heor",
     "health-economics",
     "hta",
     "cost-effectiveness",
-    "mcp",
-    "claude",
-    "pubmed",
+    "pharmacoeconomics",
     "nice",
     "icer",
-    "pharmacoeconomics"
+    "cadth",
+    "pbac",
+    "jca",
+    "euhta",
+    "pubmed",
+    "clinicaltrials",
+    "cochrane",
+    "embase",
+    "markov",
+    "psa",
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "anthropic"
   ],
-  "homepage": "https://github.com/mnaumov/HEORAgent",
+  "homepage": "https://github.com/mnaumov/HEORAgent#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mnaumov/HEORAgent.git"
+    "url": "git+https://github.com/mnaumov/HEORAgent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mnaumov/HEORAgent/issues"
   },
   "scripts": {
     "build": "tsc",

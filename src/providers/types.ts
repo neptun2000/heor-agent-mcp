@@ -19,7 +19,13 @@ export type DataSource =
   | "world_bank"
   | "all_of_us"
   | "oecd"
-  | "ihme_gbd";
+  | "ihme_gbd"
+  | "orange_book"
+  | "purple_book"
+  | "cochrane"
+  | "citeline"
+  | "pharmapendium"
+  | "cortellis";
 export type StudyType = "rct" | "meta_analysis" | "observational" | "review";
 export type TimeHorizon = "lifetime" | "5yr" | "10yr" | number;
 export type Perspective = "nhs" | "us_payer" | "societal";

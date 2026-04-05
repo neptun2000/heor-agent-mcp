@@ -25,6 +25,12 @@ import { fetchWorldBank } from "./worldBank.js";
 import { fetchAllOfUs } from "./allOfUs.js";
 import { fetchOecd } from "./oecd.js";
 import { fetchIhmeGbd } from "./ihmeGbd.js";
+import { fetchOrangeBook } from "./orangeBook.js";
+import { fetchPurpleBook } from "./purpleBook.js";
+import { fetchCochrane } from "./cochrane.js";
+import { fetchCiteline } from "./citeline.js";
+import { fetchPharmapendium } from "./pharmapendium.js";
+import { fetchCortellis } from "./cortellis.js";
 import { resultsToMarkdown } from "../../formatters/markdown.js";
 import { resultsToDocx } from "../../formatters/docx.js";
 import {
@@ -52,6 +58,12 @@ const FETCHERS: Record<
   all_of_us: fetchAllOfUs,
   oecd: fetchOecd,
   ihme_gbd: fetchIhmeGbd,
+  orange_book: fetchOrangeBook,
+  purple_book: fetchPurpleBook,
+  cochrane: fetchCochrane,
+  citeline: fetchCiteline,
+  pharmapendium: fetchPharmapendium,
+  cortellis: fetchCortellis,
 };
 
 export class DirectProvider implements IProvider {
@@ -67,11 +79,20 @@ export class DirectProvider implements IProvider {
     );
     audit = setMethodology(audit, "PRISMA-style multi-database search");
 
-    if (sources.includes("embase") && !process.env.ELSEVIER_API_KEY) {
-      audit = addWarning(
-        audit,
-        "Embase requested but ELSEVIER_API_KEY is not set — Embase results will be empty. Set ELSEVIER_API_KEY to enable Embase search.",
-      );
+    const enterpriseKeys: Record<string, string> = {
+      embase: "ELSEVIER_API_KEY",
+      cochrane: "COCHRANE_API_KEY",
+      citeline: "CITELINE_API_KEY",
+      pharmapendium: "PHARMAPENDIUM_API_KEY",
+      cortellis: "CORTELLIS_API_KEY",
+    };
+    for (const [src, envVar] of Object.entries(enterpriseKeys)) {
+      if (sources.includes(src as DataSource) && !process.env[envVar]) {
+        audit = addWarning(
+          audit,
+          `${src} requested but ${envVar} is not set — ${src} results will be empty. Set ${envVar} to enable.`,
+        );
+      }
     }
 
     const allResults: LiteratureResult[] = [];

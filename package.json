@@ -40,13 +40,13 @@
     "claude",
     "anthropic"
   ],
-  "homepage": "https://github.com/mnaumov/HEORAgent#readme",
+  "homepage": "https://github.com/neptun2000/HEORAgent#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mnaumov/HEORAgent.git"
+    "url": "git+https://github.com/neptun2000/HEORAgent.git"
   },
   "bugs": {
-    "url": "https://github.com/mnaumov/HEORAgent/issues"
+    "url": "https://github.com/neptun2000/HEORAgent/issues"
   },
   "scripts": {
     "build": "tsc",

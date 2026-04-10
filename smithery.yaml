@@ -1,0 +1,48 @@
+# Smithery configuration for heor-agent-mcp
+# Docs: https://smithery.ai/docs
+
+startCommand:
+  type: stdio
+  configSchema:
+    # JSON Schema for optional enterprise API keys.
+    # All keys are optional — the server runs with the 34 free/open
+    # sources by default and gracefully falls back when enterprise
+    # keys are missing.
+    type: object
+    properties:
+      elsevierApiKey:
+        type: string
+        description: "Elsevier API key — unlocks Embase and ScienceDirect sources"
+      cochraneApiKey:
+        type: string
+        description: "Cochrane Library API key — unlocks Cochrane systematic reviews"
+      citelineApiKey:
+        type: string
+        description: "Citeline API key — unlocks pharmaceutical intelligence"
+      pharmapendiumApiKey:
+        type: string
+        description: "Pharmapendium API key — unlocks drug safety and ADME data"
+      cortellisApiKey:
+        type: string
+        description: "Cortellis API key — unlocks competitive intelligence and pipeline data"
+      serpApiKey:
+        type: string
+        description: "SerpAPI key — unlocks Google Scholar search"
+      heorKbRoot:
+        type: string
+        description: "Path for the project knowledge base (default: ~/.heor-agent)"
+  commandFunction:
+    |-
+    (config) => ({
+      command: 'npx',
+      args: ['-y', 'heor-agent-mcp'],
+      env: {
+        ...(config.elsevierApiKey && { ELSEVIER_API_KEY: config.elsevierApiKey }),
+        ...(config.cochraneApiKey && { COCHRANE_API_KEY: config.cochraneApiKey }),
+        ...(config.citelineApiKey && { CITELINE_API_KEY: config.citelineApiKey }),
+        ...(config.pharmapendiumApiKey && { PHARMAPENDIUM_API_KEY: config.pharmapendiumApiKey }),
+        ...(config.cortellisApiKey && { CORTELLIS_API_KEY: config.cortellisApiKey }),
+        ...(config.serpApiKey && { SERPAPI_KEY: config.serpApiKey }),
+        ...(config.heorKbRoot && { HEOR_KB_ROOT: config.heorKbRoot }),
+      }
+    })

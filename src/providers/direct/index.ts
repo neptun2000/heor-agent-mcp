@@ -7,7 +7,7 @@ import type {
   LiteratureResult,
   DataSource,
 } from "../types.js";
-import { saveLiteratureResult } from "../../knowledge/index.js";
+import { saveLiteratureResult, saveReport } from "../../knowledge/index.js";
 import {
   createAuditRecord,
   addSource,
@@ -216,7 +216,10 @@ export class DirectProvider implements IProvider {
       content = { results: allResults, population_profile: profile };
     } else if (outputFormat === "docx") {
       const base64 = await resultsToDocx(allResults, audit);
-      content = `[DOCX Report Generated - ${allResults.length} results]\n\nBase64-encoded DOCX (${Math.round(base64.length / 1024)}KB):\n${base64}`;
+      const filenameStem = `literature-search-${(params.query ?? "report").slice(0, 40)}`;
+      const savedPath = await saveReport(base64, filenameStem, params.project);
+      const sizeKb = Math.round(base64.length / 1024);
+      content = `## DOCX Report Generated\n\n**File:** \`${savedPath}\`\n**Size:** ${sizeKb} KB\n**Results:** ${allResults.length} studies from ${audit.sources_queried.length} sources\n\nOpen with: \`open "${savedPath}"\``;
     } else {
       const markdownContent = resultsToMarkdown(allResults, audit);
       const profileMarkdown = profileToMarkdown(profile);

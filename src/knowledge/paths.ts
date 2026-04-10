@@ -25,11 +25,22 @@ export function getWikiDir(projectId: string): string {
   return join(getProjectRoot(projectId), "wiki");
 }
 
+export function getReportsDir(projectId?: string): string {
+  if (projectId) {
+    return join(getProjectRoot(projectId), "reports");
+  }
+  return join(getKbRoot(), "reports");
+}
+
 // Sanitize project ID to prevent path traversal and filesystem issues
 export function sanitizeProjectId(id: string): string {
   // Allow alphanumeric, hyphens, underscores. Replace all else with hyphen.
-  const clean = id.replace(/[^a-zA-Z0-9_-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
-  if (clean.length === 0) throw new Error("Invalid project ID: must contain alphanumeric characters");
+  const clean = id
+    .replace(/[^a-zA-Z0-9_-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  if (clean.length === 0)
+    throw new Error("Invalid project ID: must contain alphanumeric characters");
   if (clean.length > 64) return clean.slice(0, 64).toLowerCase();
   return clean.toLowerCase();
 }

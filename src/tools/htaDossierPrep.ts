@@ -41,6 +41,7 @@ import {
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
 import { contentToDocx } from "../formatters/docx.js";
+import { saveReport } from "../knowledge/index.js";
 import { saveDossier } from "../knowledge/index.js";
 
 const NICE_STA_SECTIONS = [
@@ -389,8 +390,11 @@ async function handleJCADossier(
       jcaTextContent,
       audit,
     );
+    const filenameStem = `jca-${params.submission_type}-${params.drug_name.slice(0, 30)}-${params.indication.slice(0, 30)}`;
+    const savedPath = await saveReport(base64, filenameStem, params.project);
+    const sizeKb = Math.round(base64.length / 1024);
     return {
-      content: `[DOCX Report Generated]\n\nBase64-encoded DOCX (${Math.round(base64.length / 1024)}KB):\n${base64}`,
+      content: `## DOCX Report Generated\n\n**File:** \`${savedPath}\`\n**Size:** ${sizeKb} KB\n**Type:** JCA ${params.submission_type.toUpperCase()} Dossier\n**Drug:** ${params.drug_name}\n**Indication:** ${params.indication}\n\nOpen with: \`open "${savedPath}"\``,
       audit,
     };
   }
@@ -485,8 +489,11 @@ export async function handleHtaDossierPrep(
       dossierTextContent,
       audit,
     );
+    const filenameStem = `${params.hta_body}-${params.submission_type}-${params.drug_name.slice(0, 30)}`;
+    const savedPath = await saveReport(base64, filenameStem, params.project);
+    const sizeKb = Math.round(base64.length / 1024);
     return {
-      content: `[DOCX Report Generated]\n\nBase64-encoded DOCX (${Math.round(base64.length / 1024)}KB):\n${base64}`,
+      content: `## DOCX Report Generated\n\n**File:** \`${savedPath}\`\n**Size:** ${sizeKb} KB\n**Type:** ${params.hta_body.toUpperCase()} ${params.submission_type.toUpperCase()}\n**Drug:** ${params.drug_name}\n**Indication:** ${params.indication}\n\nOpen with: \`open "${savedPath}"\``,
       audit,
     };
   }

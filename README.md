@@ -1,10 +1,30 @@
 # HEORAgent MCP Server
 
-An AI-powered Health Economics and Outcomes Research (HEOR) agent for Claude.ai — automates literature review, cost-effectiveness modelling, and HTA dossier preparation.
+[![npm version](https://img.shields.io/npm/v/heor-agent-mcp.svg)](https://www.npmjs.com/package/heor-agent-mcp)
+[![license](https://img.shields.io/npm/l/heor-agent-mcp.svg)](./LICENSE)
+[![node](https://img.shields.io/node/v/heor-agent-mcp.svg)](https://nodejs.org)
+
+**AI-powered Health Economics and Outcomes Research (HEOR) agent as a Model Context Protocol server.**
+
+Automates literature review across 41 data sources, state-of-the-art cost-effectiveness modelling, HTA dossier preparation for NICE / EMA / FDA / IQWiG / HAS / EU JCA, and a persistent project knowledge base — all callable as MCP tools from Claude.ai, Claude Code, and any MCP-compatible host.
+
+Built for pharmaceutical, biotech, CRO, and medical affairs teams who need rigorous, auditable HEOR workflows without building infrastructure from scratch.
+
+---
 
 ## Quick Start
 
-Add to your Claude.ai MCP configuration:
+### Claude Code
+
+```bash
+claude mcp add heor-agent -- npx heor-agent-mcp
+```
+
+Then restart Claude Code.
+
+### Claude Desktop / claude.ai
+
+Add to your MCP configuration:
 
 ```json
 {
@@ -17,136 +37,287 @@ Add to your Claude.ai MCP configuration:
 }
 ```
 
-Or run locally:
+### Verify
 
-```bash
-npm install heor-agent-mcp
-npx heor-agent-mcp
 ```
+> Run a literature search for semaglutide cost-effectiveness in T2D using PubMed and NICE TAs
+```
+
+---
 
 ## Tools
 
-### literature_search
+| Tool | Purpose |
+|------|---------|
+| `literature_search` | Search 41 data sources with a full PRISMA-style audit trail |
+| `cost_effectiveness_model` | Markov / PartSA / decision-tree CEA with PSA, OWSA, CEAC, EVPI |
+| `hta_dossier_prep` | Draft submissions for NICE, EMA, FDA, IQWiG, HAS, and EU JCA |
+| `project_create` | Initialize a persistent project workspace |
+| `knowledge_search` | Full-text search across a project's raw/ and wiki/ trees |
+| `knowledge_read` | Read any file from a project's knowledge base |
+| `knowledge_write` | Write compiled evidence to the project wiki (Obsidian-compatible) |
 
-Search PubMed, ClinicalTrials.gov, bioRxiv/medRxiv, and ChEMBL simultaneously.
-Returns structured results with a full PRISMA-style audit trail.
+### `literature_search`
 
-**Required**: `query` (string)  
-**Optional**: `sources` (array), `max_results` (1–100), `date_from` (YYYY-MM-DD), `output_format` (text|json|docx)
+Searches across 41 sources in parallel. Every call returns a **source selection table** showing which of the 41 sources were used and why — essential for HTA audit trails.
 
-**Example prompt**: "Find RCT evidence on semaglutide for type 2 diabetes from the last 3 years"
+**Example call:**
+```json
+{
+  "query": "semaglutide cardiovascular outcomes type 2 diabetes",
+  "sources": ["pubmed", "clinicaltrials", "nice_ta", "cadth_reviews", "icer_reports"],
+  "max_results": 20,
+  "output_format": "text"
+}
+```
 
-### cost_effectiveness_model
+### `cost_effectiveness_model`
 
-State-of-the-art cost-utility analysis: multi-state Markov model, probabilistic sensitivity
-analysis (PSA, Monte Carlo), one-way sensitivity analysis (tornado diagram), cost-effectiveness
-acceptability curve (CEAC), and Expected Value of Perfect Information (EVPI).
+Multi-state Markov model (default) or Partitioned Survival Analysis (oncology), following ISPOR good practice and NICE reference case (3.5% discount rate, half-cycle correction). Includes:
 
-Follows ISPOR good practice guidelines and NICE reference case (3.5% discount rate).
+- **PSA** — 1,000–10,000 Monte Carlo iterations, probability cost-effective at WTP thresholds
+- **OWSA** — one-way sensitivity analysis with tornado summary
+- **CEAC** — cost-effectiveness acceptability curve
+- **EVPI** — expected value of perfect information
+- **WTP assessment** — verdict against NHS (£20–30K), US payer ($100–150K), societal thresholds
 
-**Required**: `intervention`, `comparator`, `indication`, `time_horizon`, `perspective`, `clinical_inputs`, `cost_inputs`  
-**Optional**: `model_type` (markov|partsa|decision_tree), `utility_inputs`, `run_psa`, `psa_iterations`, `run_owsa`
+**Example call:**
+```json
+{
+  "intervention": "Semaglutide 1mg SC weekly",
+  "comparator": "Sitagliptin 100mg daily",
+  "indication": "Type 2 Diabetes Mellitus",
+  "time_horizon": "lifetime",
+  "perspective": "nhs",
+  "model_type": "markov",
+  "clinical_inputs": { "efficacy_delta": 0.5, "mortality_reduction": 0.15 },
+  "cost_inputs": { "drug_cost_annual": 3200, "comparator_cost_annual": 480 },
+  "utility_inputs": { "qaly_on_treatment": 0.82, "qaly_comparator": 0.76 },
+  "run_psa": true,
+  "output_format": "docx"
+}
+```
 
-**Supported HTA perspectives**:
-- `nhs` — NICE threshold £20–30K/QALY
-- `us_payer` — ICER threshold $100–150K/QALY
-- `societal` — Societal perspective $50–100K/QALY
+### `hta_dossier_prep`
 
-For oncology: set `model_type="partsa"` to use Partitioned Survival Analysis (NICE TSD 14).
+Drafts submission-ready sections for six HTA frameworks with gap analysis:
 
-**Example prompt**: "Model cost-effectiveness of semaglutide vs sitagliptin for T2D, NHS perspective, lifetime horizon"
+| Body | Country | Submission types |
+|------|---------|------------------|
+| NICE | UK | STA, MTA, early_access |
+| EMA | EU | STA, MTA |
+| FDA | US | STA, MTA |
+| IQWiG | Germany | STA, MTA |
+| HAS | France | STA, MTA |
+| JCA | EU (Reg. 2021/2282) | initial, renewal, variation (with PICOs) |
 
-### hta_dossier_prep
+Accepts piped output from `literature_search` and `cost_effectiveness_model`.
 
-Structure evidence into submission-ready HTA dossier sections with gap analysis.
-Accepts output from `literature_search` and `cost_effectiveness_model` directly.
+### Knowledge base tools
 
-**Required**: `hta_body` (nice|ema|fda|iqwig|has), `submission_type` (sta|mta|early_access), `drug_name`, `indication`  
-**Optional**: `evidence_summary` (text or JSON from literature_search), `model_results` (from cost_effectiveness_model)
+Projects live at `~/.heor-agent/projects/{project-id}/` with:
+- `raw/literature/` — auto-populated literature search results
+- `raw/models/` — auto-populated model runs
+- `raw/dossiers/` — auto-populated dossier drafts
+- `reports/` — generated DOCX files
+- `wiki/` — manually curated, Obsidian-compatible markdown with `[[wikilinks]]`
 
-**Supported bodies**: NICE (UK), EMA (EU), FDA (US), IQWiG (Germany), HAS (France)
+Pass `project: "project-id"` to any tool and results are saved automatically.
 
-**Example prompt**: "Prepare a NICE STA outline for semaglutide in type 2 diabetes using [literature search output]"
+---
+
+## Data Sources
+
+**41 sources across 9 categories.** Every `literature_search` call includes a source selection table showing used/not-used status and reason for each.
+
+<details>
+<summary><b>Biomedical & Clinical Trials (4)</b></summary>
+
+- **PubMed** — 35M+ biomedical citations (NCBI E-utilities)
+- **ClinicalTrials.gov** — NIH/NLM trial registry (CT.gov v2 API)
+- **bioRxiv / medRxiv** — Life sciences and medical preprints
+- **ChEMBL** — Drug bioactivity, mechanisms, ADMET (EMBL-EBI)
+</details>
+
+<details>
+<summary><b>Epidemiology & Demographics (5)</b></summary>
+
+- **WHO GHO** — WHO Global Health Observatory
+- **World Bank** — Demographics, macroeconomics, health expenditure
+- **OECD Health** — OECD health statistics (expenditure, workforce, outcomes)
+- **IHME GBD** — Global Burden of Disease (DALYs, prevalence across 204 countries)
+- **All of Us** — NIH precision medicine cohort
+</details>
+
+<details>
+<summary><b>FDA (2)</b></summary>
+
+- **FDA Orange Book** — Drug approvals and therapeutic equivalence
+- **FDA Purple Book** — Licensed biologics and biosimilars
+</details>
+
+<details>
+<summary><b>HTA Appraisals (10) — HTA precedent decisions</b></summary>
+
+- **NICE TAs** (UK) · **CADTH** (Canada) · **ICER** (US) · **PBAC** (Australia)
+- **G-BA AMNOG** (Germany) · **IQWiG** (Germany) · **HAS** (France)
+- **AIFA** (Italy) · **TLV** (Sweden) · **INESSS** (Quebec, Canada)
+</details>
+
+<details>
+<summary><b>HTA Cost References (5)</b></summary>
+
+- **CMS NADAC** (US drug acquisition costs)
+- **PSSRU** (UK unit costs) · **NHS National Cost Collection** · **BNF** (UK drug pricing)
+- **PBS Schedule** (Australia)
+</details>
+
+<details>
+<summary><b>LATAM (6)</b></summary>
+
+- **DATASUS** · **CONITEC** · **ANVISA** (Brazil)
+- **PAHO** (Pan American regional) · **IETS** (Colombia) · **FONASA** (Chile)
+</details>
+
+<details>
+<summary><b>APAC (1)</b></summary>
+
+- **HITAP** (Thailand)
+</details>
+
+<details>
+<summary><b>Enterprise (6) — require API key</b></summary>
+
+| Source | Env variable |
+|--------|--------------|
+| Embase | `ELSEVIER_API_KEY` |
+| ScienceDirect | `ELSEVIER_API_KEY` |
+| Cochrane Library | `COCHRANE_API_KEY` |
+| Citeline | `CITELINE_API_KEY` |
+| Pharmapendium | `PHARMAPENDIUM_API_KEY` |
+| Cortellis | `CORTELLIS_API_KEY` |
+| Google Scholar | `SERPAPI_KEY` |
+</details>
+
+<details>
+<summary><b>Other (1)</b></summary>
+
+- **ISPOR** — HEOR methodology and conference abstracts
+</details>
+
+---
+
+## Output Formats
+
+All tools support `output_format`:
+
+- **`text`** (default) — Markdown with formatted tables and headings
+- **`json`** — Structured objects for downstream tools
+- **`docx`** — Microsoft Word document, saved to disk, path returned in response
+
+DOCX files are saved to `~/.heor-agent/projects/{project}/reports/` (when a project is set) or `~/.heor-agent/reports/` (global). The tool response contains the absolute path — ready to attach to submissions or share with stakeholders.
+
+---
 
 ## Audit Trail
 
 Every tool call returns a full audit record:
-- Sources queried, queries sent, response counts
-- Inclusion/exclusion counts with reasons
-- Methodology notes and assumptions
-- Warnings and data quality flags
+
+- **Source selection table** — all 41 sources with used/not-used and reason
+- **Sources queried** — queries sent, response counts, status, latency
+- **Inclusions / exclusions** — counts with reasons
+- **Methodology** — PRISMA-style for literature, ISPOR/NICE for economics
+- **Assumptions** — every assumption logged with justification
+- **Warnings** — data quality flags, missing API keys, failed sources
 
 Suitable for inclusion in HTA submission appendices.
 
-## Data Sources (Phase 1 — DirectProvider)
-
-Currently integrated (free, direct API access):
-- **PubMed** — 35M+ biomedical citations (NCBI E-utilities)
-- **ClinicalTrials.gov** — FDA-regulated clinical studies (CT.gov v2 API)
-- **bioRxiv / medRxiv** — Life sciences and medical preprints
-- **ChEMBL** — Drug bioactivity, mechanisms, ADMET (EMBL-EBI)
-
-## Data Sources (Roadmap)
-
-### Phase 2 — Open/Free APIs
-- WHO Global Health Observatory — Global epidemiology and health indicators
-- World Bank Data — Demographics, macroeconomics
-- OECD Health Data — Costs, utilization, health statistics (OECD)
-- IHME / Global Burden of Disease — Global disease burden estimates
-- ISPOR Presentations Database — HEOR studies and conference posters
-
-### Phase 2 — HTA Guidance & Pricing (Open)
-- NICE (UK): Methods Guide, Technology Appraisals, PSSRU Unit Costs, NHS Reference Costs, BNF
-- ICER (US): Value Assessment Framework, CMS Data
-- CADTH (Canada): Guidelines and Reviews, INESSS
-- PBAC (Australia): Guidelines, PSD, PBS/MBS Schedule
-- HAS (France): Guidelines, Transparency Committee, CEPS
-- IQWiG/G-BA (Germany): Methods Guide, Appraisal Decisions
-- AIFA (Italy), AEMPS/IPT (Spain), TLV (Sweden), MHLW (Japan)
-- CONITEC/ANVISA (Brazil), IETS (Colombia), FONASA (Chile), HITAP (Thailand)
-- HIRA/NHIS (South Korea), WHO GHO, OECD Health, World Bank
-
-### Phase 2 — Restricted (with credentials)
-- CPRD (UK primary care), NHS HES (UK hospital episodes), SNDS (France national claims)
-- German SHI/AOK/WIdO, Nordic Registries, Japan NDB, NHIRD (Taiwan)
-- NHSO (Thailand), PhilHealth (Philippines)
-
-### Phase 3 — Commercial (enterprise tier)
-- IQVIA MIDAS/RWD, Optum Clinformatics, Flatiron Health (oncology EHR)
-- Premier Healthcare Database, Komodo Health, Oracle Health RWD
-- IBM Micromedex Red Book (drug pricing), SSR Health (net pricing/rebates)
-
-## Local RWE Datasets (Phase 2)
-
-Point to local files in `/Users/mnaumov/Projects/Health_Statistics`:
-- NAMCS — National Ambulatory Medical Care Survey (US)
-- NHAMCS — National Hospital Ambulatory Medical Care Survey (US)
-- MEPS — Medical Expenditure Panel Survey (US)
-- DATASUS — Brazilian health system data (hospital + epidemiology)
-
-## Tiers
-
-- **DirectProvider** (default) — Free. Uses your Anthropic API key. All tools, text + JSON output.
-- **HostedProvider** — Set `HEOR_API_KEY` env var. Phase 2: DOCX/PDF reports, Redis caching.
+---
 
 ## Configuration
 
 ```bash
-HEOR_API_KEY   # Set to enable HostedProvider (Phase 2). Omit for DirectProvider (Phase 1).
+# Optional — enterprise data sources
+ELSEVIER_API_KEY=...        # Embase + ScienceDirect
+COCHRANE_API_KEY=...        # Cochrane Library
+CITELINE_API_KEY=...        # Citeline
+PHARMAPENDIUM_API_KEY=...   # Pharmapendium
+CORTELLIS_API_KEY=...       # Cortellis
+SERPAPI_KEY=...             # Google Scholar
+
+# Optional — knowledge base location
+HEOR_KB_ROOT=~/.heor-agent  # Default
+
+# Optional — localhost proxy for enterprise APIs behind corporate VPN
+HEOR_PROXY_URL=http://localhost:8787
+
+# Optional — hosted tier (future)
+HEOR_API_KEY=...
 ```
+
+---
 
 ## Development
 
 ```bash
+git clone https://github.com/neptun2000/HEORAgent
+cd HEORAgent/heor-agent-mcp
 npm install
-npm test          # 74 tests
-npm run build     # Compiles to dist/
+npm test          # 244 tests across 66 suites
+npm run build     # Compile TypeScript to dist/
 npm run dev       # Run with tsx (no build step)
 ```
 
-Node.js >= 20 required.
+**Requires:** Node.js ≥ 20.
+
+---
+
+## Architecture
+
+```
+┌────────────────────────────────────────────┐
+│  MCP Host (Claude.ai / Claude Code / etc.) │
+└────────────────┬───────────────────────────┘
+                 │ stdio
+┌────────────────▼──────────────────────────┐
+│  heor-agent-mcp server                    │
+│  ┌──────────────────────────────────────┐ │
+│  │ 7 MCP tools (Zod-validated)          │ │
+│  ├──────────────────────────────────────┤ │
+│  │ DirectProvider (default)             │ │
+│  │   ├─ 41 source fetchers              │ │
+│  │   ├─ Audit builder + PRISMA trail    │ │
+│  │   ├─ Markov / PartSA economic models │ │
+│  │   ├─ Markdown + DOCX formatters      │ │
+│  │   └─ Knowledge base (YAML + MD)      │ │
+│  └──────────────────────────────────────┘ │
+└───────────────────────────────────────────┘
+                 │
+    ┌────────────┴─────────────┐
+    ▼                          ▼
+┌────────────┐         ┌──────────────────┐
+│ ~/.heor-   │         │ External APIs    │
+│ agent/     │         │ (PubMed, NICE,   │
+│ projects/  │         │  ICER, CADTH, …) │
+└────────────┘         └──────────────────┘
+```
+
+---
+
+## License
+
+MIT — see [LICENSE](./LICENSE).
+
+---
 
 ## Disclaimer
 
-All outputs are preliminary and for research orientation only. Results require validation by a
-qualified health economist before use in any HTA submission, payer negotiation, or clinical decision.
+**All outputs are preliminary and for research orientation only.** Results require validation by a qualified health economist before use in any HTA submission, payer negotiation, regulatory filing, or clinical decision. This tool does not replace professional HEOR expertise.
+
+---
+
+## Links
+
+- **npm:** https://www.npmjs.com/package/heor-agent-mcp
+- **GitHub:** https://github.com/neptun2000/HEORAgent
+- **Issues:** https://github.com/neptun2000/HEORAgent/issues

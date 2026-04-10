@@ -56,6 +56,7 @@ import {
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
 import { contentToDocx } from "../formatters/docx.js";
+import { saveReport } from "../knowledge/index.js";
 import { saveModelRun } from "../knowledge/index.js";
 
 const WTP_THRESHOLDS = {
@@ -402,7 +403,10 @@ export async function handleCostEffectivenessModel(
       textLines,
       audit,
     );
-    const content = `[DOCX Report Generated]\n\nBase64-encoded DOCX (${Math.round(base64.length / 1024)}KB):\n${base64}`;
+    const filenameStem = `ce-model-${params.intervention.slice(0, 30)}-vs-${params.comparator.slice(0, 30)}`;
+    const savedPath = await saveReport(base64, filenameStem, params.project);
+    const sizeKb = Math.round(base64.length / 1024);
+    const content = `## DOCX Report Generated\n\n**File:** \`${savedPath}\`\n**Size:** ${sizeKb} KB\n**Intervention:** ${params.intervention}\n**Comparator:** ${params.comparator}\n\nOpen with: \`open "${savedPath}"\``;
     return { content, audit };
   }
 

@@ -14,12 +14,22 @@ export interface ExclusionRecord {
   reason: string;
 }
 
+export interface SourceSelectionRow {
+  source: string;
+  name: string;
+  category: string;
+  used: boolean;
+  reason: string;
+}
+
 export interface AuditRecord {
   tool: string;
   /** ISO 8601 timestamp when the tool invocation began (query start time, not completion time) */
   timestamp: string;
   query: Record<string, unknown>;
   sources_queried: SourceAudit[];
+  /** Full source selection table showing all available sources with used/not-used and reason */
+  source_selection?: SourceSelectionRow[];
   methodology: string;
   /** Running total of results included across all sources — incremented by addSource() */
   inclusions: number;

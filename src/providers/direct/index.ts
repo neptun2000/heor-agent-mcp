@@ -20,6 +20,7 @@ import { fetchClinicalTrials } from "./clinicalTrials.js";
 import { fetchBiorxiv } from "./biorxiv.js";
 import { fetchChembl } from "./chembl.js";
 import { fetchEmbase } from "./embase.js";
+import { fetchScienceDirect } from "./scienceDirect.js";
 import { fetchWhoGho } from "./whoGho.js";
 import { fetchWorldBank } from "./worldBank.js";
 import { fetchAllOfUs } from "./allOfUs.js";
@@ -62,6 +63,7 @@ import {
   analyzeMetabolicProfile,
   profileToMarkdown,
 } from "../../tools/metabolicProfile.js";
+import { buildSourceSelectionTable } from "../../sources/registry.js";
 
 function getAllSources(): DataSource[] {
   const base: DataSource[] = ["pubmed", "clinicaltrials", "biorxiv", "chembl"];
@@ -78,6 +80,7 @@ const FETCHERS: Record<
   biorxiv: fetchBiorxiv,
   chembl: fetchChembl,
   embase: fetchEmbase,
+  sciencedirect: fetchScienceDirect,
   who_gho: fetchWhoGho,
   world_bank: fetchWorldBank,
   all_of_us: fetchAllOfUs,
@@ -128,9 +131,13 @@ export class DirectProvider implements IProvider {
     );
     audit = setMethodology(audit, "PRISMA-style multi-database search");
 
+    // Build source selection table showing all 39 sources with used/not-used and reason
+    audit.source_selection = buildSourceSelectionTable(sources);
+
     const proxyActive = getProxyUrl() !== null;
     const enterpriseKeys: Record<string, string> = {
       embase: "ELSEVIER_API_KEY",
+      sciencedirect: "ELSEVIER_API_KEY",
       cochrane: "COCHRANE_API_KEY",
       citeline: "CITELINE_API_KEY",
       pharmapendium: "PHARMAPENDIUM_API_KEY",

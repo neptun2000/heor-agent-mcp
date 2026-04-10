@@ -15,6 +15,7 @@ export type DataSource =
   | "biorxiv"
   | "chembl"
   | "embase"
+  | "sciencedirect"
   | "who_gho"
   | "world_bank"
   | "all_of_us"

@@ -43,6 +43,19 @@ export function auditToMarkdown(audit: AuditRecord): string {
   );
   lines.push(`**Total included:** ${audit.inclusions}`);
 
+  if (audit.source_selection && audit.source_selection.length > 0) {
+    lines.push(
+      `\n### Source Selection (${audit.source_selection.filter((s) => s.used).length}/${audit.source_selection.length} sources used)`,
+    );
+    lines.push(`| Source | Category | Used | Reason |`);
+    lines.push(`|--------|----------|------|--------|`);
+    audit.source_selection.forEach((s) => {
+      lines.push(
+        `| ${s.name} | ${s.category} | ${s.used ? "YES" : "NO"} | ${s.reason} |`,
+      );
+    });
+  }
+
   if (audit.sources_queried.length > 0) {
     lines.push(`\n### Sources Queried`);
     lines.push(`| Source | Query | Returned | Included | Status |`);

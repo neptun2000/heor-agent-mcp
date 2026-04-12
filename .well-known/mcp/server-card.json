@@ -1,0 +1,449 @@
+{
+  "serverInfo": {
+    "name": "heor-agent-mcp",
+    "version": "0.1.3"
+  },
+  "authentication": {
+    "required": false
+  },
+  "tools": [
+    {
+      "name": "literature_search",
+      "description": "Search PubMed, ClinicalTrials.gov, bioRxiv/medRxiv, ChEMBL, FDA Orange Book, FDA Purple Book, enterprise sources (Embase, ScienceDirect, Cochrane, Citeline, Pharmapendium, Cortellis), HTA cost referen",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Research question (e.g. 'semaglutide type 2 diabetes cost-effectiveness')"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "pubmed",
+                "clinicaltrials",
+                "biorxiv",
+                "chembl",
+                "embase",
+                "sciencedirect",
+                "who_gho",
+                "world_bank",
+                "all_of_us",
+                "oecd",
+                "ihme_gbd",
+                "orange_book",
+                "purple_book",
+                "cochrane",
+                "citeline",
+                "pharmapendium",
+                "cortellis",
+                "google_scholar",
+                "cms_nadac",
+                "pssru",
+                "nhs_costs",
+                "bnf",
+                "pbs_schedule",
+                "datasus",
+                "conitec",
+                "anvisa",
+                "paho",
+                "iets",
+                "fonasa",
+                "hitap",
+                "nice_ta",
+                "cadth_reviews",
+                "icer_reports",
+                "pbac_psd",
+                "gba_decisions",
+                "has_tc",
+                "iqwig",
+                "aifa",
+                "tlv",
+                "inesss",
+                "ispor"
+              ]
+            },
+            "description": "Data sources to query. Default: pubmed, clinicaltrials, biorxiv, chembl (+ embase if ELSEVIER_API_KEY set). Use 'who_gho' and 'world_bank' for epidemiology and demographic data. Use 'oecd' for OECD health statistics (expenditure, hospital beds, physicians, life expectancy). Use 'ihme_gbd' for Global Burden of Disease estimates (DALYs, prevalence, mortality across 204 countries). Use 'orange_book' for FDA drug approvals and therapeutic equivalence. Use 'purple_book' for FDA-licensed biologics and biosimilars. Enterprise (require API key): 'cochrane' (COCHRANE_API_KEY), 'citeline' (CITELINE_API_KEY), 'pharmapendium' (PHARMAPENDIUM_API_KEY), 'cortellis' (CORTELLIS_API_KEY). HTA cost reference sources: 'cms_nadac' (US drug acquisition costs via CMS API), 'pssru' (UK unit costs, reference links), 'nhs_costs' (NHS National Cost Collection, reference links), 'bnf' (UK drug pricing, reference links), 'pbs_schedule' (Australia PBS/MBS pricing, reference links). LATAM sources (explicit request only): 'datasus' (Brazil SUS hospital/ambulatory data), 'conitec' (Brazil HTA reports), 'anvisa' (Brazil drug pricing/registry), 'paho' (Pan American regional health statistics), 'iets' (Colombia HTA reports), 'fonasa' (Chile public health insurance data). APAC sources (explicit request only): 'hitap' (Thailand HTA reports and methodology). HTA appraisal/precedent sources (explicit request only): 'nice_ta' (NICE Technology Appraisals, UK), 'cadth_reviews' (CADTH CDR/pCODR, Canada), 'icer_reports' (ICER evidence reports and HBPBs, US), 'pbac_psd' (PBAC Public Summary Documents, Australia), 'gba_decisions' (G-BA AMNOG benefit assessments, Germany), 'has_tc' (HAS Transparency Committee opinions, France), 'iqwig' (IQWiG systematic reviews and dossier assessments, Germany), 'aifa' (AIFA reimbursement decisions, Italy), 'tlv' (TLV value-based pricing decisions, Sweden), 'inesss' (INESSS drug evaluations, Quebec Canada)."
+          },
+          "max_results": {
+            "type": "number",
+            "description": "Maximum results to return (default: 20, max: 100)"
+          },
+          "date_from": {
+            "type": "string",
+            "description": "Exclude results before this date (ISO format: YYYY-MM-DD)"
+          },
+          "output_format": {
+            "type": "string",
+            "enum": [
+              "text",
+              "json",
+              "docx"
+            ],
+            "description": "Output format. 'docx' requires hosted tier."
+          },
+          "project": {
+            "type": "string",
+            "description": "Project ID for knowledge base persistence. When set, results are saved to ~/.heor-agent/projects/{project}/raw/literature/"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "cost_effectiveness_model",
+      "description": "Build a cost-utility analysis (ICER, QALY, PSA, sensitivity analysis) for a drug vs comparator. Follows ISPOR good practice guidelines and NICE reference case. Includes probabilistic sensitivity analy",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "intervention": {
+            "type": "string",
+            "description": "Drug or treatment name"
+          },
+          "comparator": {
+            "type": "string",
+            "description": "Comparator (standard of care)"
+          },
+          "indication": {
+            "type": "string",
+            "description": "Disease or condition"
+          },
+          "time_horizon": {
+            "type": "string",
+            "description": "Modelling horizon: 'lifetime', '5yr', '10yr', or years as number"
+          },
+          "perspective": {
+            "type": "string",
+            "enum": [
+              "nhs",
+              "us_payer",
+              "societal"
+            ]
+          },
+          "model_type": {
+            "type": "string",
+            "enum": [
+              "markov",
+              "partsa",
+              "decision_tree"
+            ],
+            "description": "Model type. Default: markov. Use 'partsa' for oncology."
+          },
+          "clinical_inputs": {
+            "type": "object",
+            "properties": {
+              "efficacy_delta": {
+                "type": "number"
+              },
+              "mortality_reduction": {
+                "type": "number"
+              },
+              "ae_rate": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "efficacy_delta"
+            ]
+          },
+          "cost_inputs": {
+            "type": "object",
+            "properties": {
+              "drug_cost_annual": {
+                "type": "number"
+              },
+              "admin_cost": {
+                "type": "number"
+              },
+              "ae_cost": {
+                "type": "number"
+              },
+              "comparator_cost_annual": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "drug_cost_annual",
+              "comparator_cost_annual"
+            ]
+          },
+          "utility_inputs": {
+            "type": "object",
+            "properties": {
+              "qaly_on_treatment": {
+                "type": "number"
+              },
+              "qaly_comparator": {
+                "type": "number"
+              }
+            }
+          },
+          "run_psa": {
+            "type": "boolean",
+            "description": "Run probabilistic sensitivity analysis (default: true)"
+          },
+          "psa_iterations": {
+            "type": "number",
+            "description": "PSA iterations (default: 1000, max: 10000)"
+          },
+          "output_format": {
+            "type": "string",
+            "enum": [
+              "text",
+              "json",
+              "docx"
+            ]
+          },
+          "project": {
+            "type": "string",
+            "description": "Project ID for knowledge base persistence. When set, model run is saved to ~/.heor-agent/projects/{project}/raw/models/"
+          }
+        },
+        "required": [
+          "intervention",
+          "comparator",
+          "indication",
+          "time_horizon",
+          "perspective",
+          "clinical_inputs",
+          "cost_inputs"
+        ]
+      }
+    },
+    {
+      "name": "hta_dossier_prep",
+      "description": "Structure evidence into HTA body-specific submission format (NICE STA, EMA, FDA, IQWiG, HAS, EU JCA). Produces draft sections with gap analysis. Accepts output from literature_search and cost_effectiv",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "hta_body": {
+            "type": "string",
+            "enum": [
+              "nice",
+              "ema",
+              "fda",
+              "iqwig",
+              "has",
+              "jca"
+            ],
+            "description": "HTA body. Use 'jca' for EU Joint Clinical Assessment (EUHTA Reg. 2021/2282)."
+          },
+          "submission_type": {
+            "type": "string",
+            "enum": [
+              "sta",
+              "mta",
+              "early_access",
+              "initial",
+              "renewal",
+              "variation"
+            ],
+            "description": "Submission type. Use 'initial'/'renewal'/'variation' for JCA."
+          },
+          "drug_name": {
+            "type": "string"
+          },
+          "indication": {
+            "type": "string"
+          },
+          "evidence_summary": {
+            "description": "Text summary or JSON array from literature_search output"
+          },
+          "model_results": {
+            "description": "JSON output from cost_effectiveness_model"
+          },
+          "picos": {
+            "type": "array",
+            "description": "JCA: list of PICOs from the scoping decision. If omitted, a default PICO is generated.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "PICO identifier, e.g. 'PICO-1'"
+                },
+                "population": {
+                  "type": "string"
+                },
+                "comparator": {
+                  "type": "string"
+                },
+                "outcomes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "population",
+                "comparator",
+                "outcomes"
+              ]
+            }
+          },
+          "output_format": {
+            "type": "string",
+            "enum": [
+              "text",
+              "json",
+              "docx"
+            ]
+          },
+          "project": {
+            "type": "string",
+            "description": "Project ID for knowledge base persistence. When set, dossier draft is saved to ~/.heor-agent/projects/{project}/raw/dossiers/"
+          }
+        },
+        "required": [
+          "hta_body",
+          "submission_type",
+          "drug_name",
+          "indication"
+        ]
+      }
+    },
+    {
+      "name": "knowledge_search",
+      "description": "Search a project's knowledge base (raw/ and wiki/) for text matches. Returns file paths with line numbers and snippets. Use this to find previously-retrieved literature, model runs, and compiled wiki ",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "type": "string",
+            "description": "Project ID (must exist)"
+          },
+          "query": {
+            "type": "string",
+            "description": "Search query \u2014 multi-term searches match ANY term (OR)"
+          },
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "raw",
+                "wiki"
+              ]
+            },
+            "description": "Which subtrees to search. Default: both."
+          },
+          "max_results": {
+            "type": "number",
+            "description": "Max matches to return (default 20, max 100)"
+          },
+          "case_sensitive": {
+            "type": "boolean",
+            "description": "Case-sensitive search (default false)"
+          }
+        },
+        "required": [
+          "project",
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "knowledge_read",
+      "description": "Read a file from a project's raw/ or wiki/ tree. Path is relative to project root. Only raw/ and wiki/ subtrees accessible.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "type": "string",
+            "description": "Project ID"
+          },
+          "path": {
+            "type": "string",
+            "description": "Relative path (e.g. 'wiki/trials/sustain-6.md' or 'raw/literature/pubmed_12345.md')"
+          }
+        },
+        "required": [
+          "project",
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "knowledge_write",
+      "description": "Write a file to the project's wiki/ tree. Path MUST start with 'wiki/' and end with '.md'. Use this to compile/organize evidence from raw/ files into a structured knowledge base. Supports Obsidian-sty",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "type": "string",
+            "description": "Project ID"
+          },
+          "path": {
+            "type": "string",
+            "description": "Relative path starting with 'wiki/', ending with .md (e.g. 'wiki/trials/sustain-6.md')"
+          },
+          "content": {
+            "type": "string",
+            "description": "Markdown content. Can include YAML frontmatter and [[wikilinks]]."
+          }
+        },
+        "required": [
+          "project",
+          "path",
+          "content"
+        ]
+      }
+    },
+    {
+      "name": "project_create",
+      "description": "Initialize a new HEOR project workspace with directory skeleton and project.yaml metadata. Idempotent \u2014 returns existing project if already created. Required before using the `project` parameter in ot",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "Short identifier (alphanumeric + hyphens, e.g. 'semaglutide-t2d')"
+          },
+          "drug": {
+            "type": "string",
+            "description": "Drug or intervention name"
+          },
+          "indication": {
+            "type": "string",
+            "description": "Disease/condition being treated"
+          },
+          "hta_targets": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "nice",
+                "ema",
+                "fda",
+                "iqwig",
+                "has",
+                "jca",
+                "cadth",
+                "pbac",
+                "icer"
+              ]
+            },
+            "description": "HTA bodies to target (optional)"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Free-text project notes (optional)"
+          }
+        },
+        "required": [
+          "project_id",
+          "drug",
+          "indication"
+        ]
+      }
+    }
+  ],
+  "resources": [],
+  "prompts": []
+}

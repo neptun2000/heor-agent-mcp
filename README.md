@@ -257,11 +257,57 @@ HEOR_API_KEY=...
 
 ---
 
+## Web UI
+
+A companion chat interface is available at:
+
+**https://web-michael-ns-projects.vercel.app**
+
+- Chat with Claude Opus 4.6 + all 7 HEOR tools
+- **BYOK (Bring Your Own Key)** — paste your Anthropic API key in the settings; it stays in your browser's localStorage and is never stored on our servers
+- Markdown rendering with styled tables, tool call cards with live progress timers
+- Example prompts for common HEOR workflows
+
+The web UI calls the hosted MCP server on Railway for tool execution. No setup required — just add your API key and start querying.
+
+### Self-hosting the web UI
+
+```bash
+cd web
+npm install
+echo "ANTHROPIC_API_KEY=sk-ant-..." > .env.local  # optional server-side fallback
+npm run dev -- -p 3456
+```
+
+Set `MCP_SERVER_URL` to point to your own MCP server instance (default: the public Railway deployment).
+
+---
+
+## HTTP Transport
+
+The server supports both **stdio** (default, for local MCP clients) and **Streamable HTTP** (for hosted deployment).
+
+```bash
+# Stdio mode (default — for Claude Code, Claude Desktop)
+npx heor-agent-mcp
+
+# HTTP mode — for hosted deployment, Smithery, web UI backend
+npx heor-agent-mcp --http                    # port 8787
+MCP_HTTP_PORT=3000 npx heor-agent-mcp        # custom port
+```
+
+HTTP endpoints:
+- `POST/GET/DELETE /mcp` — MCP Streamable HTTP protocol
+- `GET /health` — health check
+- `GET /.well-known/mcp/server-card.json` — Smithery discovery
+
+---
+
 ## Development
 
 ```bash
-git clone https://github.com/neptun2000/HEORAgent
-cd HEORAgent/heor-agent-mcp
+git clone https://github.com/neptun2000/heor-agent-mcp
+cd heor-agent-mcp
 npm install
 npm test          # 244 tests across 66 suites
 npm run build     # Compile TypeScript to dist/
@@ -316,8 +362,21 @@ MIT — see [LICENSE](./LICENSE).
 
 ---
 
+## Distribution
+
+| Channel | How to use | Who pays |
+|---------|-----------|----------|
+| **npm** | `npx heor-agent-mcp` | User's Claude subscription |
+| **Smithery** | [smithery.ai/servers/neptun2000-70zu/heor-agent-mcp](https://smithery.ai/servers/neptun2000-70zu/heor-agent-mcp) | User's Claude subscription |
+| **Web UI** | [web-michael-ns-projects.vercel.app](https://web-michael-ns-projects.vercel.app) | User's own Anthropic API key (BYOK) |
+| **Hosted MCP** | `https://heor-agent-mcp-production.up.railway.app` | Free (tool execution only) |
+
+---
+
 ## Links
 
 - **npm:** https://www.npmjs.com/package/heor-agent-mcp
-- **GitHub:** https://github.com/neptun2000/HEORAgent
-- **Issues:** https://github.com/neptun2000/HEORAgent/issues
+- **GitHub:** https://github.com/neptun2000/heor-agent-mcp
+- **Smithery:** https://smithery.ai/servers/neptun2000-70zu/heor-agent-mcp
+- **Web UI:** https://web-michael-ns-projects.vercel.app
+- **Issues:** https://github.com/neptun2000/heor-agent-mcp/issues

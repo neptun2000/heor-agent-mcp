@@ -44,6 +44,7 @@ import {
   projectCreateToolSchema,
 } from "./tools/projectCreate.js";
 import { randomUUID } from "node:crypto";
+import { trackToolCall, trackSession, shutdownAnalytics } from "./analytics.js";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 
@@ -67,6 +68,7 @@ function createMcpServer(): Server {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
+    const callStart = Date.now();
 
     try {
       let result;
@@ -93,11 +95,14 @@ function createMcpServer(): Server {
           result = await handleProjectCreate(args);
           break;
         default:
+          trackToolCall(name, Date.now() - callStart, "error");
           return {
             content: [{ type: "text", text: `Unknown tool: ${name}` }],
             isError: true,
           };
       }
+
+      trackToolCall(name, Date.now() - callStart, "ok");
 
       const content =
         typeof result.content === "string"
@@ -109,6 +114,9 @@ function createMcpServer(): Server {
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      trackToolCall(name, Date.now() - callStart, "error", undefined, {
+        error: message,
+      });
       return {
         content: [{ type: "text", text: `Error: ${message}` }],
         isError: true,
@@ -210,13 +218,17 @@ async function runHttp(port: number) {
             sessionIdGenerator: () => randomUUID(),
             onsessioninitialized: (id) => {
               sessions[id] = transport;
+              trackSession("session_start", id);
             },
           });
           transport.onclose = () => {
             const id = Object.entries(sessions).find(
               ([, t]) => t === transport,
             )?.[0];
-            if (id) delete sessions[id];
+            if (id) {
+              trackSession("session_end", id);
+              delete sessions[id];
+            }
           };
           await server.connect(transport);
         } else {
@@ -282,4 +294,14 @@ async function main() {
 main().catch((err) => {
   console.error("Fatal error:", err);
   process.exit(1);
+});
+
+process.on("SIGTERM", async () => {
+  await shutdownAnalytics();
+  process.exit(0);
+});
+
+process.on("SIGINT", async () => {
+  await shutdownAnalytics();
+  process.exit(0);
 });

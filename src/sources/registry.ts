@@ -194,9 +194,9 @@ export const SOURCE_REGISTRY: SourceMeta[] = [
   },
   {
     id: "cadth_reviews",
-    name: "CADTH",
+    name: "CDA-AMC (CADTH)",
     category: "hta_appraisal",
-    description: "CADTH CDR/pCODR reviews (Canada)",
+    description: "CDA-AMC (formerly CADTH) reimbursement reviews (Canada)",
     regional: "Canada",
   },
   {

@@ -1,6 +1,9 @@
 import type { LiteratureResult } from "../types.js";
 
-export async function fetchTlv(query: string, maxResults: number): Promise<LiteratureResult[]> {
+export async function fetchTlv(
+  query: string,
+  maxResults: number,
+): Promise<LiteratureResult[]> {
   const entries = [
     {
       title: `TLV Sweden Decisions: ${query}`,
@@ -9,7 +12,7 @@ export async function fetchTlv(query: string, maxResults: number): Promise<Liter
     },
     {
       title: `TLV General Guidelines for Economic Evaluations`,
-      abstract: `TLV's guidelines for health economic evaluations submitted in support of reimbursement applications. Covers cost-effectiveness analysis, willingness-to-pay threshold (approximately SEK 500K/QALY for severe conditions), QALY methodology, perspective (societal), discount rate (3%), and uncertainty analysis requirements. Required reading for Swedish HTA submissions.`,
+      abstract: `TLV's guidelines for health economic evaluations submitted in support of reimbursement applications. Covers cost-effectiveness analysis with severity-tiered WTP thresholds: ~SEK 250K/QALY (low severity), ~SEK 500K (medium), ~SEK 750K (high), ~SEK 1M (very high severity). QALY methodology, societal perspective, 3% discount rate, and uncertainty analysis requirements. Required reading for Swedish HTA submissions.`,
       url: "https://www.tlv.se/in-english/medicines/general-guidelines-for-economic-evaluations.html",
     },
     {
@@ -23,7 +26,9 @@ export async function fetchTlv(query: string, maxResults: number): Promise<Liter
     id: `tlv_${i}`,
     source: "tlv" as const,
     title: e.title,
-    authors: ["Tandvårds- och läkemedelsförmånsverket (TLV) — Dental and Pharmaceutical Benefits Agency, Sweden"],
+    authors: [
+      "Tandvårds- och läkemedelsförmånsverket (TLV) — Dental and Pharmaceutical Benefits Agency, Sweden",
+    ],
     date: new Date().getFullYear().toString(),
     study_type: "hta_report",
     abstract: e.abstract,

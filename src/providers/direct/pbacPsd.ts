@@ -1,6 +1,9 @@
 import type { LiteratureResult } from "../types.js";
 
-export async function fetchPbacPsd(query: string, maxResults: number): Promise<LiteratureResult[]> {
+export async function fetchPbacPsd(
+  query: string,
+  maxResults: number,
+): Promise<LiteratureResult[]> {
   const entries = [
     {
       title: `PBAC Public Summary Documents: ${query}`,
@@ -9,7 +12,7 @@ export async function fetchPbacPsd(query: string, maxResults: number): Promise<L
     },
     {
       title: `PBAC Guidelines 5.0 (2016)`,
-      abstract: `PBAC guidelines for preparing drug submissions, covering cost-minimisation, cost-effectiveness, and cost-utility analyses. Describes PBAC's preferred methods: incremental analysis, QALYs, discount rate (5%), perspective (health system), and willingness-to-pay threshold (approximately AUD 45–75K/QALY). Required reference for PBS submissions.`,
+      abstract: `PBAC guidelines for preparing drug submissions, covering cost-minimisation, cost-effectiveness, and cost-utility analyses. Describes PBAC's preferred methods: incremental analysis, QALYs, discount rate (5%), perspective (health system). PBAC has no formal WTP threshold but the implicit threshold is approximately AUD 50K/QALY. Required reference for PBS submissions.`,
       url: "https://pbac.pbs.gov.au/",
     },
     {

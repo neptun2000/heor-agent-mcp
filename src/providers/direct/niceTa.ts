@@ -1,6 +1,9 @@
 import type { LiteratureResult } from "../types.js";
 
-export async function fetchNiceTa(query: string, maxResults: number): Promise<LiteratureResult[]> {
+export async function fetchNiceTa(
+  query: string,
+  maxResults: number,
+): Promise<LiteratureResult[]> {
   const entries = [
     {
       title: `NICE Technology Appraisals Search: ${query}`,
@@ -9,7 +12,7 @@ export async function fetchNiceTa(query: string, maxResults: number): Promise<Li
     },
     {
       title: `NICE Single Technology Appraisal Process Guide`,
-      abstract: `NICE's STA methodology guide PMG36 and process guide PMG19. Required reading for company submissions. Covers reference case, time horizon, discount rates (3.5%), perspective (NHS+PSS), ICER threshold (£20–30K/QALY), end-of-life criteria, and innovation rating.`,
+      abstract: `NICE's STA methodology guide PMG36 and process guide PMG19. Required reading for company submissions. Covers reference case, time horizon, discount rates (3.5%), perspective (NHS+PSS), ICER threshold (£25–35K/QALY, updated April 2026), end-of-life criteria, and innovation rating.`,
       url: "https://www.nice.org.uk/process/pmg36",
     },
     {

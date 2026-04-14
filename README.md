@@ -79,7 +79,7 @@ Multi-state Markov model (default) or Partitioned Survival Analysis (oncology), 
 - **OWSA** — one-way sensitivity analysis with tornado summary
 - **CEAC** — cost-effectiveness acceptability curve
 - **EVPI** — expected value of perfect information
-- **WTP assessment** — verdict against NHS (£20–30K), US payer ($100–150K), societal thresholds
+- **WTP assessment** — verdict against NHS (£25–35K/QALY, updated April 2026), US payer ($100–150K), societal thresholds
 
 **Example call:**
 ```json

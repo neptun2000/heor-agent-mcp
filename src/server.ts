@@ -1,4 +1,13 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __pkgDir = dirname(fileURLToPath(import.meta.url));
+const PKG_VERSION = JSON.parse(
+  readFileSync(join(__pkgDir, "..", "package.json"), "utf-8"),
+).version as string;
+
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -37,12 +46,10 @@ import {
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 
 function createMcpServer(): Server {
   const server = new Server(
-    { name: "heor-agent-mcp", version: "0.1.3" },
+    { name: "heor-agent-mcp", version: PKG_VERSION },
     { capabilities: { tools: {} } },
   );
 
@@ -171,7 +178,11 @@ async function runHttp(port: number) {
     if (req.method === "GET" && req.url === "/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(
-        JSON.stringify({ status: "ok", server: "heor-agent-mcp", version: "0.1.3" }),
+        JSON.stringify({
+          status: "ok",
+          server: "heor-agent-mcp",
+          version: PKG_VERSION,
+        }),
       );
       return;
     }

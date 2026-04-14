@@ -43,6 +43,10 @@ import {
   handleProjectCreate,
   projectCreateToolSchema,
 } from "./tools/projectCreate.js";
+import {
+  handleEvidenceNetwork,
+  evidenceNetworkToolSchema,
+} from "./tools/evidenceNetwork.js";
 import { randomUUID } from "node:crypto";
 import { trackToolCall, trackSession, shutdownAnalytics } from "./analytics.js";
 import { createServer } from "node:http";
@@ -63,6 +67,7 @@ function createMcpServer(): Server {
       knowledgeReadToolSchema,
       knowledgeWriteToolSchema,
       projectCreateToolSchema,
+      evidenceNetworkToolSchema,
     ],
   }));
 
@@ -93,6 +98,9 @@ function createMcpServer(): Server {
           break;
         case "project_create":
           result = await handleProjectCreate(args);
+          break;
+        case "evidence_network":
+          result = await handleEvidenceNetwork(args);
           break;
         default:
           trackToolCall(name, Date.now() - callStart, "error");

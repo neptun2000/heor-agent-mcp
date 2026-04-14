@@ -60,7 +60,7 @@ import { saveReport } from "../knowledge/index.js";
 import { saveModelRun } from "../knowledge/index.js";
 
 const WTP_THRESHOLDS = {
-  nhs: { low: 20000, high: 30000, currency: "GBP", symbol: "£" },
+  nhs: { low: 25000, high: 35000, currency: "GBP", symbol: "£" },
   us_payer: { low: 100000, high: 150000, currency: "USD", symbol: "$" },
   societal: { low: 50000, high: 100000, currency: "USD", symbol: "$" },
 };

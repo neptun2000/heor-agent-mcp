@@ -49,6 +49,7 @@
     "url": "https://github.com/neptun2000/HEORAgent/issues"
   },
   "scripts": {
+    "start": "node dist/server.js",
     "build": "tsc",
     "dev": "tsx src/server.ts",
     "test": "jest",

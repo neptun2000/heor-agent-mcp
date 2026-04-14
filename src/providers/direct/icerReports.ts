@@ -1,6 +1,9 @@
 import type { LiteratureResult } from "../types.js";
 
-export async function fetchIcerReports(query: string, maxResults: number): Promise<LiteratureResult[]> {
+export async function fetchIcerReports(
+  query: string,
+  maxResults: number,
+): Promise<LiteratureResult[]> {
   const entries = [
     {
       title: `ICER Evidence Report: ${query}`,
@@ -8,7 +11,7 @@ export async function fetchIcerReports(query: string, maxResults: number): Promi
       url: `https://icer.org/?s=${encodeURIComponent(query)}`,
     },
     {
-      title: `ICER Value Assessment Framework 2023`,
+      title: `ICER Value Assessment Framework 2023-2026`,
       abstract: `ICER's Value Assessment Framework describes the methods used in all ICER evidence reports. Covers clinical benefit rating, comparative value rating, incremental cost-effectiveness ratios, health-benefit price benchmarks, and budget impact analysis. Essential reading for understanding ICER's standards and preparing for ICER engagement.`,
       url: "https://icer.org/our-approach/methods-process/value-assessment-framework/",
     },

@@ -2,6 +2,11 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v0.6.0 (2026-04-15)
+
+### Added
+- **screen_abstracts tool** — PICO-based abstract screening with relevance scoring, study design classification (Cochrane Handbook Ch. 4), and ranked inclusion/exclusion decisions. Turns raw literature_search results into a screened shortlist with PRISMA flow summary.
+
 ## v0.5.0 (2026-04-15)
 
 ### Added

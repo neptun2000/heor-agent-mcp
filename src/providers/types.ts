@@ -74,6 +74,7 @@ export interface LiteratureSearchParams {
   study_types?: StudyType[];
   output_format?: OutputFormat;
   project?: string;
+  runs?: number;
 }
 
 export interface CEModelParams {

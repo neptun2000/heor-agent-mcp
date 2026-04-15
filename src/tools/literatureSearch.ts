@@ -80,6 +80,15 @@ const LiteratureSearchSchema = z.object({
     .optional(),
   output_format: z.enum(["text", "json", "docx"]).optional(),
   project: z.string().optional(),
+  runs: z
+    .number()
+    .int()
+    .min(1)
+    .max(5)
+    .optional()
+    .describe(
+      "Number of search runs to perform (1-5, default 1). Multiple runs are deduplicated and ranked by consistency — studies found in more runs are ranked higher. Use runs=3 for comprehensive, stable results.",
+    ),
 });
 
 function resolveSourceAliases(params: unknown): unknown {
@@ -186,6 +195,11 @@ export const literatureSearchToolSchema = {
         type: "string",
         description:
           "Project ID for knowledge base persistence. When set, results are saved to ~/.heor-agent/projects/{project}/raw/literature/",
+      },
+      runs: {
+        type: "number",
+        description:
+          "Number of search runs (1-5, default 1). Multiple runs deduplicate and rank by consistency. Use runs=3 for comprehensive, stable results.",
       },
     },
     required: ["query"],

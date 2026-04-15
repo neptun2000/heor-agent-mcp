@@ -8,7 +8,7 @@ export async function fetchIqwig(
     {
       title: `IQWiG Reports Search: ${query}`,
       abstract: `IQWiG (Institut für Qualität und Wirtschaftlichkeit im Gesundheitswesen — Institute for Quality and Efficiency in Health Care) produces systematic reviews, health technology assessments, and AMNOG dossier assessments commissioned by G-BA. Search "${query}" to find IQWiG reports on clinical benefit, cost-effectiveness, and evidence quality. IQWiG assessments are foundational to G-BA benefit rating decisions under AMNOG.`,
-      url: `https://www.iqwig.de/en/projects/?tab=search&query=${encodeURIComponent(query)}`,
+      url: `https://www.iqwig.de/en/search/?q=${encodeURIComponent(query)}`,
     },
     {
       title: `IQWiG General Methods v8.0 (2025)`,

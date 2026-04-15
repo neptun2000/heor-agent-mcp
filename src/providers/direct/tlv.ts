@@ -8,7 +8,7 @@ export async function fetchTlv(
     {
       title: `TLV Sweden Decisions: ${query}`,
       abstract: `TLV (Tandvårds- och läkemedelsförmånsverket — Dental and Pharmaceutical Benefits Agency) makes reimbursement decisions for drugs in Sweden's pharmaceutical benefits scheme (LFN). Each decision includes clinical assessment, health economic evaluation, and reimbursement conditions. Search "${query}" to find TLV decisions relevant to the drug or indication. Key for Swedish market access and Nordic HTA benchmarking.`,
-      url: `https://www.tlv.se/in-english/search.html?query=${encodeURIComponent(query)}`,
+      url: `https://www.tlv.se/beslut/sok-i-databasen.html?q=${encodeURIComponent(query)}`,
     },
     {
       title: `TLV General Guidelines for Economic Evaluations`,

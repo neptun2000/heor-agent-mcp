@@ -47,6 +47,10 @@ import {
   handleEvidenceNetwork,
   evidenceNetworkToolSchema,
 } from "./tools/evidenceNetwork.js";
+import {
+  handleIndirectComparison,
+  indirectComparisonToolSchema,
+} from "./tools/indirectComparison.js";
 import { randomUUID } from "node:crypto";
 import { trackToolCall, trackSession, shutdownAnalytics } from "./analytics.js";
 import { createServer } from "node:http";
@@ -68,6 +72,7 @@ function createMcpServer(): Server {
       knowledgeWriteToolSchema,
       projectCreateToolSchema,
       evidenceNetworkToolSchema,
+      indirectComparisonToolSchema,
     ],
   }));
 
@@ -101,6 +106,9 @@ function createMcpServer(): Server {
           break;
         case "evidence_network":
           result = await handleEvidenceNetwork(args);
+          break;
+        case "indirect_comparison":
+          result = await handleIndirectComparison(args);
           break;
         default:
           trackToolCall(name, Date.now() - callStart, "error");

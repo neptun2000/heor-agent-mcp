@@ -2,6 +2,12 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v0.5.0 (2026-04-15)
+
+### Added
+- **survival_fitting tool** — fit 5 parametric distributions (Exponential, Weibull, Log-logistic, Log-normal, Gompertz) to Kaplan-Meier data. AIC/BIC model selection, extrapolation table, clinical plausibility guidance per NICE DSU TSD 14 (Latimer 2013)
+- **EVPPI** (Expected Value of Partial Perfect Information) — per-parameter VOI analysis in PSA output. Shows which specific parameters are worth further research, using non-parametric binning method (Strong et al. 2014)
+
 ## v0.4.0 (2026-04-15)
 
 ### Added

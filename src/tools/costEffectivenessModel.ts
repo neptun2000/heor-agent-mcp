@@ -353,6 +353,11 @@ export async function handleCostEffectivenessModel(
       prob_cost_effective: psaResult.prob_cost_effective,
       ceac: psaResult.ceac,
       evpi: psaResult.evpi,
+      evppi: psaResult.evppi.map((e) => ({
+        parameter: e.parameter,
+        evppi: e.evppi,
+        evppi_proportion: e.evppi_proportion,
+      })),
       scatter: psaResult.scatter_sample.map((it) => ({
         delta_cost: it.delta_cost,
         delta_qaly: it.delta_qaly,
@@ -459,6 +464,20 @@ export async function handleCostEffectivenessModel(
       `- **EVPI:** ${symbol}${Math.round(psaSummary.evpi).toLocaleString()} (expected value of perfect information)`,
       ``,
     );
+
+    // EVPPI section
+    if (psaSummary.evppi && psaSummary.evppi.length > 0) {
+      psaSection.push(`#### EVPPI (Partial Value of Information)`);
+      psaSection.push(`Which parameters are worth further research:`);
+      psaSection.push(`| Parameter | EVPPI | % of EVPI |`);
+      psaSection.push(`|-----------|-------|-----------|`);
+      for (const ev of psaSummary.evppi.slice(0, 5)) {
+        psaSection.push(
+          `| ${ev.parameter} | ${symbol}${Math.round(ev.evppi).toLocaleString()} | ${(ev.evppi_proportion * 100).toFixed(1)}% |`,
+        );
+      }
+      psaSection.push(``);
+    }
   }
 
   // OWSA section (top 5)

@@ -8,6 +8,11 @@ import {
   buildMarkovParamsFromCE,
   runMarkovAndComputeICER,
 } from "./modelUtils.js";
+import {
+  computeEVPPI,
+  type EVPPIResult,
+  type PSAIterationData,
+} from "./evppi.js";
 
 export type CEModelInputs = CEModelParams;
 
@@ -33,6 +38,7 @@ export interface PSAResult {
   prob_cost_effective: Record<string, number>; // keyed by threshold name
   ceac: Array<{ wtp: number; prob_ce: number }>;
   evpi: number;
+  evppi: EVPPIResult[]; // per-parameter partial EVPI
   scatter_sample: PSAIteration[]; // first 500 iterations for scatter plot
 }
 
@@ -73,6 +79,7 @@ function perturbGamma(value: number, cv: number, rng: () => number): number {
 export function runPSA(params: PSAParams): PSAResult {
   const rng = createSeededRng(params.seed ?? 42);
   const iterations: PSAIteration[] = [];
+  const evppiData: PSAIterationData[] = [];
 
   for (let i = 0; i < params.n_iterations; i++) {
     // Sample perturbed parameters
@@ -142,6 +149,31 @@ export function runPSA(params: PSAParams): PSAResult {
     const { delta_cost, delta_qaly, icer } =
       runMarkovAndComputeICER(perturbedParams);
     iterations.push({ delta_cost, delta_qaly, icer });
+
+    // Track parameter values for EVPPI
+    evppiData.push({
+      delta_cost,
+      delta_qaly,
+      params: {
+        efficacy_delta: perturbedParams.clinical_inputs.efficacy_delta,
+        drug_cost_annual: perturbedParams.cost_inputs.drug_cost_annual,
+        comparator_cost_annual:
+          perturbedParams.cost_inputs.comparator_cost_annual,
+        ...(perturbedParams.clinical_inputs.mortality_reduction !== undefined
+          ? {
+              mortality_reduction:
+                perturbedParams.clinical_inputs.mortality_reduction,
+            }
+          : {}),
+        ...(perturbedParams.utility_inputs
+          ? {
+              qaly_on_treatment:
+                perturbedParams.utility_inputs.qaly_on_treatment,
+              qaly_comparator: perturbedParams.utility_inputs.qaly_comparator,
+            }
+          : {}),
+      },
+    });
   }
 
   // Compute statistics
@@ -200,6 +232,11 @@ export function runPSA(params: PSAParams): PSAResult {
   const max_e_nmb = Math.max(nmb_intervention_mean, nmb_comparator_mean);
   const evpi = Math.max(0, e_max_nmb - max_e_nmb);
 
+  // EVPPI: per-parameter partial value of information
+  const paramNames =
+    evppiData.length > 0 ? Object.keys(evppiData[0]!.params) : [];
+  const evppiResults = computeEVPPI(evppiData, lambda, paramNames);
+
   const scatter_sample = iterations.slice(0, 500);
 
   return {
@@ -210,6 +247,7 @@ export function runPSA(params: PSAParams): PSAResult {
     prob_cost_effective,
     ceac,
     evpi,
+    evppi: evppiResults,
     scatter_sample,
   };
 }

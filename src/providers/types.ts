@@ -171,6 +171,7 @@ export interface PSASummary {
   prob_cost_effective: Record<string, number>;
   ceac: Array<{ wtp: number; prob_ce: number }>;
   evpi: number;
+  evppi: Array<{ parameter: string; evppi: number; evppi_proportion: number }>;
   scatter: Array<{ delta_cost: number; delta_qaly: number }>;
 }
 

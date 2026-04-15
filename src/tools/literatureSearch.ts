@@ -2,6 +2,28 @@ import { z } from "zod";
 import { createProvider } from "../providers/factory.js";
 import type { ToolResult } from "../providers/types.js";
 
+const SOURCE_ALIASES: Record<string, string> = {
+  nice: "nice_ta",
+  cadth: "cadth_reviews",
+  "cda-amc": "cadth_reviews",
+  icer: "icer_reports",
+  pbac: "pbac_psd",
+  gba: "gba_decisions",
+  "g-ba": "gba_decisions",
+  has: "has_tc",
+  ct: "clinicaltrials",
+  "clinicaltrials.gov": "clinicaltrials",
+  ncbi: "pubmed",
+  elsevier: "embase",
+  world_bank_data: "world_bank",
+  worldbank: "world_bank",
+  who: "who_gho",
+  gbd: "ihme_gbd",
+  nadac: "cms_nadac",
+  nhs: "nhs_costs",
+  pbs: "pbs_schedule",
+};
+
 const LiteratureSearchSchema = z.object({
   query: z.string().min(1, "query is required"),
   sources: z
@@ -60,10 +82,25 @@ const LiteratureSearchSchema = z.object({
   project: z.string().optional(),
 });
 
+function resolveSourceAliases(params: unknown): unknown {
+  if (
+    typeof params === "object" &&
+    params !== null &&
+    "sources" in params &&
+    Array.isArray((params as Record<string, unknown>).sources)
+  ) {
+    const p = params as Record<string, unknown>;
+    p.sources = (p.sources as string[]).map(
+      (s) => SOURCE_ALIASES[s.toLowerCase()] ?? s,
+    );
+  }
+  return params;
+}
+
 export async function handleLiteratureSearch(
   rawParams: unknown,
 ): Promise<ToolResult> {
-  const params = LiteratureSearchSchema.parse(rawParams);
+  const params = LiteratureSearchSchema.parse(resolveSourceAliases(rawParams));
   const provider = createProvider();
   return provider.searchLiterature(params);
 }

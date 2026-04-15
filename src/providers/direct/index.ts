@@ -157,38 +157,83 @@ export class DirectProvider implements IProvider {
       }
     }
 
+    const runs = Math.min(Math.max(params.runs ?? 1, 1), 5);
     const allResults: LiteratureResult[] = [];
 
-    for (const source of sources) {
-      const start = Date.now();
-      try {
-        const results = await FETCHERS[source](params.query, maxPerSource);
-        const filtered = params.date_from
-          ? results.filter((r) => !r.date || r.date >= params.date_from!)
-          : results;
-        audit = addSource(audit, {
-          source,
-          query_sent: params.query,
-          results_returned: results.length,
-          results_included: filtered.length,
-          latency_ms: Date.now() - start,
-          status: "ok",
-        });
-        allResults.push(...filtered);
-      } catch (err) {
-        audit = addSource(audit, {
-          source,
-          query_sent: params.query,
-          results_returned: 0,
-          results_included: 0,
-          latency_ms: Date.now() - start,
-          status: "failed",
-          error: err instanceof Error ? err.message : String(err),
-        });
-        audit = addWarning(
-          audit,
-          `Source ${source} failed: ${err instanceof Error ? err.message : String(err)}`,
-        );
+    // Track how many runs each result appears in (for stability ranking)
+    const resultFrequency = new Map<string, number>();
+
+    for (let run = 0; run < runs; run++) {
+      for (const source of sources) {
+        const start = Date.now();
+        try {
+          const results = await FETCHERS[source](params.query, maxPerSource);
+          const filtered = params.date_from
+            ? results.filter((r) => !r.date || r.date >= params.date_from!)
+            : results;
+
+          // Only add audit for first run to avoid duplicating source entries
+          if (run === 0) {
+            audit = addSource(audit, {
+              source,
+              query_sent: params.query,
+              results_returned: results.length,
+              results_included: filtered.length,
+              latency_ms: Date.now() - start,
+              status: "ok",
+            });
+          }
+
+          for (const r of filtered) {
+            const key = r.id || `${r.source}_${r.title}`;
+            const freq = (resultFrequency.get(key) ?? 0) + 1;
+            resultFrequency.set(key, freq);
+
+            // Only add to results if not already present (deduplicate)
+            if (freq === 1) {
+              allResults.push(r);
+            }
+          }
+        } catch (err) {
+          if (run === 0) {
+            audit = addSource(audit, {
+              source,
+              query_sent: params.query,
+              results_returned: 0,
+              results_included: 0,
+              latency_ms: Date.now() - start,
+              status: "failed",
+              error: err instanceof Error ? err.message : String(err),
+            });
+            audit = addWarning(
+              audit,
+              `Source ${source} failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
+      }
+    }
+
+    // Sort by stability: results found in more runs ranked higher
+    if (runs > 1) {
+      allResults.sort((a, b) => {
+        const keyA = a.id || `${a.source}_${a.title}`;
+        const keyB = b.id || `${b.source}_${b.title}`;
+        const freqA = resultFrequency.get(keyA) ?? 0;
+        const freqB = resultFrequency.get(keyB) ?? 0;
+        return freqB - freqA; // higher frequency first
+      });
+
+      audit = addAssumption(
+        audit,
+        `Stability search: ${runs} runs performed, results deduplicated and ranked by consistency (${allResults.length} unique results)`,
+      );
+
+      // Add stability scores to results
+      for (const r of allResults) {
+        const key = r.id || `${r.source}_${r.title}`;
+        const freq = resultFrequency.get(key) ?? 1;
+        r.abstract = `[Stability: ${freq}/${runs} runs] ${r.abstract}`;
       }
     }
 

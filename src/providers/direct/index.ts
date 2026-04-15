@@ -164,51 +164,71 @@ export class DirectProvider implements IProvider {
     const resultFrequency = new Map<string, number>();
 
     for (let run = 0; run < runs; run++) {
-      for (const source of sources) {
+      // Fetch all sources in parallel within each run
+      const fetchPromises = sources.map(async (source) => {
         const start = Date.now();
         try {
           const results = await FETCHERS[source](params.query, maxPerSource);
           const filtered = params.date_from
             ? results.filter((r) => !r.date || r.date >= params.date_from!)
             : results;
+          return {
+            source,
+            results,
+            filtered,
+            latency_ms: Date.now() - start,
+            status: "ok" as const,
+            error: undefined,
+          };
+        } catch (err) {
+          return {
+            source,
+            results: [] as LiteratureResult[],
+            filtered: [] as LiteratureResult[],
+            latency_ms: Date.now() - start,
+            status: "failed" as const,
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }
+      });
 
-          // Only add audit for first run to avoid duplicating source entries
-          if (run === 0) {
+      const settled = await Promise.all(fetchPromises);
+
+      for (const outcome of settled) {
+        if (run === 0) {
+          if (outcome.status === "ok") {
             audit = addSource(audit, {
-              source,
+              source: outcome.source,
               query_sent: params.query,
-              results_returned: results.length,
-              results_included: filtered.length,
-              latency_ms: Date.now() - start,
+              results_returned: outcome.results.length,
+              results_included: outcome.filtered.length,
+              latency_ms: outcome.latency_ms,
               status: "ok",
             });
-          }
-
-          for (const r of filtered) {
-            const key = r.id || `${r.source}_${r.title}`;
-            const freq = (resultFrequency.get(key) ?? 0) + 1;
-            resultFrequency.set(key, freq);
-
-            // Only add to results if not already present (deduplicate)
-            if (freq === 1) {
-              allResults.push(r);
-            }
-          }
-        } catch (err) {
-          if (run === 0) {
+          } else {
             audit = addSource(audit, {
-              source,
+              source: outcome.source,
               query_sent: params.query,
               results_returned: 0,
               results_included: 0,
-              latency_ms: Date.now() - start,
+              latency_ms: outcome.latency_ms,
               status: "failed",
-              error: err instanceof Error ? err.message : String(err),
+              error: outcome.error,
             });
             audit = addWarning(
               audit,
-              `Source ${source} failed: ${err instanceof Error ? err.message : String(err)}`,
+              `Source ${outcome.source} failed: ${outcome.error}`,
             );
+          }
+        }
+
+        for (const r of outcome.filtered) {
+          const key = r.id || `${r.source}_${r.title}`;
+          const freq = (resultFrequency.get(key) ?? 0) + 1;
+          resultFrequency.set(key, freq);
+
+          if (freq === 1) {
+            allResults.push(r);
           }
         }
       }

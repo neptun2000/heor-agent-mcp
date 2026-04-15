@@ -2,6 +2,33 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v0.4.0 (2026-04-15)
+
+### Added
+- **budget_impact_model tool** — ISPOR-compliant budget impact analysis with year-by-year net cost, market share uptake curves, treatment displacement, and population growth (Mauskopf 2007, Sullivan 2014)
+- **population_adjusted_comparison tool** — MAIC (Matching-Adjusted Indirect Comparison) and STC (Simulated Treatment Comparison) for population-adjusted indirect comparisons. Follows NICE DSU TSD 18 (Phillippo 2016). Accepts summary-level statistics — no IPD required
+- **Scenario analysis** on cost_effectiveness_model — new `scenarios` parameter runs multiple what-if variants in a single call with comparison table output
+- **GRADE evidence quality assessment** on hta_dossier_prep — auto-generated GRADE table (Risk of Bias, Inconsistency, Indirectness, Imprecision, Publication Bias) when literature results are provided
+- **docs/FEATURES.md** — comprehensive feature reference with Feature Name, What, Why, How for all 11 tools
+
+### Fixed
+- **Markov model Dead state** — 3-state model (On-Treatment/Off-Treatment/Dead) replaces 2-state model. Absorbing Dead state prevents infinite QALY/LY accumulation
+- **ICER sign handling** — `wtpVerdict` now correctly distinguishes dominant (lower cost + higher QALY) from dominated (higher cost + lower QALY) using delta signs
+- **Parallel source fetching** — literature_search uses `Promise.all` instead of sequential loop (major performance improvement with multiple sources)
+- **DOMPurify security** — web UI switches from incomplete FORBID_ATTR blocklist to ALLOWED_ATTR allowlist for SVG sanitization
+- **MCP server security** — bearer token auth (MCP_AUTH_TOKEN), CORS origin restrictions (MCP_CORS_ORIGINS), session limits (max 100, 30min TTL)
+- **EVPI calculation** — uses perspective-appropriate WTP threshold instead of hardcoded $50,000
+- **knowledge_write validation** — Zod schema enforces wiki/ prefix and .md suffix at validation layer
+- **JSON-RPC ID collisions** — web UI uses incrementing counter instead of Date.now()
+- Duplicate `getTimeHorizonYears` function consolidated into modelUtils.ts
+- Stale "7 tools" comments updated throughout
+
+## v0.3.0 (2026-04-14)
+
+### Added
+- **indirect_comparison tool** — Bucher method (single common comparator) and frequentist NMA (full network) for indirect treatment comparisons. Supports MD, OR, RR, HR. Auto-selects method based on network structure
+- **Stability search** — literature_search `runs` parameter (1-5) performs multiple search runs, deduplicates, and ranks by consistency
+
 ## v0.2.0 (2026-04-14)
 
 ### Added

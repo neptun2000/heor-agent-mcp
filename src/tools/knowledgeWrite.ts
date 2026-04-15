@@ -5,16 +5,34 @@ import { createAuditRecord } from "../audit/builder.js";
 
 const KnowledgeWriteSchema = z.object({
   project: z.string().min(1),
-  path: z.string().min(1),
+  path: z
+    .string()
+    .min(1)
+    .refine((p) => p.startsWith("wiki/"), {
+      message: "Path must start with 'wiki/'",
+    })
+    .refine((p) => p.endsWith(".md"), {
+      message: "Path must end with '.md'",
+    }),
   content: z.string(),
 });
 
-export async function handleKnowledgeWrite(rawParams: unknown): Promise<ToolResult> {
+export async function handleKnowledgeWrite(
+  rawParams: unknown,
+): Promise<ToolResult> {
   const params = KnowledgeWriteSchema.parse(rawParams);
-  const audit = createAuditRecord("knowledge_write", { project: params.project, path: params.path }, "text");
+  const audit = createAuditRecord(
+    "knowledge_write",
+    { project: params.project, path: params.path },
+    "text",
+  );
 
   try {
-    const fullPath = await writeWikiFile(params.project, params.path, params.content);
+    const fullPath = await writeWikiFile(
+      params.project,
+      params.path,
+      params.content,
+    );
     return {
       content: `✓ Wrote ${params.path} (${params.content.length} chars)\nFull path: ${fullPath}`,
       audit,
@@ -30,13 +48,22 @@ export async function handleKnowledgeWrite(rawParams: unknown): Promise<ToolResu
 
 export const knowledgeWriteToolSchema = {
   name: "knowledge_write",
-  description: "Write a file to the project's wiki/ tree. Path MUST start with 'wiki/' and end with '.md'. Use this to compile/organize evidence from raw/ files into a structured knowledge base. Supports Obsidian-style [[wikilinks]].",
+  description:
+    "Write a file to the project's wiki/ tree. Path MUST start with 'wiki/' and end with '.md'. Use this to compile/organize evidence from raw/ files into a structured knowledge base. Supports Obsidian-style [[wikilinks]].",
   inputSchema: {
     type: "object",
     properties: {
       project: { type: "string", description: "Project ID" },
-      path: { type: "string", description: "Relative path starting with 'wiki/', ending with .md (e.g. 'wiki/trials/sustain-6.md')" },
-      content: { type: "string", description: "Markdown content. Can include YAML frontmatter and [[wikilinks]]." },
+      path: {
+        type: "string",
+        description:
+          "Relative path starting with 'wiki/', ending with .md (e.g. 'wiki/trials/sustain-6.md')",
+      },
+      content: {
+        type: "string",
+        description:
+          "Markdown content. Can include YAML frontmatter and [[wikilinks]].",
+      },
     },
     required: ["project", "path", "content"],
   },

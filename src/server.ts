@@ -59,6 +59,10 @@ import {
   handlePopulationAdjustedComparison,
   populationAdjustedComparisonToolSchema,
 } from "./tools/populationAdjustedComparison.js";
+import {
+  handleSurvivalFitting,
+  survivalFittingToolSchema,
+} from "./tools/survivalFitting.js";
 import { randomUUID } from "node:crypto";
 import { trackToolCall, trackSession, shutdownAnalytics } from "./analytics.js";
 import { createServer } from "node:http";
@@ -83,6 +87,7 @@ function createMcpServer(): Server {
       indirectComparisonToolSchema,
       budgetImpactModelToolSchema,
       populationAdjustedComparisonToolSchema,
+      survivalFittingToolSchema,
     ],
   }));
 
@@ -125,6 +130,9 @@ function createMcpServer(): Server {
           break;
         case "population_adjusted_comparison":
           result = await handlePopulationAdjustedComparison(args);
+          break;
+        case "survival_fitting":
+          result = await handleSurvivalFitting(args);
           break;
         default:
           trackToolCall(name, Date.now() - callStart, "error");

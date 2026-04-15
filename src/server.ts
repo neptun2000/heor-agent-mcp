@@ -63,6 +63,10 @@ import {
   handleSurvivalFitting,
   survivalFittingToolSchema,
 } from "./tools/survivalFitting.js";
+import {
+  handleScreenAbstracts,
+  screenAbstractsToolSchema,
+} from "./tools/screenAbstracts.js";
 import { randomUUID } from "node:crypto";
 import { trackToolCall, trackSession, shutdownAnalytics } from "./analytics.js";
 import { createServer } from "node:http";
@@ -88,6 +92,7 @@ function createMcpServer(): Server {
       budgetImpactModelToolSchema,
       populationAdjustedComparisonToolSchema,
       survivalFittingToolSchema,
+      screenAbstractsToolSchema,
     ],
   }));
 
@@ -133,6 +138,9 @@ function createMcpServer(): Server {
           break;
         case "survival_fitting":
           result = await handleSurvivalFitting(args);
+          break;
+        case "screen_abstracts":
+          result = await handleScreenAbstracts(args);
           break;
         default:
           trackToolCall(name, Date.now() - callStart, "error");

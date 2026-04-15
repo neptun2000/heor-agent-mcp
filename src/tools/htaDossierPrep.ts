@@ -102,6 +102,160 @@ const METHODOLOGY_BY_BODY: Record<string, string> = {
   jca: "EUHTA Regulation (EU) 2021/2282 — Joint Clinical Assessment",
 };
 
+/**
+ * Auto-generate GRADE evidence quality assessment from literature results.
+ *
+ * GRADE domains: Risk of bias, Inconsistency, Indirectness, Imprecision, Publication bias
+ * Ratings: High, Moderate, Low, Very Low
+ *
+ * Uses study type counts and basic heuristics from the evidence set.
+ */
+function generateGradeTable(
+  evidence: LiteratureResult[],
+  outcomes: string[],
+): string {
+  if (evidence.length === 0) return "";
+
+  // Count study types
+  const rctCount = evidence.filter(
+    (r) =>
+      r.study_type?.toLowerCase().includes("rct") ||
+      r.study_type?.toLowerCase().includes("randomized") ||
+      r.study_type?.toLowerCase().includes("randomised"),
+  ).length;
+  const maCount = evidence.filter(
+    (r) =>
+      r.study_type?.toLowerCase().includes("meta") ||
+      r.study_type?.toLowerCase().includes("systematic"),
+  ).length;
+  const obsCount = evidence.filter(
+    (r) =>
+      r.study_type?.toLowerCase().includes("observational") ||
+      r.study_type?.toLowerCase().includes("cohort") ||
+      r.study_type?.toLowerCase().includes("case"),
+  ).length;
+
+  // Base certainty: RCTs start High, observational starts Low
+  const hasRCTs = rctCount > 0;
+  const hasMAs = maCount > 0;
+
+  function assessOutcome(outcome: string): {
+    certainty: string;
+    rob: string;
+    inconsistency: string;
+    indirectness: string;
+    imprecision: string;
+    pub_bias: string;
+    rationale: string;
+  } {
+    // Check if any evidence mentions this outcome
+    const relevant = evidence.filter(
+      (r) =>
+        r.title?.toLowerCase().includes(outcome.toLowerCase()) ||
+        r.abstract?.toLowerCase().includes(outcome.toLowerCase()),
+    );
+    const nRelevant = relevant.length;
+
+    // Risk of bias
+    const rob = hasRCTs || hasMAs ? "Low" : "High";
+
+    // Inconsistency: if multiple studies, assume some inconsistency possible
+    const inconsistency =
+      nRelevant > 3 ? "Low" : nRelevant > 1 ? "Moderate" : "Serious";
+
+    // Indirectness: assume moderate unless direct evidence exists
+    const indirectness = nRelevant > 0 ? "Low" : "Serious";
+
+    // Imprecision: based on study count
+    const imprecision =
+      nRelevant >= 3 ? "Low" : nRelevant >= 1 ? "Moderate" : "Serious";
+
+    // Publication bias
+    const pub_bias = hasMAs ? "Low" : nRelevant >= 5 ? "Low" : "Suspected";
+
+    // Overall certainty
+    let downgrades = 0;
+    if (rob === "High") downgrades++;
+    if (inconsistency === "Serious") downgrades++;
+    if (indirectness === "Serious") downgrades++;
+    if (imprecision === "Serious") downgrades++;
+    if (pub_bias === "Suspected") downgrades++;
+
+    const baseLevel = hasRCTs ? 4 : 2; // High=4, Low=2
+    const finalLevel = Math.max(1, baseLevel - downgrades);
+    const certainty =
+      finalLevel >= 4
+        ? "High"
+        : finalLevel >= 3
+          ? "Moderate"
+          : finalLevel >= 2
+            ? "Low"
+            : "Very Low";
+
+    const rationale = [
+      rob !== "Low" ? `RoB: ${rob}` : "",
+      inconsistency !== "Low" ? `Inconsistency: ${inconsistency}` : "",
+      indirectness !== "Low" ? `Indirectness: ${indirectness}` : "",
+      imprecision !== "Low" ? `Imprecision: ${imprecision}` : "",
+      pub_bias !== "Low" ? `Pub. bias: ${pub_bias}` : "",
+    ]
+      .filter(Boolean)
+      .join("; ");
+
+    return {
+      certainty,
+      rob,
+      inconsistency,
+      indirectness,
+      imprecision,
+      pub_bias,
+      rationale: rationale || "No downgrading",
+    };
+  }
+
+  const assessedOutcomes =
+    outcomes.length > 0
+      ? outcomes
+      : [
+          "overall survival",
+          "progression-free survival",
+          "quality of life",
+          "adverse events",
+        ];
+
+  const lines: string[] = [
+    `### GRADE Evidence Quality Assessment`,
+    ``,
+    `Based on ${evidence.length} studies (${rctCount} RCTs, ${maCount} systematic reviews/meta-analyses, ${obsCount} observational):`,
+    ``,
+    `| Outcome | Certainty | RoB | Inconsistency | Indirectness | Imprecision | Pub. Bias | Rationale |`,
+    `|---------|-----------|-----|---------------|-------------|-------------|-----------|-----------|`,
+  ];
+
+  for (const outcome of assessedOutcomes) {
+    const a = assessOutcome(outcome);
+    const certIcon =
+      a.certainty === "High"
+        ? "++++"
+        : a.certainty === "Moderate"
+          ? "+++-"
+          : a.certainty === "Low"
+            ? "++--"
+            : "+---";
+    lines.push(
+      `| ${outcome} | **${a.certainty}** ${certIcon} | ${a.rob} | ${a.inconsistency} | ${a.indirectness} | ${a.imprecision} | ${a.pub_bias} | ${a.rationale} |`,
+    );
+  }
+
+  lines.push(``);
+  lines.push(
+    `> **Note:** This is an automated GRADE assessment based on study counts and types. A definitive GRADE evaluation requires clinical expert judgment on each domain. See [GRADE Handbook](https://gdt.gradepro.org/app/handbook/handbook.html).`,
+  );
+  lines.push(``);
+
+  return lines.join("\n");
+}
+
 function buildSection(
   name: string,
   drugName: string,
@@ -453,6 +607,24 @@ export async function handleHtaDossierPrep(
       audit = addWarning(
         audit,
         `Section "${sectionName}" requires additional input`,
+      );
+    }
+  }
+
+  // Auto-generate GRADE table when evidence is provided as LiteratureResult[]
+  if (
+    Array.isArray(params.evidence_summary) &&
+    params.evidence_summary.length > 0
+  ) {
+    const gradeTable = generateGradeTable(
+      params.evidence_summary as LiteratureResult[],
+      [],
+    );
+    if (gradeTable) {
+      lines.push(gradeTable);
+      audit = addAssumption(
+        audit,
+        "GRADE evidence quality assessment auto-generated from literature search results",
       );
     }
   }

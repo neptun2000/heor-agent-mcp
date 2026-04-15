@@ -15,6 +15,8 @@ export interface PSAParams {
   base_params: CEModelInputs;
   n_iterations: number;
   seed?: number;
+  /** WTP threshold for EVPI calculation. Defaults to perspective-appropriate value. */
+  evpi_lambda?: number;
 }
 
 export interface PSAIteration {
@@ -182,8 +184,8 @@ export function runPSA(params: PSAParams): PSAResult {
   }
 
   // EVPI: E[max_arm(NMB)] - max_arm(E[NMB])
-  // Using a reference WTP (midpoint of common thresholds: $50,000)
-  const lambda = 50000;
+  // Use perspective-appropriate WTP threshold (passed via evpi_lambda)
+  const lambda = params.evpi_lambda ?? 50000;
   const nmb_intervention_mean =
     iterations.reduce(
       (sum, it) => sum + (lambda * it.delta_qaly - it.delta_cost),

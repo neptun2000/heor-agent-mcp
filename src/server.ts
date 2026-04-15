@@ -51,6 +51,14 @@ import {
   handleIndirectComparison,
   indirectComparisonToolSchema,
 } from "./tools/indirectComparison.js";
+import {
+  handleBudgetImpactModel,
+  budgetImpactModelToolSchema,
+} from "./tools/budgetImpactModel.js";
+import {
+  handlePopulationAdjustedComparison,
+  populationAdjustedComparisonToolSchema,
+} from "./tools/populationAdjustedComparison.js";
 import { randomUUID } from "node:crypto";
 import { trackToolCall, trackSession, shutdownAnalytics } from "./analytics.js";
 import { createServer } from "node:http";
@@ -73,6 +81,8 @@ function createMcpServer(): Server {
       projectCreateToolSchema,
       evidenceNetworkToolSchema,
       indirectComparisonToolSchema,
+      budgetImpactModelToolSchema,
+      populationAdjustedComparisonToolSchema,
     ],
   }));
 
@@ -109,6 +119,12 @@ function createMcpServer(): Server {
           break;
         case "indirect_comparison":
           result = await handleIndirectComparison(args);
+          break;
+        case "budget_impact_model":
+          result = await handleBudgetImpactModel(args);
+          break;
+        case "population_adjusted_comparison":
+          result = await handlePopulationAdjustedComparison(args);
           break;
         default:
           trackToolCall(name, Date.now() - callStart, "error");
@@ -154,18 +170,62 @@ async function runStdio() {
 
 // --- HTTP mode (--http flag or MCP_HTTP_PORT env) ---
 
-async function runHttp(port: number) {
-  const sessions: Record<string, StreamableHTTPServerTransport> = {};
+// --- Session management with TTL and limits ---
 
+const MAX_SESSIONS = parseInt(process.env.MCP_MAX_SESSIONS ?? "100", 10);
+const SESSION_TTL_MS = parseInt(
+  process.env.MCP_SESSION_TTL_MS ?? String(30 * 60 * 1000),
+  10,
+); // 30 min default
+
+interface ManagedSession {
+  transport: StreamableHTTPServerTransport;
+  lastActivity: number;
+}
+
+const sessions: Record<string, ManagedSession> = {};
+
+function evictStaleSessions(): void {
+  const now = Date.now();
+  for (const [id, session] of Object.entries(sessions)) {
+    if (now - session.lastActivity > SESSION_TTL_MS) {
+      session.transport.close?.();
+      delete sessions[id];
+      trackSession("session_end", id, { reason: "ttl_eviction" });
+    }
+  }
+}
+
+// Periodic eviction every 5 minutes
+const evictionInterval = setInterval(evictStaleSessions, 5 * 60 * 1000);
+evictionInterval.unref(); // don't prevent process exit
+
+async function runHttp(port: number) {
   const __dirname = dirname(fileURLToPath(import.meta.url));
 
+  // Allowed CORS origins (comma-separated env var, or "*" for dev)
+  const allowedOrigins = (process.env.MCP_CORS_ORIGINS ?? "*")
+    .split(",")
+    .map((s) => s.trim());
+
+  // Optional bearer token for authentication
+  const authToken = process.env.MCP_AUTH_TOKEN;
+
   const httpServer = createServer(async (req, res) => {
-    // CORS headers
-    res.setHeader("Access-Control-Allow-Origin", "*");
+    // CORS headers — restrict to allowed origins
+    const origin = req.headers.origin ?? "";
+    const corsOrigin = allowedOrigins.includes("*")
+      ? "*"
+      : allowedOrigins.includes(origin)
+        ? origin
+        : "";
+    if (corsOrigin) {
+      res.setHeader("Access-Control-Allow-Origin", corsOrigin);
+    }
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
     res.setHeader(
       "Access-Control-Allow-Headers",
-      "Content-Type, mcp-session-id",
+      "Content-Type, mcp-session-id, Authorization",
     );
     res.setHeader("Access-Control-Expose-Headers", "mcp-session-id");
 
@@ -213,6 +273,16 @@ async function runHttp(port: number) {
 
     // MCP endpoint
     if (req.url === "/mcp") {
+      // Auth check (if MCP_AUTH_TOKEN is set)
+      if (authToken) {
+        const authHeader = req.headers.authorization ?? "";
+        if (authHeader !== `Bearer ${authToken}`) {
+          res.writeHead(401, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Unauthorized" }));
+          return;
+        }
+      }
+
       const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
       if (req.method === "POST") {
@@ -226,20 +296,33 @@ async function runHttp(port: number) {
         let transport: StreamableHTTPServerTransport;
 
         if (sessionId && sessions[sessionId]) {
-          transport = sessions[sessionId];
+          sessions[sessionId].lastActivity = Date.now();
+          transport = sessions[sessionId].transport;
         } else if (!sessionId && body?.method === "initialize") {
+          // Enforce session limit
+          evictStaleSessions();
+          if (Object.keys(sessions).length >= MAX_SESSIONS) {
+            res.writeHead(503, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                error: "Too many active sessions. Try again later.",
+              }),
+            );
+            return;
+          }
+
           // New session
           const server = createMcpServer();
           transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
             onsessioninitialized: (id) => {
-              sessions[id] = transport;
+              sessions[id] = { transport, lastActivity: Date.now() };
               trackSession("session_start", id);
             },
           });
           transport.onclose = () => {
             const id = Object.entries(sessions).find(
-              ([, t]) => t === transport,
+              ([, s]) => s.transport === transport,
             )?.[0];
             if (id) {
               trackSession("session_end", id);
@@ -263,13 +346,14 @@ async function runHttp(port: number) {
           res.end(JSON.stringify({ error: "Invalid session" }));
           return;
         }
-        await sessions[sessionId].handleRequest(req, res);
+        sessions[sessionId].lastActivity = Date.now();
+        await sessions[sessionId].transport.handleRequest(req, res);
         return;
       }
 
       if (req.method === "DELETE") {
         if (sessionId && sessions[sessionId]) {
-          await sessions[sessionId].close();
+          await sessions[sessionId].transport.close();
           delete sessions[sessionId];
         }
         res.writeHead(200);

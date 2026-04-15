@@ -39,6 +39,38 @@ const CEModelSchema = z.object({
   run_psa: z.boolean().optional(),
   psa_iterations: z.number().int().min(1).max(10000).optional(),
   run_owsa: z.boolean().optional(),
+  scenarios: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        overrides: z.object({
+          time_horizon: z
+            .union([z.enum(["lifetime", "5yr", "10yr"]), z.number().positive()])
+            .optional(),
+          perspective: z.enum(["nhs", "us_payer", "societal"]).optional(),
+          clinical_inputs: z
+            .object({
+              efficacy_delta: z.number().min(0).max(1).optional(),
+              mortality_reduction: z.number().min(0).max(1).optional(),
+            })
+            .optional(),
+          cost_inputs: z
+            .object({
+              drug_cost_annual: z.number().nonnegative().optional(),
+              comparator_cost_annual: z.number().nonnegative().optional(),
+            })
+            .optional(),
+          utility_inputs: z
+            .object({
+              qaly_on_treatment: z.number().min(0).max(1).optional(),
+              qaly_comparator: z.number().min(0).max(1).optional(),
+            })
+            .optional(),
+        }),
+      }),
+    )
+    .max(10)
+    .optional(),
   output_format: z.enum(["text", "json", "docx"]).optional(),
   project: z.string().optional(),
 });
@@ -48,6 +80,7 @@ import { runOWSA, buildDefaultOWSAParameters } from "../models/owsa.js";
 import {
   buildMarkovParamsFromCE,
   runMarkovAndComputeICER,
+  getTimeHorizonYears,
 } from "../models/modelUtils.js";
 import {
   createAuditRecord,
@@ -67,18 +100,102 @@ const WTP_THRESHOLDS = {
 
 const DISCOUNT_RATE = 0.035;
 
-function getTimeHorizonYears(horizon: CEModelParams["time_horizon"]): number {
-  if (horizon === "lifetime") return 40;
-  if (horizon === "5yr") return 5;
-  if (horizon === "10yr") return 10;
-  return Number(horizon);
+/**
+ * Run scenario analysis: re-run the CE model with parameter overrides.
+ * Returns markdown table comparing base case to each scenario.
+ */
+function buildScenarioSection(
+  params: CEModelParams & {
+    scenarios?: Array<{ name: string; overrides: Record<string, unknown> }>;
+  },
+  symbol: string,
+): string[] {
+  if (!params.scenarios || params.scenarios.length === 0) return [];
+
+  const lines: string[] = [
+    `### Scenario Analysis`,
+    `| Scenario | ICER | Delta Cost | Delta QALY | Verdict |`,
+    `|----------|------|-----------|------------|---------|`,
+  ];
+
+  // Base case row
+  const baseResult = runMarkovAndComputeICER(params);
+  const baseIcer = isFinite(baseResult.icer)
+    ? `${symbol}${Math.round(baseResult.icer).toLocaleString()}`
+    : baseResult.delta_cost <= 0 && baseResult.delta_qaly >= 0
+      ? "Dominant"
+      : "Dominated";
+  lines.push(
+    `| **Base case** | ${baseIcer} | ${symbol}${Math.round(baseResult.delta_cost).toLocaleString()} | ${baseResult.delta_qaly.toFixed(3)} | — |`,
+  );
+
+  for (const scenario of params.scenarios) {
+    // Deep merge overrides into base params
+    const merged: CEModelParams = {
+      ...params,
+      ...scenario.overrides,
+      clinical_inputs: {
+        ...params.clinical_inputs,
+        ...((scenario.overrides.clinical_inputs as Record<string, unknown>) ??
+          {}),
+      } as CEModelParams["clinical_inputs"],
+      cost_inputs: {
+        ...params.cost_inputs,
+        ...((scenario.overrides.cost_inputs as Record<string, unknown>) ?? {}),
+      } as CEModelParams["cost_inputs"],
+      utility_inputs: params.utility_inputs
+        ? ({
+            ...params.utility_inputs,
+            ...((scenario.overrides.utility_inputs as Record<
+              string,
+              unknown
+            >) ?? {}),
+          } as CEModelParams["utility_inputs"])
+        : undefined,
+    };
+
+    // Remove scenarios from merged to avoid recursion
+    delete (merged as unknown as Record<string, unknown>).scenarios;
+
+    const result = runMarkovAndComputeICER(merged);
+    const perspective =
+      (scenario.overrides.perspective as string) ?? params.perspective;
+    const threshold =
+      WTP_THRESHOLDS[perspective as keyof typeof WTP_THRESHOLDS];
+    const verdict = wtpVerdict(
+      result.icer,
+      threshold,
+      result.delta_cost,
+      result.delta_qaly,
+    );
+
+    const icerStr = isFinite(result.icer)
+      ? `${symbol}${Math.round(result.icer).toLocaleString()}`
+      : result.delta_cost <= 0 && result.delta_qaly >= 0
+        ? "Dominant"
+        : "Dominated";
+
+    lines.push(
+      `| ${scenario.name} | ${icerStr} | ${symbol}${Math.round(result.delta_cost).toLocaleString()} | ${result.delta_qaly.toFixed(3)} | ${verdict} |`,
+    );
+  }
+
+  lines.push(``);
+  return lines;
 }
 
 function wtpVerdict(
   icer: number,
   threshold: { low: number; high: number },
+  delta_cost: number,
+  delta_qaly: number,
 ): WTPAssessment["verdict"] {
-  if (!isFinite(icer) && icer < 0) return "dominated";
+  // Dominant: lower cost AND higher QALYs — always cost-effective
+  if (delta_cost <= 0 && delta_qaly >= 0 && (delta_cost < 0 || delta_qaly > 0))
+    return "cost_effective";
+  // Dominated: higher cost AND lower QALYs — never cost-effective
+  if (delta_cost >= 0 && delta_qaly <= 0 && (delta_cost > 0 || delta_qaly < 0))
+    return "dominated";
   if (!isFinite(icer)) return "not_cost_effective";
   if (icer < threshold.low) return "cost_effective";
   if (icer < threshold.high) return "borderline";
@@ -88,6 +205,8 @@ function wtpVerdict(
 function buildWTPAssessment(
   icer: number,
   perspective: keyof typeof WTP_THRESHOLDS,
+  delta_cost: number,
+  delta_qaly: number,
 ): WTPAssessment {
   const threshold = WTP_THRESHOLDS[perspective];
   return {
@@ -95,7 +214,7 @@ function buildWTPAssessment(
     threshold_high: threshold.high,
     currency: threshold.currency,
     symbol: threshold.symbol,
-    verdict: wtpVerdict(icer, threshold),
+    verdict: wtpVerdict(icer, threshold, delta_cost, delta_qaly),
   };
 }
 
@@ -206,7 +325,7 @@ export async function handleCostEffectivenessModel(
     comparator_qaly = markovResult.comparator_qaly;
     intervention_lys = markovResult.intervention_lys;
     comparator_lys = markovResult.comparator_lys;
-    stateNames = params.states ?? ["On-Treatment", "Off-Treatment"];
+    stateNames = params.states ?? ["On-Treatment", "Off-Treatment", "Dead"];
     nCycles = years;
   }
 
@@ -223,6 +342,7 @@ export async function handleCostEffectivenessModel(
       base_params: params,
       n_iterations,
       seed: 12345,
+      evpi_lambda: threshold.low,
     });
 
     psaSummary = {
@@ -259,9 +379,9 @@ export async function handleCostEffectivenessModel(
 
   // --- WTP Analysis ---
   const wtp_analysis = {
-    nhs: buildWTPAssessment(icer, "nhs"),
-    us_payer: buildWTPAssessment(icer, "us_payer"),
-    societal: buildWTPAssessment(icer, "societal"),
+    nhs: buildWTPAssessment(icer, "nhs", delta_cost, delta_qaly),
+    us_payer: buildWTPAssessment(icer, "us_payer", delta_cost, delta_qaly),
+    societal: buildWTPAssessment(icer, "societal", delta_cost, delta_qaly),
   };
 
   // --- Build result ---
@@ -296,19 +416,30 @@ export async function handleCostEffectivenessModel(
   }
 
   // --- Text output (backwards-compatible) ---
-  const icerFormatted = isFinite(icer)
-    ? Math.round(icer).toLocaleString()
-    : "Dominated";
+  const isDominant =
+    delta_cost <= 0 && delta_qaly >= 0 && (delta_cost < 0 || delta_qaly > 0);
+  const isDominated =
+    delta_cost >= 0 && delta_qaly <= 0 && (delta_cost > 0 || delta_qaly < 0);
+  const icerFormatted = isDominant
+    ? "Dominant"
+    : isDominated
+      ? "Dominated"
+      : isFinite(icer)
+        ? Math.round(icer).toLocaleString()
+        : "N/A";
   const perspectiveVerdict = wtp_analysis[params.perspective];
 
-  const interpretation =
-    isFinite(icer) && icer >= 0
-      ? icer < threshold.low
-        ? `${symbol}${icerFormatted}/QALY — likely cost-effective (below NICE threshold of ${symbol}${threshold.low.toLocaleString()})`
-        : icer < threshold.high
-          ? `${symbol}${icerFormatted}/QALY — borderline cost-effective (within ${symbol}${threshold.low.toLocaleString()}–${symbol}${threshold.high.toLocaleString()} threshold range)`
-          : `${symbol}${icerFormatted}/QALY — not cost-effective at standard threshold`
-      : "Dominated — intervention costs more and provides less benefit than comparator";
+  const interpretation = isDominant
+    ? "Dominant — intervention is less costly and more effective than comparator"
+    : isDominated
+      ? "Dominated — intervention costs more and provides less benefit than comparator"
+      : isFinite(icer) && icer >= 0
+        ? icer < threshold.low
+          ? `${symbol}${icerFormatted}/QALY — likely cost-effective (below NICE threshold of ${symbol}${threshold.low.toLocaleString()})`
+          : icer < threshold.high
+            ? `${symbol}${icerFormatted}/QALY — borderline cost-effective (within ${symbol}${threshold.low.toLocaleString()}–${symbol}${threshold.high.toLocaleString()} threshold range)`
+            : `${symbol}${icerFormatted}/QALY — not cost-effective at standard threshold`
+        : "ICER could not be computed";
 
   // PSA section
   const psaSection: string[] = [];
@@ -372,6 +503,7 @@ export async function handleCostEffectivenessModel(
     ``,
     ...psaSection,
     ...owsaSection,
+    ...buildScenarioSection(params, symbol),
     `### Model Structure`,
     `Multi-state Markov model with half-cycle correction. Discounted at ${DISCOUNT_RATE * 100}% per NICE reference case.`,
     `States: ${stateNames.join(", ")} | Cycles: ${nCycles} annual cycles`,
@@ -471,6 +603,26 @@ export const costEffectivenessModelToolSchema = {
       psa_iterations: {
         type: "number",
         description: "PSA iterations (default: 1000, max: 10000)",
+      },
+      scenarios: {
+        type: "array",
+        description:
+          "Optional scenario analysis: array of named parameter overrides. Each scenario re-runs the model with the specified changes. Max 10 scenarios.",
+        items: {
+          type: "object",
+          properties: {
+            name: {
+              type: "string",
+              description: "Scenario name (e.g., '20% price reduction')",
+            },
+            overrides: {
+              type: "object",
+              description:
+                "Parameter overrides (time_horizon, perspective, clinical_inputs, cost_inputs, utility_inputs)",
+            },
+          },
+          required: ["name", "overrides"],
+        },
       },
       output_format: { type: "string", enum: ["text", "json", "docx"] },
       project: {

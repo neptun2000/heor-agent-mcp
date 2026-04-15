@@ -9,7 +9,9 @@ import { runMarkovModel } from "./markov.js";
 
 const DISCOUNT_RATE = 0.035;
 
-function getTimeHorizonYears(horizon: CEModelParams["time_horizon"]): number {
+export function getTimeHorizonYears(
+  horizon: CEModelParams["time_horizon"],
+): number {
   if (horizon === "lifetime") return 40;
   if (horizon === "5yr") return 5;
   if (horizon === "10yr") return 10;
@@ -17,8 +19,12 @@ function getTimeHorizonYears(horizon: CEModelParams["time_horizon"]): number {
 }
 
 /**
- * Build MarkovParams from CEModelParams using a 2-state model
- * (On-Treatment, Off-Treatment).
+ * Build MarkovParams from CEModelParams using a 3-state model
+ * (On-Treatment, Off-Treatment, Dead).
+ *
+ * The Dead state is an absorbing state (utility=0, cost=0) — the cohort
+ * fraction that enters Dead never leaves, which correctly bounds life-year
+ * and QALY accumulation over the time horizon.
  */
 export function buildMarkovParamsFromCE(params: CEModelParams): MarkovParams {
   const years = getTimeHorizonYears(params.time_horizon);
@@ -37,69 +43,80 @@ export function buildMarkovParamsFromCE(params: CEModelParams): MarkovParams {
     (params.cost_inputs.admin_cost ?? 0);
 
   // Efficacy delta used to derive annual probability of staying on treatment
-  // Higher efficacy → more cycles on treatment → better health
   const efficacyDelta = Math.max(
     0,
     Math.min(0.999, params.clinical_inputs.efficacy_delta),
   );
   const mortalityReduction = params.clinical_inputs.mortality_reduction ?? 0;
 
-  // Transition: prob of staying in On-Treatment state for intervention
-  // Base: driven by efficacy (0.4 efficacy → ~0.8 prob of staying on treatment, modulated)
+  // Background annual mortality rate (~2% baseline, reduced by mortalityReduction)
+  const baseMortality = 0.02;
+  const interventionMortality = Math.max(
+    0.005,
+    baseMortality * (1 - mortalityReduction),
+  );
+  const comparatorMortality = baseMortality;
+
+  // Transition: prob of staying in On-Treatment state
   const probStayOnIntervention = Math.max(
     0.05,
-    Math.min(0.95, 0.5 + efficacyDelta * 0.5),
+    Math.min(0.93, 0.5 + efficacyDelta * 0.5),
   );
-  // For comparator: lower stay probability (baseline)
   const baselineProbStayOn = Math.max(
     0.05,
-    Math.min(0.9, probStayOnIntervention * 0.7),
+    Math.min(0.88, probStayOnIntervention * 0.7),
   );
-
-  // Mortality reduction affects off-treatment → death transition
-  // (simplified: mortality reduction lowers probability of going to off-treatment)
-  const mortalityEffect = Math.max(0, Math.min(0.3, mortalityReduction * 0.3));
 
   const states: MarkovState[] = [
     { name: "On-Treatment", utility: utilityOn, cost_annual: costIntervention },
     { name: "Off-Treatment", utility: utilityOff, cost_annual: 0 },
+    { name: "Dead", utility: 0, cost_annual: 0 },
   ];
 
-  const statesComparator: MarkovState[] = [
-    { name: "On-Treatment", utility: utilityOn, cost_annual: costComparator },
-    { name: "Off-Treatment", utility: utilityOff, cost_annual: 0 },
-  ];
+  // Helper: ensure row sums to 1.0
+  function normalizeRow(row: Record<string, number>): Record<string, number> {
+    const sum = Object.values(row).reduce((a, b) => a + b, 0);
+    if (Math.abs(sum - 1.0) < 1e-10) return row;
+    const result: Record<string, number> = {};
+    for (const [k, v] of Object.entries(row)) {
+      result[k] = v / sum;
+    }
+    return result;
+  }
 
   const transition_matrix_intervention: TransitionMatrix = {
-    "On-Treatment": {
-      "On-Treatment": Math.min(0.95, probStayOnIntervention + mortalityEffect),
-      "Off-Treatment": Math.max(
-        0.05,
-        1 - probStayOnIntervention - mortalityEffect,
-      ),
-    },
-    "Off-Treatment": {
+    "On-Treatment": normalizeRow({
+      "On-Treatment": probStayOnIntervention,
+      "Off-Treatment": 1 - probStayOnIntervention - interventionMortality,
+      Dead: interventionMortality,
+    }),
+    "Off-Treatment": normalizeRow({
       "On-Treatment": 0.05,
-      "Off-Treatment": 0.95,
-    },
+      "Off-Treatment": 0.95 - interventionMortality,
+      Dead: interventionMortality,
+    }),
+    Dead: { "On-Treatment": 0, "Off-Treatment": 0, Dead: 1 },
   };
 
   const transition_matrix_comparator: TransitionMatrix = {
-    "On-Treatment": {
-      "On-Treatment": Math.min(0.9, baselineProbStayOn),
-      "Off-Treatment": Math.max(0.1, 1 - baselineProbStayOn),
-    },
-    "Off-Treatment": {
+    "On-Treatment": normalizeRow({
+      "On-Treatment": baselineProbStayOn,
+      "Off-Treatment": 1 - baselineProbStayOn - comparatorMortality,
+      Dead: comparatorMortality,
+    }),
+    "Off-Treatment": normalizeRow({
       "On-Treatment": 0.05,
-      "Off-Treatment": 0.95,
-    },
+      "Off-Treatment": 0.95 - comparatorMortality,
+      Dead: comparatorMortality,
+    }),
+    Dead: { "On-Treatment": 0, "Off-Treatment": 0, Dead: 1 },
   };
 
   return {
     states,
     transition_matrix_intervention,
     transition_matrix_comparator,
-    initial_cohort: { "On-Treatment": 1.0, "Off-Treatment": 0.0 },
+    initial_cohort: { "On-Treatment": 1.0, "Off-Treatment": 0.0, Dead: 0.0 },
     cycle_length_years,
     n_cycles,
     discount_rate_costs: DISCOUNT_RATE,
@@ -140,11 +157,13 @@ export function runMarkovAndComputeICER(params: CEModelParams): {
   const statesIntervention: MarkovState[] = [
     { name: "On-Treatment", utility: utilityOn, cost_annual: costIntervention },
     { name: "Off-Treatment", utility: utilityOff, cost_annual: 0 },
+    { name: "Dead", utility: 0, cost_annual: 0 },
   ];
 
   const statesComparator: MarkovState[] = [
     { name: "On-Treatment", utility: utilityOn, cost_annual: costComparator },
     { name: "Off-Treatment", utility: utilityOff, cost_annual: 0 },
+    { name: "Dead", utility: 0, cost_annual: 0 },
   ];
 
   // Run intervention arm: use intervention states + intervention transition matrix.

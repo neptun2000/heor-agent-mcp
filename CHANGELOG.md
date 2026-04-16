@@ -2,6 +2,11 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v0.7.0 (2026-04-16)
+
+### Added
+- **validate_links tool** — HTTP HEAD check for URLs before presenting them to users. Categorizes as working/browser_only/broken/timeout. Web UI system prompt now mandates validation of all citation URLs before they appear in responses.
+
 ## v0.6.0 (2026-04-15)
 
 ### Added

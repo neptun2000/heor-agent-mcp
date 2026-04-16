@@ -157,7 +157,7 @@ function runMAIC(params: PopAdjParams): {
 
   // Normalize weights
   const sumW = weights.reduce((a, b) => a + b, 0);
-  const normWeights = weights.map((w) => w / sumW * N);
+  const normWeights = weights.map((w) => (w / sumW) * N);
 
   // Effective sample size: (sum w)^2 / sum(w^2)
   const sumNormW = normWeights.reduce((a, b) => a + b, 0);
@@ -265,8 +265,10 @@ function runSTC(params: PopAdjParams): {
 
     // Variance of adjustment (approximation)
     const adjVar =
-      (idxSE * 0.1 * smd) * (idxSE * 0.1 * smd) +
-      (idxEffect * 0.1 * (1 / Math.sqrt(idx.n))) *
+      idxSE * 0.1 * smd * (idxSE * 0.1 * smd) +
+      idxEffect *
+        0.1 *
+        (1 / Math.sqrt(idx.n)) *
         (idxEffect * 0.1 * (1 / Math.sqrt(idx.n)));
     adjustmentVariance += adjVar;
   }
@@ -359,8 +361,7 @@ export async function handlePopulationAdjustedComparison(
 
   let result;
   try {
-    result =
-      method === "maic" ? runMAIC(params) : runSTC(params);
+    result = method === "maic" ? runMAIC(params) : runSTC(params);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     audit = addWarning(audit, `${method.toUpperCase()} failed: ${msg}`);
@@ -401,12 +402,11 @@ export async function handlePopulationAdjustedComparison(
     };
   }
 
-  const fmtEff = (v: number) =>
-    logScale ? v.toFixed(3) : v.toFixed(4);
+  const fmtEff = (v: number) => (logScale ? v.toFixed(3) : v.toFixed(4));
 
   const sig =
-    (result.adjusted_ci_lower > (logScale ? 1 : 0) ||
-      result.adjusted_ci_upper < (logScale ? 1 : 0))
+    result.adjusted_ci_lower > (logScale ? 1 : 0) ||
+    result.adjusted_ci_upper < (logScale ? 1 : 0)
       ? "statistically significant"
       : "not statistically significant";
 
@@ -465,6 +465,13 @@ export const populationAdjustedComparisonToolSchema = {
   name: "population_adjusted_comparison",
   description:
     "Perform a population-adjusted indirect comparison using MAIC (Matching-Adjusted Indirect Comparison) or STC (Simulated Treatment Comparison). Adjusts for differences in effect modifiers between two trials that share a common comparator. Follows NICE DSU TSD 18 (Phillippo 2016) and ISPOR guidance. Accepts summary-level statistics (mean, SD per covariate) — no individual patient data required.",
+  annotations: {
+    title: "Population-Adjusted Comparison (MAIC/STC)",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   inputSchema: {
     type: "object",
     properties: {
@@ -473,11 +480,17 @@ export const populationAdjustedComparisonToolSchema = {
         description:
           "Trial with data to be reweighted (the trial for which you want to adjust)",
         properties: {
-          name: { type: "string", description: "Trial name (e.g., 'SUSTAIN-7')" },
+          name: {
+            type: "string",
+            description: "Trial name (e.g., 'SUSTAIN-7')",
+          },
           treatment: { type: "string", description: "Treatment arm name" },
           comparator: { type: "string", description: "Comparator arm name" },
           n: { type: "number", description: "Sample size" },
-          effect: { type: "number", description: "Point estimate (HR, OR, RR, or MD)" },
+          effect: {
+            type: "number",
+            description: "Point estimate (HR, OR, RR, or MD)",
+          },
           ci_lower: { type: "number", description: "Lower 95% CI" },
           ci_upper: { type: "number", description: "Upper 95% CI" },
           measure: { type: "string", enum: ["MD", "OR", "RR", "HR"] },
@@ -486,7 +499,11 @@ export const populationAdjustedComparisonToolSchema = {
             items: {
               type: "object",
               properties: {
-                name: { type: "string", description: "Covariate name (e.g., 'age', 'bmi', 'hba1c_baseline')" },
+                name: {
+                  type: "string",
+                  description:
+                    "Covariate name (e.g., 'age', 'bmi', 'hba1c_baseline')",
+                },
                 mean: { type: "number" },
                 sd: { type: "number" },
               },
@@ -494,12 +511,21 @@ export const populationAdjustedComparisonToolSchema = {
             },
           },
         },
-        required: ["name", "treatment", "comparator", "n", "effect", "ci_lower", "ci_upper", "measure", "covariates"],
+        required: [
+          "name",
+          "treatment",
+          "comparator",
+          "n",
+          "effect",
+          "ci_lower",
+          "ci_upper",
+          "measure",
+          "covariates",
+        ],
       },
       target_trial: {
         type: "object",
-        description:
-          "Trial whose population is the matching target",
+        description: "Trial whose population is the matching target",
         properties: {
           name: { type: "string" },
           treatment: { type: "string" },
@@ -522,7 +548,17 @@ export const populationAdjustedComparisonToolSchema = {
             },
           },
         },
-        required: ["name", "treatment", "comparator", "n", "effect", "ci_lower", "ci_upper", "measure", "covariates"],
+        required: [
+          "name",
+          "treatment",
+          "comparator",
+          "n",
+          "effect",
+          "ci_lower",
+          "ci_upper",
+          "measure",
+          "covariates",
+        ],
       },
       effect_modifiers: {
         type: "array",
@@ -538,7 +574,8 @@ export const populationAdjustedComparisonToolSchema = {
       },
       outcome_name: {
         type: "string",
-        description: "Name of the outcome being compared (e.g., 'HbA1c change')",
+        description:
+          "Name of the outcome being compared (e.g., 'HbA1c change')",
       },
       output_format: { type: "string", enum: ["text", "json"] },
       project: { type: "string", description: "Project ID for persistence" },

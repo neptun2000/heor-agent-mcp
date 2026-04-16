@@ -50,6 +50,13 @@ export const knowledgeWriteToolSchema = {
   name: "knowledge_write",
   description:
     "Write a file to the project's wiki/ tree. Path MUST start with 'wiki/' and end with '.md'. Use this to compile/organize evidence from raw/ files into a structured knowledge base. Supports Obsidian-style [[wikilinks]].",
+  annotations: {
+    title: "Knowledge Base Write",
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   inputSchema: {
     type: "object",
     properties: {

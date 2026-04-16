@@ -694,7 +694,14 @@ export async function handleHtaDossierPrep(
 export const htaDossierPrepToolSchema = {
   name: "hta_dossier_prep",
   description:
-    "Structure evidence into HTA body-specific submission format (NICE STA, EMA, FDA, IQWiG, HAS, EU JCA). Produces draft sections with gap analysis. Accepts output from literature_search and cost_effectiveness_model.",
+    "Structure evidence into HTA body-specific submission format (NICE STA, EMA, FDA, IQWiG, HAS, EU JCA, or Global Value Dossier). Produces draft sections with gap analysis and auto-GRADE evidence quality tables. Accepts output from literature_search and cost_effectiveness_model.",
+  annotations: {
+    title: "HTA Dossier Preparation",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   inputSchema: {
     type: "object",
     properties: {

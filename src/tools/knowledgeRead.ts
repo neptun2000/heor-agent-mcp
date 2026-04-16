@@ -8,9 +8,15 @@ const KnowledgeReadSchema = z.object({
   path: z.string().min(1),
 });
 
-export async function handleKnowledgeRead(rawParams: unknown): Promise<ToolResult> {
+export async function handleKnowledgeRead(
+  rawParams: unknown,
+): Promise<ToolResult> {
   const params = KnowledgeReadSchema.parse(rawParams);
-  const audit = createAuditRecord("knowledge_read", params as unknown as Record<string, unknown>, "text");
+  const audit = createAuditRecord(
+    "knowledge_read",
+    params as unknown as Record<string, unknown>,
+    "text",
+  );
 
   try {
     const content = await readKnowledgeFile(params.project, params.path);
@@ -29,12 +35,24 @@ export async function handleKnowledgeRead(rawParams: unknown): Promise<ToolResul
 
 export const knowledgeReadToolSchema = {
   name: "knowledge_read",
-  description: "Read a file from a project's raw/ or wiki/ tree. Path is relative to project root. Only raw/ and wiki/ subtrees accessible.",
+  description:
+    "Read a file from a project's raw/ or wiki/ tree. Path is relative to project root. Only raw/ and wiki/ subtrees accessible.",
+  annotations: {
+    title: "Knowledge Base Read",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   inputSchema: {
     type: "object",
     properties: {
       project: { type: "string", description: "Project ID" },
-      path: { type: "string", description: "Relative path (e.g. 'wiki/trials/sustain-6.md' or 'raw/literature/pubmed_12345.md')" },
+      path: {
+        type: "string",
+        description:
+          "Relative path (e.g. 'wiki/trials/sustain-6.md' or 'raw/literature/pubmed_12345.md')",
+      },
     },
     required: ["project", "path"],
   },

@@ -255,6 +255,13 @@ export const budgetImpactModelToolSchema = {
   name: "budget_impact_model",
   description:
     "Estimate the total budget impact of adopting a new intervention over 1-5 years. Follows ISPOR Budget Impact Analysis good practice guidelines (Mauskopf 2007, Sullivan 2014). Computes year-by-year net cost to payer, including market share uptake, treatment displacement, and population growth.",
+  annotations: {
+    title: "Budget Impact Model",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   inputSchema: {
     type: "object",
     properties: {

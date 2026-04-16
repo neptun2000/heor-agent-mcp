@@ -11,9 +11,15 @@ const KnowledgeSearchSchema = z.object({
   case_sensitive: z.boolean().optional(),
 });
 
-export async function handleKnowledgeSearch(rawParams: unknown): Promise<ToolResult> {
+export async function handleKnowledgeSearch(
+  rawParams: unknown,
+): Promise<ToolResult> {
   const params = KnowledgeSearchSchema.parse(rawParams);
-  const audit = createAuditRecord("knowledge_search", params as unknown as Record<string, unknown>, "text");
+  const audit = createAuditRecord(
+    "knowledge_search",
+    params as unknown as Record<string, unknown>,
+    "text",
+  );
 
   const matches = await searchProject(params.project, params.query, {
     paths: params.paths,
@@ -26,7 +32,9 @@ export async function handleKnowledgeSearch(rawParams: unknown): Promise<ToolRes
   lines.push(`Project: ${params.project} | Matches: ${matches.length}\n`);
 
   if (matches.length === 0) {
-    lines.push("No matches found. Try broader search terms or check that the project has been populated (run literature_search with `project` param first).");
+    lines.push(
+      "No matches found. Try broader search terms or check that the project has been populated (run literature_search with `project` param first).",
+    );
   } else {
     for (const m of matches) {
       lines.push(`### ${m.file}${m.title ? ` — ${m.title}` : ""}`);
@@ -41,15 +49,36 @@ export async function handleKnowledgeSearch(rawParams: unknown): Promise<ToolRes
 
 export const knowledgeSearchToolSchema = {
   name: "knowledge_search",
-  description: "Search a project's knowledge base (raw/ and wiki/) for text matches. Returns file paths with line numbers and snippets. Use this to find previously-retrieved literature, model runs, and compiled wiki content without re-querying external APIs.",
+  description:
+    "Search a project's knowledge base (raw/ and wiki/) for text matches. Returns file paths with line numbers and snippets. Use this to find previously-retrieved literature, model runs, and compiled wiki content without re-querying external APIs.",
+  annotations: {
+    title: "Knowledge Base Search",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   inputSchema: {
     type: "object",
     properties: {
       project: { type: "string", description: "Project ID (must exist)" },
-      query: { type: "string", description: "Search query — multi-term searches match ANY term (OR)" },
-      paths: { type: "array", items: { type: "string", enum: ["raw", "wiki"] }, description: "Which subtrees to search. Default: both." },
-      max_results: { type: "number", description: "Max matches to return (default 20, max 100)" },
-      case_sensitive: { type: "boolean", description: "Case-sensitive search (default false)" },
+      query: {
+        type: "string",
+        description: "Search query — multi-term searches match ANY term (OR)",
+      },
+      paths: {
+        type: "array",
+        items: { type: "string", enum: ["raw", "wiki"] },
+        description: "Which subtrees to search. Default: both.",
+      },
+      max_results: {
+        type: "number",
+        description: "Max matches to return (default 20, max 100)",
+      },
+      case_sensitive: {
+        type: "boolean",
+        description: "Case-sensitive search (default false)",
+      },
     },
     required: ["project", "query"],
   },

@@ -45,13 +45,14 @@ function formatResult(result: SurvivalFitResult, endpoint: string): string {
       .join(", ");
     const isBestAIC = fit.name === result.best_aic.name;
     const isBestBIC = fit.name === result.best_bic.name;
-    const badge = isBestAIC && isBestBIC
-      ? " **[Best]**"
-      : isBestAIC
-        ? " *[Best AIC]*"
-        : isBestBIC
-          ? " *[Best BIC]*"
-          : "";
+    const badge =
+      isBestAIC && isBestBIC
+        ? " **[Best]**"
+        : isBestAIC
+          ? " *[Best AIC]*"
+          : isBestBIC
+            ? " *[Best BIC]*"
+            : "";
 
     lines.push(
       `| ${fit.name}${badge} | ${fit.aic.toFixed(1)} | ${fit.bic.toFixed(1)} | ${fit.log_likelihood.toFixed(1)} | ${fit.median_survival.toFixed(1)} | ${paramStr} |`,
@@ -94,7 +95,9 @@ function formatResult(result: SurvivalFitResult, endpoint: string): string {
   lines.push(`1. **Visual fit** to the KM curve`);
   lines.push(`2. **Clinical plausibility** of the long-term extrapolation`);
   lines.push(`3. **External data** (registry data, natural history studies)`);
-  lines.push(`4. **Hazard function shape** — does it match expected disease trajectory?`);
+  lines.push(
+    `4. **Hazard function shape** — does it match expected disease trajectory?`,
+  );
   lines.push(``);
 
   const bestFit = result.best_aic;
@@ -158,7 +161,8 @@ export async function handleSurvivalFitting(
     };
   }
 
-  const text = formatResult(result, params.endpoint) + "\n" + auditToMarkdown(audit);
+  const text =
+    formatResult(result, params.endpoint) + "\n" + auditToMarkdown(audit);
   return { content: text, audit };
 }
 
@@ -166,6 +170,13 @@ export const survivalFittingToolSchema = {
   name: "survival_fitting",
   description:
     "Fit parametric survival distributions (Exponential, Weibull, Log-logistic, Log-normal, Gompertz) to Kaplan-Meier data. Returns AIC/BIC model comparison, parameter estimates, median survival, and extrapolation table. Follows NICE DSU TSD 14 guidance. Use to select the best-fitting distribution for PartSA models.",
+  annotations: {
+    title: "Survival Curve Fitting",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   inputSchema: {
     type: "object",
     properties: {
@@ -200,8 +211,7 @@ export const survivalFittingToolSchema = {
       },
       endpoint: {
         type: "string",
-        description:
-          "Endpoint name (e.g., 'OS', 'PFS', 'DFS'). Default: 'OS'.",
+        description: "Endpoint name (e.g., 'OS', 'PFS', 'DFS'). Default: 'OS'.",
       },
       output_format: { type: "string", enum: ["text", "json"] },
       project: { type: "string", description: "Project ID for persistence" },

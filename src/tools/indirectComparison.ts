@@ -181,6 +181,13 @@ export const indirectComparisonToolSchema = {
   name: "indirect_comparison",
   description:
     "Compute indirect treatment comparisons using the Bucher method (single common comparator) or frequentist network meta-analysis (full network). Requires user-supplied effect sizes (point estimates + 95% CI) from published trials. Supports mean differences (MD) and ratio measures (OR, RR, HR). Auto-selects method based on network structure, or user can specify.",
+  annotations: {
+    title: "Indirect Treatment Comparison",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   inputSchema: {
     type: "object",
     properties: {

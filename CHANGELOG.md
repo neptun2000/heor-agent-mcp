@@ -2,6 +2,11 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v0.9.1 (2026-04-16)
+
+### Added
+- **MCP tool annotations** on all 14 tools (readOnlyHint, destructiveHint, idempotentHint, openWorldHint, title). Improves Smithery quality score and gives MCP clients clearer intent signals for tool use.
+
 ## v0.9.0 (2026-04-16)
 
 ### Added

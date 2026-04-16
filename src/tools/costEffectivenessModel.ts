@@ -585,6 +585,13 @@ export const costEffectivenessModelToolSchema = {
   name: "cost_effectiveness_model",
   description:
     "Build a cost-utility analysis (ICER, QALY, PSA, sensitivity analysis) for a drug vs comparator. Follows ISPOR good practice guidelines and NICE reference case. Includes probabilistic sensitivity analysis (PSA), one-way sensitivity, and cost-effectiveness acceptability curve (CEAC).",
+  annotations: {
+    title: "Cost-Effectiveness Model",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   inputSchema: {
     type: "object",
     properties: {

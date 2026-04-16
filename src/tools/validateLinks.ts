@@ -19,18 +19,8 @@ import {
  */
 
 const ValidateLinksSchema = z.object({
-  urls: z
-    .array(z.string().url())
-    .min(1)
-    .max(50)
-    .describe("URLs to validate"),
-  timeout_ms: z
-    .number()
-    .int()
-    .min(1000)
-    .max(30000)
-    .default(10000)
-    .optional(),
+  urls: z.array(z.string().url()).min(1).max(50).describe("URLs to validate"),
+  timeout_ms: z.number().int().min(1000).max(30000).default(10000).optional(),
 });
 
 interface LinkStatus {
@@ -66,10 +56,7 @@ function categorize(url: string, status: number): LinkStatus["category"] {
   return "error";
 }
 
-async function checkUrl(
-  url: string,
-  timeoutMs: number,
-): Promise<LinkStatus> {
+async function checkUrl(url: string, timeoutMs: number): Promise<LinkStatus> {
   try {
     const res = await fetch(url, {
       method: "HEAD",
@@ -116,9 +103,8 @@ async function checkUrl(
       url,
       status_code: 0,
       ok: false,
-      category: msg.includes("abort") || msg.includes("timeout")
-        ? "timeout"
-        : "error",
+      category:
+        msg.includes("abort") || msg.includes("timeout") ? "timeout" : "error",
       message: msg,
     };
   }
@@ -147,9 +133,14 @@ export async function handleValidateLinks(
   );
 
   const working = results.filter((r) => r.category === "working").length;
-  const browserOnly = results.filter((r) => r.category === "browser_only").length;
+  const browserOnly = results.filter(
+    (r) => r.category === "browser_only",
+  ).length;
   const broken = results.filter(
-    (r) => r.category === "broken" || r.category === "timeout" || r.category === "error",
+    (r) =>
+      r.category === "broken" ||
+      r.category === "timeout" ||
+      r.category === "error",
   ).length;
 
   const lines: string[] = [
@@ -169,12 +160,8 @@ export async function handleValidateLinks(
           ? "Browser"
           : "BROKEN";
     const shortUrl = r.url.length > 60 ? r.url.slice(0, 57) + "..." : r.url;
-    const note = r.final_url
-      ? `Redirected to ${r.final_url}`
-      : r.message || "";
-    lines.push(
-      `| ${shortUrl} | ${r.status_code || "—"} | ${icon} | ${note} |`,
-    );
+    const note = r.final_url ? `Redirected to ${r.final_url}` : r.message || "";
+    lines.push(`| ${shortUrl} | ${r.status_code || "—"} | ${icon} | ${note} |`);
   }
 
   lines.push(``);
@@ -191,7 +178,12 @@ export async function handleValidateLinks(
 
   return {
     content: {
-      summary: { total: results.length, working, browser_only: browserOnly, broken },
+      summary: {
+        total: results.length,
+        working,
+        browser_only: browserOnly,
+        broken,
+      },
       results,
       text: lines.join("\n"),
     },
@@ -203,6 +195,13 @@ export const validateLinksToolSchema = {
   name: "validate_links",
   description:
     "Validate URLs by making HEAD requests and checking HTTP status codes. Returns categorization: working (200), browser_only (403 from bot-blocking sites that work in browsers), broken (404/410), or timeout/error. ALWAYS use this before presenting reference links to users — broken links destroy trust. Pass all URLs you plan to cite.",
+  annotations: {
+    title: "Validate Reference Links",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
   inputSchema: {
     type: "object",
     properties: {

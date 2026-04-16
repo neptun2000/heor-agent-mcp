@@ -68,6 +68,13 @@ export const evidenceNetworkToolSchema = {
   name: "evidence_network",
   description:
     "Analyze literature search results to build an evidence network map. Extracts intervention-comparator pairs from titles and abstracts, constructs a treatment comparison network, and assesses NMA (network meta-analysis) feasibility. Pass the results array from a prior literature_search call.",
+  annotations: {
+    title: "Evidence Network Analysis",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
   inputSchema: {
     type: "object",
     properties: {

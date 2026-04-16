@@ -1,7 +1,7 @@
 import type { AuditRecord } from "../audit/types.js";
 
 export type OutputFormat = "text" | "json" | "docx" | "xlsx";
-export type HtaBody = "nice" | "ema" | "fda" | "iqwig" | "has" | "jca";
+export type HtaBody = "nice" | "ema" | "fda" | "iqwig" | "has" | "jca" | "gvd";
 export type SubmissionType =
   | "sta"
   | "mta"

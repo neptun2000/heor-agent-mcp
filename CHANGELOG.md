@@ -2,6 +2,12 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v0.8.0 (2026-04-16)
+
+### Added
+- **Excel (XLSX) export for cost_effectiveness_model** — editable multi-tab workbook (Summary, Inputs, Transition Matrix, PSA, CEAC, Audit). Yellow cells mark editable inputs so local market-access teams can localize pricing/prevalence and re-run. Driven by Reddit feedback from an HEOR practitioner.
+- Updated server-card.json to reflect all 14 current tools and v0.7.1+ metadata (was stale at v0.1.3)
+
 ## v0.7.0 (2026-04-16)
 
 ### Added

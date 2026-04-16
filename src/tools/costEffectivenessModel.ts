@@ -71,7 +71,7 @@ const CEModelSchema = z.object({
     )
     .max(10)
     .optional(),
-  output_format: z.enum(["text", "json", "docx"]).optional(),
+  output_format: z.enum(["text", "json", "docx", "xlsx"]).optional(),
   project: z.string().optional(),
 });
 import { runPartSA } from "../models/partsa.js";
@@ -561,6 +561,22 @@ export async function handleCostEffectivenessModel(
     return { content, audit };
   }
 
+  if (outputFormat === "xlsx") {
+    const { ceModelToXlsx } = await import("../formatters/xlsx.js");
+    const buf = await ceModelToXlsx(params, modelResult, audit);
+    const base64 = buf.toString("base64");
+    const filenameStem = `ce-model-${params.intervention.slice(0, 30)}-vs-${params.comparator.slice(0, 30)}`;
+    const savedPath = await saveReport(
+      base64,
+      filenameStem,
+      params.project,
+      "xlsx",
+    );
+    const sizeKb = Math.round(buf.length / 1024);
+    const content = `## Excel Workbook Generated\n\n**File:** \`${savedPath}\`\n**Size:** ${sizeKb} KB\n**Intervention:** ${params.intervention}\n**Comparator:** ${params.comparator}\n\nTabs: Summary | Inputs (editable) | Transition Matrix | PSA | CEAC | Audit\n\nYellow cells = editable inputs. Local teams can localize and modify.\n\nOpen with: \`open "${savedPath}"\``;
+    return { content, audit };
+  }
+
   const content = textLines;
   return { content, audit };
 }
@@ -643,7 +659,12 @@ export const costEffectivenessModelToolSchema = {
           required: ["name", "overrides"],
         },
       },
-      output_format: { type: "string", enum: ["text", "json", "docx"] },
+      output_format: {
+        type: "string",
+        enum: ["text", "json", "docx", "xlsx"],
+        description:
+          "Use 'xlsx' for editable Excel workbook — local market-access teams can modify inputs and re-run.",
+      },
       project: {
         type: "string",
         description:

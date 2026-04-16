@@ -247,12 +247,18 @@ export const indirectComparisonToolSchema = {
       },
       target: {
         type: "object",
-        properties: {
-          intervention: { type: "string" },
-          comparator: { type: "string" },
-        },
         description:
-          "Specific comparison to compute. Omit to compute all possible.",
+          "Optional: specific comparison to compute. Omit to compute all possible pairwise comparisons.",
+        properties: {
+          intervention: {
+            type: "string",
+            description: "Treatment to be compared (numerator).",
+          },
+          comparator: {
+            type: "string",
+            description: "Reference treatment (denominator).",
+          },
+        },
       },
       method: {
         type: "string",

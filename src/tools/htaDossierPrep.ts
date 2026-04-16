@@ -707,28 +707,37 @@ export const htaDossierPrepToolSchema = {
     properties: {
       hta_body: {
         type: "string",
-        enum: ["nice", "ema", "fda", "iqwig", "has", "jca"],
+        enum: ["nice", "ema", "fda", "iqwig", "has", "jca", "gvd"],
         description:
-          "HTA body. Use 'jca' for EU Joint Clinical Assessment (EUHTA Reg. 2021/2282).",
+          "HTA body/dossier format. 'nice'=UK NICE STA; 'ema'=EMA CTD; 'fda'=FDA prescribing info; 'iqwig'=Germany AMNOG; 'has'=France transparency committee; 'jca'=EU Joint Clinical Assessment (Reg. 2021/2282); 'gvd'=Global Value Dossier (cross-market foundational document).",
       },
       submission_type: {
         type: "string",
         enum: ["sta", "mta", "early_access", "initial", "renewal", "variation"],
         description:
-          "Submission type. Use 'initial'/'renewal'/'variation' for JCA.",
+          "Submission type. 'sta'/'mta' for NICE; 'initial'/'renewal'/'variation' for JCA; 'early_access' for accelerated pathways.",
       },
-      drug_name: { type: "string" },
-      indication: { type: "string" },
+      drug_name: {
+        type: "string",
+        description: "Generic or brand name of the drug/intervention.",
+      },
+      indication: {
+        type: "string",
+        description:
+          "Disease or condition being treated (e.g., 'type 2 diabetes', 'non-small cell lung cancer').",
+      },
       evidence_summary: {
-        description: "Text summary or JSON array from literature_search output",
+        description:
+          "Clinical evidence input. Accepts: a text summary string, OR a JSON array of LiteratureResult objects from literature_search (use output_format='json'). When passed as array, auto-generates a GRADE evidence quality table.",
       },
       model_results: {
-        description: "JSON output from cost_effectiveness_model",
+        description:
+          "JSON output from cost_effectiveness_model — used to populate the Economic Evidence Summary section.",
       },
       picos: {
         type: "array",
         description:
-          "JCA: list of PICOs from the scoping decision. If omitted, a default PICO is generated.",
+          "JCA-specific: list of PICOs from the scoping decision. Each PICO generates its own dossier section. If omitted, a default single PICO is generated.",
         items: {
           type: "object",
           properties: {
@@ -736,14 +745,29 @@ export const htaDossierPrepToolSchema = {
               type: "string",
               description: "PICO identifier, e.g. 'PICO-1'",
             },
-            population: { type: "string" },
-            comparator: { type: "string" },
-            outcomes: { type: "array", items: { type: "string" } },
+            population: {
+              type: "string",
+              description: "Target patient subpopulation for this PICO.",
+            },
+            comparator: {
+              type: "string",
+              description: "Comparator treatment for this PICO.",
+            },
+            outcomes: {
+              type: "array",
+              items: { type: "string" },
+              description: "Outcomes of interest for this PICO.",
+            },
           },
           required: ["id", "population", "comparator", "outcomes"],
         },
       },
-      output_format: { type: "string", enum: ["text", "json", "docx"] },
+      output_format: {
+        type: "string",
+        enum: ["text", "json", "docx"],
+        description:
+          "Output format. 'text' returns markdown; 'json' returns structured sections; 'docx' generates a Word document and saves to disk.",
+      },
       project: {
         type: "string",
         description:

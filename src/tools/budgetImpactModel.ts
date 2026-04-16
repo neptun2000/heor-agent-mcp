@@ -271,7 +271,12 @@ export const budgetImpactModelToolSchema = {
         description: "Current standard of care",
       },
       indication: { type: "string", description: "Disease or condition" },
-      perspective: { type: "string", enum: ["nhs", "us_payer", "societal"] },
+      perspective: {
+        type: "string",
+        enum: ["nhs", "us_payer", "societal"],
+        description:
+          "Payer perspective: 'nhs' (UK NHS), 'us_payer' (US commercial/Medicare), or 'societal' (broader costs incl. productivity). Determines currency and cost categories.",
+      },
       time_horizon_years: {
         type: "number",
         description: "Budget horizon in years (1-10, default 5)",

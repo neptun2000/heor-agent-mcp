@@ -2,6 +2,11 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v0.9.4 (2026-04-16)
+
+### Added
+- **Parameter descriptions** audited and filled for all tool schemas — `perspective`, `clinical_inputs`, `cost_inputs`, `utility_inputs` on cost_effectiveness_model; `perspective` on budget_impact_model; `drug_name`, `indication`, `output_format`, nested PICO fields on hta_dossier_prep; `target.intervention`/`target.comparator` on indirect_comparison. Improves Smithery parameter-descriptions score.
+
 ## v0.9.3 (2026-04-16)
 
 ### Fixed (from code review)

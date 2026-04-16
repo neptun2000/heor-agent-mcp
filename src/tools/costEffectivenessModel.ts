@@ -606,7 +606,12 @@ export const costEffectivenessModelToolSchema = {
         description:
           "Modelling horizon: 'lifetime', '5yr', '10yr', or years as number",
       },
-      perspective: { type: "string", enum: ["nhs", "us_payer", "societal"] },
+      perspective: {
+        type: "string",
+        enum: ["nhs", "us_payer", "societal"],
+        description:
+          "Economic perspective: 'nhs' (UK NHS, WTP £25-35K/QALY), 'us_payer' ($100-150K/QALY ICER standard), or 'societal' (broader costs incl. productivity).",
+      },
       model_type: {
         type: "string",
         enum: ["markov", "partsa", "decision_tree"],
@@ -614,28 +619,66 @@ export const costEffectivenessModelToolSchema = {
       },
       clinical_inputs: {
         type: "object",
+        description:
+          "Clinical efficacy and safety parameters driving the Markov transitions.",
         properties: {
-          efficacy_delta: { type: "number" },
-          mortality_reduction: { type: "number" },
-          ae_rate: { type: "number" },
+          efficacy_delta: {
+            type: "number",
+            description:
+              "Relative efficacy of intervention vs comparator (0-1). Higher = stronger treatment effect. Drives probability of staying on treatment.",
+          },
+          mortality_reduction: {
+            type: "number",
+            description:
+              "Relative mortality reduction (0-1). E.g., 0.2 = 20% lower mortality vs baseline 2%.",
+          },
+          ae_rate: {
+            type: "number",
+            description: "Annual adverse event rate (0-1).",
+          },
         },
         required: ["efficacy_delta"],
       },
       cost_inputs: {
         type: "object",
+        description:
+          "Annual costs per patient in the base currency for the selected perspective.",
         properties: {
-          drug_cost_annual: { type: "number" },
-          admin_cost: { type: "number" },
-          ae_cost: { type: "number" },
-          comparator_cost_annual: { type: "number" },
+          drug_cost_annual: {
+            type: "number",
+            description: "Annual drug acquisition cost for the intervention.",
+          },
+          admin_cost: {
+            type: "number",
+            description:
+              "Annual administration cost (applies to both arms if shared).",
+          },
+          ae_cost: {
+            type: "number",
+            description: "Annual adverse event management cost.",
+          },
+          comparator_cost_annual: {
+            type: "number",
+            description: "Annual drug acquisition cost for the comparator.",
+          },
         },
         required: ["drug_cost_annual", "comparator_cost_annual"],
       },
       utility_inputs: {
         type: "object",
+        description:
+          "QALY weights for each health state (optional — defaults derived from efficacy if omitted).",
         properties: {
-          qaly_on_treatment: { type: "number" },
-          qaly_comparator: { type: "number" },
+          qaly_on_treatment: {
+            type: "number",
+            description:
+              "Utility weight (0-1) for on-treatment state. 1=perfect health, 0=death.",
+          },
+          qaly_comparator: {
+            type: "number",
+            description:
+              "Utility weight (0-1) for comparator / off-treatment state.",
+          },
         },
       },
       run_psa: {

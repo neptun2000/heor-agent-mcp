@@ -2,6 +2,17 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v0.9.0 (2026-04-16)
+
+### Added
+- **Excel (XLSX) export for budget_impact_model** — multi-tab editable workbook (Summary, Inputs, Year-by-Year, Audit) so local market-access teams can localize pricing
+- **GVD (Global Value Dossier) template** in hta_dossier_prep — new `hta_body: "gvd"` option with 13 sections (Disease Background, Unmet Need, Clinical Evidence, Comparative Effectiveness, Health Economic Summary, Policy Environment, etc.). Driven by Reddit feedback — GVDs are the upstream cross-market evidence document before country-specific dossiers.
+- **MCP prompts capability** — 5 pre-built HEOR workflow prompts (literature-review, cost-effectiveness-analysis, hta-dossier, budget-impact, indirect-comparison) that appear as slash commands in Claude Desktop
+- **MCP resources capability** — declares resources capability (empty list for now) to satisfy MCP clients
+
+### Fixed
+- Smithery quality score issues: added resources/list and prompts/list handlers (previously returned "Method not found")
+
 ## v0.8.0 (2026-04-16)
 
 ### Added

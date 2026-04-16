@@ -14,6 +14,9 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
   handleLiteratureSearch,
@@ -76,11 +79,125 @@ import { trackToolCall, trackSession, shutdownAnalytics } from "./analytics.js";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 
+// Pre-built HEOR workflow prompts for Claude Desktop slash-command discovery
+const HEOR_PROMPTS = [
+  {
+    name: "literature-review",
+    description:
+      "Systematic literature review with PRISMA audit trail — runs literature_search across 41 sources then screens by PICO criteria.",
+    arguments: [
+      {
+        name: "drug",
+        description: "Drug or intervention name",
+        required: true,
+      },
+      { name: "indication", description: "Disease/condition", required: true },
+    ],
+  },
+  {
+    name: "cost-effectiveness-analysis",
+    description:
+      "Full cost-effectiveness analysis: Markov/PartSA model with PSA, OWSA, CEAC, EVPI, EVPPI, and scenario analysis.",
+    arguments: [
+      { name: "intervention", description: "Drug name", required: true },
+      { name: "comparator", description: "Standard of care", required: true },
+      { name: "indication", description: "Disease/condition", required: true },
+      {
+        name: "perspective",
+        description: "nhs, us_payer, or societal",
+        required: true,
+      },
+    ],
+  },
+  {
+    name: "hta-dossier",
+    description:
+      "Generate a complete HTA submission dossier (NICE, EMA, FDA, IQWiG, HAS, EU JCA, or Global Value Dossier) with auto-GRADE evidence quality assessment.",
+    arguments: [
+      {
+        name: "hta_body",
+        description: "nice, ema, fda, iqwig, has, jca, or gvd",
+        required: true,
+      },
+      { name: "drug", description: "Drug name", required: true },
+      { name: "indication", description: "Disease/condition", required: true },
+    ],
+  },
+  {
+    name: "budget-impact",
+    description:
+      "5-year budget impact analysis with Excel export for localization by market-access teams.",
+    arguments: [
+      { name: "intervention", description: "Drug name", required: true },
+      {
+        name: "population",
+        description: "Eligible population size",
+        required: true,
+      },
+      {
+        name: "perspective",
+        description: "nhs, us_payer, or societal",
+        required: true,
+      },
+    ],
+  },
+  {
+    name: "indirect-comparison",
+    description:
+      "Indirect treatment comparison using Bucher method, Frequentist NMA, or MAIC/STC (population-adjusted).",
+    arguments: [
+      { name: "intervention", description: "Treatment A", required: true },
+      { name: "comparator", description: "Treatment B", required: true },
+    ],
+  },
+];
+
 function createMcpServer(): Server {
   const server = new Server(
     { name: "heor-agent-mcp", version: PKG_VERSION },
-    { capabilities: { tools: {} } },
+    {
+      capabilities: {
+        tools: {},
+        resources: {},
+        prompts: {},
+      },
+    },
   );
+
+  // Empty resources list (required by MCP spec for capability declaration)
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+    resources: [],
+  }));
+
+  // List pre-built HEOR workflow prompts
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+    prompts: HEOR_PROMPTS,
+  }));
+
+  // Return a prompt when requested
+  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    const prompt = HEOR_PROMPTS.find((p) => p.name === request.params.name);
+    if (!prompt) {
+      throw new Error(`Prompt not found: ${request.params.name}`);
+    }
+    const args = request.params.arguments ?? {};
+    const argList = Object.entries(args)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join(", ");
+
+    return {
+      description: prompt.description,
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `Run a ${prompt.name.replace(/-/g, " ")} workflow using the HEOR Agent tools. Parameters: ${argList}`,
+          },
+        },
+      ],
+    };
+  });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [

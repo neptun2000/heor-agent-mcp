@@ -39,7 +39,7 @@ const BudgetImpactSchema = z.object({
       }),
     )
     .optional(),
-  output_format: z.enum(["text", "json", "docx"]).optional(),
+  output_format: z.enum(["text", "json", "docx", "xlsx"]).optional(),
   project: z.string().optional(),
 });
 
@@ -226,6 +226,28 @@ export async function handleBudgetImpactModel(
     };
   }
 
+  if (outputFormat === "xlsx") {
+    const { bimToXlsx } = await import("../formatters/xlsx.js");
+    const buf = await bimToXlsx(
+      params as unknown as Record<string, unknown>,
+      results,
+      audit,
+    );
+    const base64 = buf.toString("base64");
+    const filenameStem = `bia-${params.intervention.slice(0, 30)}-vs-${params.comparator.slice(0, 30)}`;
+    const savedPath = await saveReport(
+      base64,
+      filenameStem,
+      params.project,
+      "xlsx",
+    );
+    const sizeKb = Math.round(buf.length / 1024);
+    return {
+      content: `## Excel Workbook Generated\n\n**File:** \`${savedPath}\`\n**Size:** ${sizeKb} KB\n\nTabs: Summary | Inputs (editable) | Year-by-Year | Audit\n\nYellow cells = editable inputs. Local teams can localize pricing and re-run.\n\nOpen with: \`open "${savedPath}"\``,
+      audit,
+    };
+  }
+
   return { content: lines, audit };
 }
 
@@ -314,7 +336,12 @@ export const budgetImpactModelToolSchema = {
           required: ["treatment", "share", "cost_annual"],
         },
       },
-      output_format: { type: "string", enum: ["text", "json", "docx"] },
+      output_format: {
+        type: "string",
+        enum: ["text", "json", "docx", "xlsx"],
+        description:
+          "Use 'xlsx' for editable Excel workbook — local market-access teams can modify inputs and re-run.",
+      },
       project: { type: "string", description: "Project ID for persistence" },
     },
     required: [

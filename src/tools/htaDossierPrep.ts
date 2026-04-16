@@ -7,7 +7,7 @@ import type {
 } from "../providers/types.js";
 
 const DossierSchema = z.object({
-  hta_body: z.enum(["nice", "ema", "fda", "iqwig", "has", "jca"]),
+  hta_body: z.enum(["nice", "ema", "fda", "iqwig", "has", "jca", "gvd"]),
   submission_type: z.enum([
     "sta",
     "mta",
@@ -84,6 +84,22 @@ const JCA_SECTIONS = [
   "Evidence Gaps and Uncertainty",
 ];
 
+const GVD_SECTIONS = [
+  "Executive Summary",
+  "Disease Background and Epidemiology",
+  "Current Standard of Care",
+  "Unmet Need",
+  "Product Description and Mechanism of Action",
+  "Clinical Evidence",
+  "Comparative Effectiveness",
+  "Safety Profile",
+  "Health Economic Summary",
+  "Patient Reported Outcomes and Quality of Life",
+  "Policy Environment and Market Access Landscape",
+  "Implementation Considerations",
+  "Evidence Gaps and Ongoing Studies",
+];
+
 const SECTIONS_BY_BODY: Record<string, string[]> = {
   nice: NICE_STA_SECTIONS,
   ema: EMA_SECTIONS,
@@ -91,6 +107,7 @@ const SECTIONS_BY_BODY: Record<string, string[]> = {
   iqwig: NICE_STA_SECTIONS,
   has: NICE_STA_SECTIONS,
   jca: JCA_SECTIONS,
+  gvd: GVD_SECTIONS,
 };
 
 const METHODOLOGY_BY_BODY: Record<string, string> = {
@@ -100,6 +117,7 @@ const METHODOLOGY_BY_BODY: Record<string, string> = {
   iqwig: "IQWiG Methods v6.1",
   has: "HAS transparency committee dossier format",
   jca: "EUHTA Regulation (EU) 2021/2282 — Joint Clinical Assessment",
+  gvd: "Global Value Dossier — cross-market foundational evidence document (ISPOR GVD best practices)",
 };
 
 /**

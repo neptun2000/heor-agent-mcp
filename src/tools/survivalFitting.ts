@@ -3,6 +3,7 @@ import type { ToolResult } from "../providers/types.js";
 import {
   createAuditRecord,
   addAssumption,
+  addWarning,
   setMethodology,
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
@@ -123,8 +124,21 @@ export async function handleSurvivalFitting(
   );
   audit = setMethodology(
     audit,
-    "Parametric survival curve fitting per NICE DSU TSD 14 (Latimer 2013). MLE via Nelder-Mead. Model selection via AIC/BIC.",
+    "Approximate parametric survival curve fitting (orientation-only). Likelihood computed from KM step-summary rows, not from individual patient event/censoring times. Model selection via AIC/BIC. For NICE DSU TSD 14 (Latimer 2013) compliant analysis, use IPD with flexsurv (R) or equivalent.",
   );
+  audit = addWarning(
+    audit,
+    "EXPERIMENTAL: fits are based on KM summary data only. AIC/BIC values and extrapolations are approximate. Validate against IPD-based fits before using for cost-effectiveness modeling.",
+  );
+  const missingNAtRisk = params.km_data.filter(
+    (d) => d.n_at_risk === undefined,
+  ).length;
+  if (missingNAtRisk > 0) {
+    audit = addWarning(
+      audit,
+      `${missingNAtRisk} of ${params.km_data.length} KM rows missing n_at_risk — a default sample size is assumed, which reduces fit quality. Provide n_at_risk per row for more reliable AIC/BIC values.`,
+    );
+  }
   audit = addAssumption(
     audit,
     `${params.km_data.length} KM data points provided`,
@@ -169,7 +183,7 @@ export async function handleSurvivalFitting(
 export const survivalFittingToolSchema = {
   name: "survival_fitting",
   description:
-    "Fit parametric survival distributions (Exponential, Weibull, Log-logistic, Log-normal, Gompertz) to Kaplan-Meier data. Returns AIC/BIC model comparison, parameter estimates, median survival, and extrapolation table. Follows NICE DSU TSD 14 guidance. Use to select the best-fitting distribution for PartSA models.",
+    "⚠️ EXPERIMENTAL. Fit parametric survival distributions (Exponential, Weibull, Log-logistic, Log-normal, Gompertz) to Kaplan-Meier SUMMARY data. Returns AIC/BIC model comparison for orientation. IMPORTANT: this fits to KM step data (time, survival proportion, n_at_risk), not individual patient-level events/censoring times. Results are approximate compared to true MLE on IPD. For NICE DSU TSD 14 compliant survival modeling, use IPD with flexsurv (R) or equivalent. Provide n_at_risk on each KM row for better fits — otherwise a default sample size is assumed.",
   annotations: {
     title: "Survival Curve Fitting",
     readOnlyHint: true,

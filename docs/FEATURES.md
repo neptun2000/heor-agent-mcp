@@ -1,42 +1,84 @@
 # HEORAgent MCP Server — Features
 
-## Tools (14)
+14 tools, 41 data sources, complete HEOR workflow automation.
 
-| Feature Name | What | Why | How | Test Prompt | What to Look For |
-|-------------|------|-----|-----|-------------|-----------------|
-| **Literature Search** | Search 41 data sources for evidence on a drug or indication with PRISMA-style audit trail | Every HTA submission starts with a systematic literature review — automating this across 41 sources saves weeks of manual work | PubMed, ClinicalTrials.gov, bioRxiv, ChEMBL, Embase, Cochrane, NICE, CADTH, ICER, PBAC, G-BA, and 30+ more. Multi-run stability search with deduplication. Source selection transparency table. | "Search the literature for semaglutide cost-effectiveness in type 2 diabetes. Use PubMed, NICE TAs, and ICER reports." | Structured results with titles, sources, dates. Source selection table showing all 41 sources with used/not-used. Audit trail. |
-| **Cost-Effectiveness Model** | Build Markov / PartSA cost-utility analysis with PSA, OWSA, CEAC, EVPI, EVPPI, and scenario analysis | Payers and HTA bodies require cost-effectiveness evidence to make reimbursement decisions — ICER per QALY is the universal metric | 3-state Markov (On-Treatment/Off-Treatment/Dead) or PartSA (PFS/PD/Dead). Half-cycle correction, 3.5% discounting (NICE reference case). Monte Carlo PSA up to 10K iterations. | "Build a CE model for semaglutide vs sitagliptin in T2D, NHS perspective, lifetime, with PSA." | ICER result, base case table, PSA section with mean ICER + 95% CI + probability cost-effective, **EVPPI table** showing which parameters are worth researching, OWSA tornado. |
-| **Budget Impact Model** | Estimate year-by-year net budget impact of adopting a new intervention over 1-10 years | Every HTA submission requires a BIA alongside CEA — NICE, CADTH, PBAC all mandate it to assess affordability | ISPOR BIA good practice (Mauskopf 2007, Sullivan 2014). Market share uptake curves, treatment displacement, population growth, per-patient cost breakdown. | "Estimate 5-year budget impact of semaglutide for T2D, NHS, 50k patients, drug £3000/yr, comparator £500/yr, uptake 10% year 1 to 30% year 5." | Year-by-year table with eligible population, treated patients, market share, net budget impact, per-patient cost. Total summary. |
-| **HTA Dossier Prep** | Structure evidence into HTA body-specific submission format with gap analysis and auto-GRADE | HTA bodies have strict template requirements — wrong format means rejection or delay. GRADE is mandated by JCA and used by NICE. | Templates for NICE STA, EMA, FDA, IQWiG, HAS, EU JCA. Per-PICO sections for JCA (Reg. 2021/2282). Auto-generates GRADE evidence quality table from literature results. | "Search literature for pembrolizumab in NSCLC using PubMed, then draft a NICE STA dossier using those results." | Dossier sections (Population, Intervention, Comparators, etc.), gap analysis listing missing sections, **GRADE table** with certainty ratings per outcome when literature results are passed. |
-| **Evidence Network** | Analyze literature results to build treatment comparison network and assess NMA feasibility | Before running an NMA, you need to know if the evidence network is connected and sufficient — this tool answers that question | Regex-based extraction of intervention-comparator pairs. Union-Find connectivity analysis. Feasibility assessment (node count, edge count, gaps). | "Search literature for GLP-1 receptor agonists in T2D, then build an evidence network from the results." | Network nodes (treatments), edges (comparisons with trial counts), NMA feasibility verdict (feasible/not), connected components, evidence gaps. |
-| **Indirect Comparison** | Compute indirect treatment comparisons using Bucher method or frequentist NMA | When no head-to-head trial exists, indirect comparisons are the only way to compare treatments — required by all HTA bodies | Bucher (single common comparator) or weighted least squares NMA (full network). Supports MD, OR, RR, HR. Auto-selects method based on network structure. | "Compare semaglutide vs dulaglutide indirectly via placebo. SUSTAIN-1: semaglutide vs placebo HR 0.74 (0.58-0.95). AWARD-5: dulaglutide vs placebo HR 0.78 (0.65-0.93)." | Indirect estimate with 95% CI, p-value, method used (Bucher/NMA), common comparator identified, limitations listed. |
-| **Population-Adjusted Comparison (MAIC/STC)** | MAIC / STC for population-adjusted indirect comparisons when trial populations differ | Standard ITC (Bucher/NMA) assumes similar populations — MAIC/STC adjusts for this, increasingly required by NICE and EMA | MAIC: propensity score reweighting with ESS reporting. STC: outcome regression adjustment. Summary-level data (no IPD required). Follows NICE DSU TSD 18. | "Run a MAIC comparison between SUSTAIN-7 and AWARD-11. Adjust for age (56±10 vs 58±9) and BMI (33±5 vs 35±6)." | Adjusted treatment effect with 95% CI, Effective Sample Size (ESS), comparison table showing both trials, effect modifier balance, method used (MAIC or STC), limitations. |
-| **Survival Fitting** | Fit parametric survival distributions to Kaplan-Meier data with AIC/BIC model selection | Oncology PartSA models need extrapolation beyond trial follow-up — choosing the right distribution is critical for long-term cost-effectiveness | Exponential, Weibull, Log-logistic, Log-normal, Gompertz. MLE via Nelder-Mead. AIC/BIC comparison. Extrapolation table. Follows NICE DSU TSD 14. | "Fit survival curves to this PFS data: time 0 survival 1.0, time 3 survival 0.85, time 6 survival 0.68, time 9 survival 0.55, time 12 survival 0.42, time 18 survival 0.25, time 24 survival 0.15" | Model comparison table (5 distributions with AIC, BIC, parameters), best model recommendation, extrapolation table beyond observed data, clinical plausibility checklist. |
-| **Abstract Screening** | Screen literature results using PICO criteria — scores relevance, classifies study design, returns ranked shortlist with inclusion/exclusion reasons | Systematic reviews require screening hundreds of abstracts — automating this saves hours and follows Cochrane methodology | PICO keyword matching, study design hierarchy (SR > RCT > Cohort > Case), configurable threshold, PRISMA flow summary. Excludes editorials/commentaries automatically. | "Search literature for semaglutide in T2D using PubMed with output_format json, then screen the results for population adults with T2D, intervention semaglutide, comparator placebo, outcomes HbA1c and weight." | PRISMA flow (identified/screened/included/excluded counts), ranked inclusion table with P/I/C/O match indicators, study design classification, uncertain studies flagged for manual review. |
-| **Link Validation** | HTTP HEAD check on URLs before presenting them to users | Broken reference links destroy trust — NICE/CADTH etc. change URLs frequently | Parallel HTTP HEAD requests, categorizes as working/browser_only/broken/timeout. Handles sites that block bots (CADTH, HAS) by marking them browser_only. System prompt mandates validation before citations. | "Validate these URLs: https://www.nice.org.uk/guidance/ta875 and https://www.cda-amc.ca/reimbursement-reviews" | Per-URL status code, category (working/browser_only/broken), any redirects, summary counts. |
-| **Scenario Analysis** | Run multiple what-if variants of the CE model in a single call | HTA reviewers expect sensitivity to key assumptions — running each manually is tedious | Parameter overrides per scenario, comparison table output. Enhancement to cost_effectiveness_model. | "CE model for semaglutide vs sitagliptin, NHS, lifetime. Scenarios: '20% discount' with drug cost 2400, '5yr horizon' with time_horizon 5yr." | Scenario comparison table with base case + each variant showing ICER, delta cost, delta QALY, verdict per scenario. |
-| **Project Create** | Initialize a persistent project workspace with structured directories | HEOR projects span weeks/months — a workspace keeps literature, models, and dossiers organized across sessions | Creates ~/.heor-agent/projects/{id}/ with raw/literature/, raw/models/, raw/dossiers/, wiki/ directories. | "Create a new project for tirzepatide in obesity targeting NICE and ICER." | Confirmation with project ID, directory structure created, metadata saved. |
-| **Knowledge Search** | Full-text search across a project's raw data and wiki | Quickly find previously saved evidence without re-running searches | Multi-term OR matching across raw/ and wiki/ directories. | "Search project tirzepatide-obesity for 'cardiovascular outcomes'" | File paths, line numbers, context snippets matching the query. |
-| **Knowledge Write** | Write compiled evidence to the project wiki | Organize and synthesize findings into a structured knowledge base | Writes to wiki/ directory only. Supports YAML frontmatter and Obsidian-style [[wikilinks]]. | "Write a wiki page summarizing SURMOUNT trial results to project tirzepatide-obesity at wiki/trials/surmount.md" | Confirmation with file path, character count. File must start with wiki/ and end with .md. |
+## Core Workflow Tools
+
+| Tool | What it does | Why it matters |
+|------|-------------|----------------|
+| `literature_search` | Search 41 sources with PRISMA audit trail | Weeks of manual literature review compressed to minutes |
+| `screen_abstracts` | PICO-based relevance scoring + study design classification | Filters noise from search results per Cochrane Handbook Ch. 4 |
+| `evidence_network` | Build treatment comparison network, assess NMA feasibility | Essential prerequisite for indirect comparisons |
+| `indirect_comparison` | Bucher method + Frequentist NMA | Compare treatments when no head-to-head trials exist |
+| `population_adjusted_comparison` | MAIC/STC (experimental, summary-level) | Adjusts for population differences per NICE DSU TSD 18 |
+| `survival_fitting` | Fit 5 parametric distributions to KM data | Select best distribution for oncology PartSA models |
+| `cost_effectiveness_model` | Markov/PartSA with PSA, OWSA, CEAC, EVPI, EVPPI | ICER per QALY — the universal HTA metric |
+| `budget_impact_model` | ISPOR-compliant BIA with year-by-year output | Every HTA submission requires BIA alongside CEA |
+| `hta_dossier_prep` | NICE, EMA, FDA, IQWiG, HAS, EU JCA, GVD with auto-GRADE | Body-specific templates save weeks of manual formatting |
+| `validate_links` | HTTP validation of citation URLs | Prevents broken references in reports |
+
+## Project Knowledge Base
+
+| Tool | What it does |
+|------|-------------|
+| `project_create` | Initialize persistent workspace at `~/.heor-agent/projects/` |
+| `knowledge_search` | Full-text search across project `raw/` and `wiki/` |
+| `knowledge_read` | Read any file from project knowledge base |
+| `knowledge_write` | Write to `wiki/` (Obsidian-compatible, supports wikilinks) |
+
+## Methods & Standards
+
+| Method | Reference |
+|--------|-----------|
+| Multi-state Markov | NICE reference case, half-cycle correction, 3.5% discounting |
+| Partitioned Survival | Woods 2017 |
+| PSA | Monte Carlo, 1K–10K iterations |
+| EVPPI | Strong et al. 2014 (non-parametric binning) |
+| Bucher indirect comparison | Bucher 1997 |
+| Frequentist NMA | Rücker 2012 (weighted least squares) |
+| MAIC/STC | Phillippo 2016, NICE DSU TSD 18 |
+| Survival fitting | Latimer 2013, NICE DSU TSD 14 |
+| Budget impact | Mauskopf 2007, Sullivan 2014, ISPOR |
+| GRADE | Guyatt et al. 2008, GRADE Handbook |
 
 ## Data Sources (41)
 
 | Category | Sources |
 |----------|---------|
-| **Biomedical** | PubMed, ClinicalTrials.gov, bioRxiv/medRxiv, ChEMBL |
-| **Epidemiology** | WHO GHO, World Bank, OECD Health, IHME GBD, All of Us |
-| **FDA Regulatory** | Orange Book, Purple Book |
-| **Enterprise** | Embase, ScienceDirect, Cochrane, Citeline, Pharmapendium, Cortellis, Google Scholar |
-| **HTA Cost References** | CMS NADAC, PSSRU, NHS National Cost Collection, BNF, PBS Schedule |
-| **HTA Appraisals** | NICE TAs, CADTH/CDA-AMC, ICER, PBAC, G-BA AMNOG, HAS, IQWiG, AIFA, TLV, INESSS, ISPOR |
-| **LATAM** | DATASUS, CONITEC, ANVISA, PAHO, IETS, FONASA |
-| **APAC** | HITAP |
+| Biomedical | PubMed, ClinicalTrials.gov, bioRxiv/medRxiv, ChEMBL |
+| Epidemiology | WHO GHO, World Bank, OECD Health, IHME GBD, All of Us |
+| FDA Regulatory | Orange Book, Purple Book |
+| Enterprise (API key) | Embase, ScienceDirect, Cochrane, Citeline, Pharmapendium, Cortellis, Google Scholar |
+| Cost References | CMS NADAC, PSSRU, NHS National Cost Collection, BNF, PBS Schedule |
+| HTA Appraisals | NICE TAs, CADTH/CDA-AMC, ICER, PBAC, G-BA AMNOG, HAS, IQWiG, AIFA, TLV, INESSS, ISPOR |
+| LATAM | DATASUS, CONITEC, ANVISA, PAHO, IETS, FONASA |
+| APAC | HITAP |
 
-## Indirect Comparison Methods
+## Output Formats
 
-| Method | When Used | Reference |
-|--------|-----------|-----------|
-| Bucher | Single common comparator (A-B-C) | Bucher 1997 |
-| Frequentist NMA | Connected network (3+ treatments) | Weighted least squares |
-| MAIC | Population mismatch, summary data available | Signorovitch 2010, NICE DSU TSD 18 |
-| STC | Fewer effect modifiers, simpler adjustment | NICE DSU TSD 18 |
+| Format | Use case |
+|--------|----------|
+| `text` | Markdown report (default) — for chat UIs and quick review |
+| `json` | Structured output — for piping between tools and programmatic use |
+| `docx` | Word document — for HTA submissions and reports |
+| `xlsx` | Excel workbook — for local market-access teams to review CE models and BIAs (report-style, not interactive) |
+
+## Status: What's Production-Ready vs Experimental
+
+**Production-ready:**
+- Literature search (41 sources)
+- Project knowledge base
+- HTA dossier prep (templates + auto-GRADE from literature)
+- Budget impact model
+- Cost-effectiveness model (Markov + PartSA with PSA, OWSA, CEAC, EVPI)
+- Evidence network mapping
+- Bucher indirect comparison
+- Abstract screening (PICO-based)
+- Link validation
+
+**Experimental / orientation-only:**
+- `population_adjusted_comparison` (MAIC/STC) — summary-level approximation, not IPD-based. Not submission-ready.
+- `survival_fitting` — fits to KM step-summary data, not individual patient time-to-event data. Validate against IPD fits.
+- `EVPPI` — uses non-parametric binning; results can be noisy when total EVPI is near zero.
+
+See [CHANGELOG.md](../CHANGELOG.md) for version history.

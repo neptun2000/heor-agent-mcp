@@ -1,7 +1,7 @@
 {
   "serverInfo": {
     "name": "heor-agent-mcp",
-    "version": "0.9.1",
+    "version": "0.9.2",
     "description": "AI-powered Health Economics and Outcomes Research (HEOR) MCP server. 14 tools for literature search (41 data sources), cost-effectiveness modeling (Markov/PartSA with PSA/EVPPI/scenarios), budget impact analysis, abstract screening, survival curve fitting, indirect comparisons (Bucher/NMA/MAIC/STC), HTA dossier prep (NICE/EMA/FDA/IQWiG/HAS/EU JCA) with auto-GRADE."
   },
   "authentication": {

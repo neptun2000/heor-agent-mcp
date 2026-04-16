@@ -2,6 +2,26 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v0.9.2 (2026-04-16)
+
+### Fixed (from code review)
+- **BIM market share forward-fill** — missing years now inherit from the most recent DEFINED year before them, not the last-defined-globally (which was inflating early-year budget impacts)
+- **BIM xlsx perspective crash** — fixed TypeError when `perspective` was undefined in Excel export
+- **XLSX transition matrix** — now derived from actual model params (efficacy_delta, mortality_reduction), no longer hardcoded placeholders
+- **XLSX "Mean ICER" label** — renamed to "ICER of means (E[ΔC] / E[ΔQ])" to reflect the formula accurately; added separate "Mean of per-iteration ICERs" for the alternative interpretation
+- **HTTP JSON parser** — now returns 400 with clear error instead of crashing on malformed request body
+- **HTA template hardcoded outcomes** — "Outcomes (PICO)" section no longer defaults to HbA1c/diabetes regardless of indication
+- **Link validator 429/503** — now categorized as "rate_limited" (transient) instead of "broken"
+
+### Changed
+- **MAIC/STC descriptions** — marked as EXPERIMENTAL with clear warnings that summary-level data produces approximate results only; true MAIC/STC per NICE DSU TSD 18 requires individual patient data
+- **Survival fitting description** — marked as EXPERIMENTAL with warnings that KM-summary fits are approximate; true MLE requires IPD
+- **Excel export language** — changed "editable, re-runnable" to honest "structured report — editing cells does not re-run the model"
+- **FEATURES.md** — restructured into focused tables (was one mega-table that rendered badly on Glama); added "Production vs Experimental" section
+
+### Added
+- **28 new smoke tests** covering budget_impact_model, population_adjusted_comparison, survival_fitting, screen_abstracts, validate_links (72 suites, 272 tests total)
+
 ## v0.9.1 (2026-04-16)
 
 ### Added

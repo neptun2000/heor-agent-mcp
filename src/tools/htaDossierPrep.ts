@@ -307,8 +307,8 @@ function buildSection(
       };
     case "Outcomes (PICO)":
       return {
-        content: `Primary: HbA1c reduction, mortality. Secondary: QoL (EQ-5D), hospitalisation, adverse events.\n⚠️ Confirm outcome selection with clinical advisor.`,
-        status: "partial",
+        content: `⚠️ Define primary and secondary outcomes for ${indication}. Typically includes a clinical effectiveness endpoint, mortality/survival where applicable, quality of life (EQ-5D or disease-specific PROs), hospitalization rate, and adverse events. Confirm selection with clinical advisor and HTA scoping decision.`,
+        status: "missing",
       };
     case "Clinical Evidence Summary":
       return evidence

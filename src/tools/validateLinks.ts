@@ -27,7 +27,13 @@ interface LinkStatus {
   url: string;
   status_code: number;
   ok: boolean;
-  category: "working" | "browser_only" | "broken" | "timeout" | "error";
+  category:
+    | "working"
+    | "browser_only"
+    | "broken"
+    | "rate_limited"
+    | "timeout"
+    | "error";
   message: string;
   final_url?: string; // after redirects
 }
@@ -51,7 +57,7 @@ function categorize(url: string, status: number): LinkStatus["category"] {
     return "broken";
   }
   if (status === 404 || status === 410) return "broken";
-  if (status === 429) return "broken"; // rate limited
+  if (status === 429 || status === 503) return "rate_limited";
   if (status === 0) return "timeout";
   return "error";
 }
@@ -136,6 +142,9 @@ export async function handleValidateLinks(
   const browserOnly = results.filter(
     (r) => r.category === "browser_only",
   ).length;
+  const rateLimited = results.filter(
+    (r) => r.category === "rate_limited",
+  ).length;
   const broken = results.filter(
     (r) =>
       r.category === "broken" ||
@@ -146,7 +155,7 @@ export async function handleValidateLinks(
   const lines: string[] = [
     `## Link Validation Report`,
     ``,
-    `**Summary:** ${working} working | ${browserOnly} browser-only (403 to bots, works in browser) | ${broken} broken`,
+    `**Summary:** ${working} working | ${browserOnly} browser-only | ${rateLimited} rate-limited | ${broken} broken`,
     ``,
     `| URL | Status | Category | Notes |`,
     `|-----|--------|----------|-------|`,
@@ -158,7 +167,9 @@ export async function handleValidateLinks(
         ? "OK"
         : r.category === "browser_only"
           ? "Browser"
-          : "BROKEN";
+          : r.category === "rate_limited"
+            ? "Rate-limited"
+            : "BROKEN";
     const shortUrl = r.url.length > 60 ? r.url.slice(0, 57) + "..." : r.url;
     const note = r.final_url ? `Redirected to ${r.final_url}` : r.message || "";
     lines.push(`| ${shortUrl} | ${r.status_code || "—"} | ${icon} | ${note} |`);
@@ -175,6 +186,11 @@ export async function handleValidateLinks(
       `> **Note:** ${browserOnly} link(s) return 403 to automated requests but work in browsers. These are safe to present.`,
     );
   }
+  if (rateLimited > 0) {
+    lines.push(
+      `> **Note:** ${rateLimited} link(s) are rate-limited (429/503). URLs are probably fine — retry later or present with a caveat.`,
+    );
+  }
 
   return {
     content: {
@@ -182,6 +198,7 @@ export async function handleValidateLinks(
         total: results.length,
         working,
         browser_only: browserOnly,
+        rate_limited: rateLimited,
         broken,
       },
       results,

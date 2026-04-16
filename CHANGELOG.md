@@ -2,7 +2,7 @@
 
 All notable changes to HEORAgent MCP Server.
 
-## v0.9.2 (2026-04-16)
+## v0.9.3 (2026-04-16)
 
 ### Fixed (from code review)
 - **BIM market share forward-fill** — missing years now inherit from the most recent DEFINED year before them, not the last-defined-globally (which was inflating early-year budget impacts)

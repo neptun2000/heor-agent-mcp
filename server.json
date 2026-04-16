@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.neptun2000/heor-agent",
-  "description": "AI-powered Health Economics and Outcomes Research (HEOR) MCP server — 14 tools across literature search (41 data sources incl. PubMed/ClinicalTrials.gov/Cochrane/NICE/CADTH/ICER), cost-effectiveness modeling (Markov/PartSA/PSA/EVPPI), budget impact analysis, abstract screening, survival curve fitting (NICE DSU TSD 14), indirect comparisons (Bucher/NMA/MAIC/STC), and HTA dossier prep (NICE/EMA/FDA/IQWiG/HAS/EU JCA) with auto-GRADE.",
+  "description": "HEOR MCP server: literature search, CEA, BIA, NMA/MAIC, HTA dossiers (NICE/FDA/EMA/JCA).",
   "repository": {
     "url": "https://github.com/neptun2000/heor-agent-mcp",
     "source": "github"
   },
-  "version": "0.7.1",
+  "version": "0.8.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "heor-agent-mcp",
-      "version": "0.7.1",
+      "version": "0.8.0",
       "transport": {
         "type": "stdio"
       }

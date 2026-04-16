@@ -1,6 +1,6 @@
 {
   "name": "heor-agent-mcp",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "mcpName": "io.github.neptun2000/heor-agent",
   "license": "MIT",
   "author": "mnaumov",
@@ -60,6 +60,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "docx": "^9.6.1",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "posthog-node": "^5.29.2",
     "typescript": "^5.9.3",

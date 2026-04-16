@@ -126,6 +126,50 @@ Pass `project: "project-id"` to any tool and results are saved automatically.
 
 ---
 
+## Examples
+
+Copy-paste prompts to try in Claude Code, Claude Desktop, or the [web UI](https://web-michael-ns-projects.vercel.app).
+
+### Single-tool examples
+
+**Literature search**
+> Search the literature for tirzepatide cardiovascular outcomes in type 2 diabetes. Use PubMed, ClinicalTrials.gov, and NICE TAs.
+
+**Survival curve fitting**
+> Fit survival curves to this OS data from KEYNOTE-189: time 0 survival 1.0, time 6 survival 0.88, time 12 survival 0.72, time 18 survival 0.60, time 24 survival 0.51, time 36 survival 0.38. Use months.
+
+**Budget impact**
+> Estimate the 5-year NHS budget impact of semaglutide for obesity. 200,000 eligible patients, drug cost £1,200/year, comparator (orlistat) £250/year, uptake 15% year 1 to 40% year 5.
+
+**Cost-effectiveness model**
+> Build a CE model for semaglutide vs sitagliptin in T2D, NHS perspective, lifetime horizon, with PSA.
+
+**Indirect comparison (Bucher)**
+> I have two trials: SUSTAIN-1 showed semaglutide vs placebo HR 0.74 (0.58-0.95) for HbA1c, and AWARD-5 showed dulaglutide vs placebo HR 0.78 (0.65-0.93). Run a Bucher indirect comparison between semaglutide and dulaglutide.
+
+**MAIC (population-adjusted comparison)**
+> Run a MAIC between SUSTAIN-7 (N=300, semaglutide vs placebo, HR 0.74, CI 0.58-0.95, age 56±10, BMI 33±5) and AWARD-11 (N=600, dulaglutide vs placebo, HR 0.78, CI 0.65-0.93, age 58±9, BMI 35±6). Adjust for age and BMI.
+
+### Multi-tool workflows
+
+**Abstract screening workflow**
+> Search PubMed for pembrolizumab in NSCLC, then screen the results with population adults with NSCLC, intervention pembrolizumab, comparator chemotherapy, outcomes overall survival and PFS.
+
+**Evidence network + NMA feasibility**
+> Search for GLP-1 receptor agonists in T2D using PubMed, build an evidence network from the results, and assess NMA feasibility.
+
+**CE model with scenarios**
+> Build a CE model for dapagliflozin vs placebo in heart failure, NHS perspective, lifetime horizon, with PSA. Add scenarios: "20% price reduction" with drug cost 400, "10-year horizon" with time_horizon 10yr.
+
+### End-to-end HTA workflow
+
+**Full dossier preparation**
+> Create a project for semaglutide in obesity targeting NICE and ICER. Search literature for evidence, screen the results for adults with obesity comparing semaglutide to placebo for weight loss outcomes, then draft a NICE STA dossier using the screened results.
+
+This single prompt exercises: `project_create` → `literature_search` → `screen_abstracts` → `hta_dossier_prep` (with auto-GRADE).
+
+---
+
 ## Data Sources
 
 **41 sources across 9 categories.** Every `literature_search` call includes a source selection table showing used/not-used status and reason for each.

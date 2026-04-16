@@ -194,13 +194,35 @@ export async function ceModelToXlsx(
   });
 
   inputs.getRow(inputRows.length + 3).getCell(1).value =
-    "Yellow cells = editable inputs. Modify for your market, then re-run the model.";
+    "Inputs shown for transparency. To re-run with modified values, call the cost_effectiveness_model tool again — editing this sheet does not recalculate results.";
   inputs.getRow(inputRows.length + 3).getCell(1).font = {
     italic: true,
     color: { argb: "FF666666" },
   };
 
   // --- Tab 3: Transition Matrix ---
+  // Derive actual transition probabilities from model params (same logic as
+  // src/models/modelUtils.ts buildMarkovParamsFromCE).
+  const efficacyDelta = Math.max(
+    0,
+    Math.min(0.999, params.clinical_inputs.efficacy_delta),
+  );
+  const mortalityReduction = params.clinical_inputs.mortality_reduction ?? 0;
+  const baseMortality = 0.02;
+  const interventionMortality = Math.max(
+    0.005,
+    baseMortality * (1 - mortalityReduction),
+  );
+  const comparatorMortality = baseMortality;
+  const probStayOnIntervention = Math.max(
+    0.05,
+    Math.min(0.93, 0.5 + efficacyDelta * 0.5),
+  );
+  const baselineProbStayOn = Math.max(
+    0.05,
+    Math.min(0.88, probStayOnIntervention * 0.7),
+  );
+
   const trans = wb.addWorksheet("Transition Matrix");
   trans.columns = [
     { header: "From \\ To", key: "state", width: 20 },
@@ -210,12 +232,32 @@ export async function ceModelToXlsx(
   ];
   ["A1", "B1", "C1", "D1"].forEach((c) => styleHeaderCell(trans.getCell(c)));
 
-  trans.getRow(2).values = ["On-Treatment (Intervention)", 0.85, 0.13, 0.02];
-  trans.getRow(3).values = ["Off-Treatment (Intervention)", 0.05, 0.93, 0.02];
+  trans.getRow(2).values = [
+    "On-Treatment (Intervention)",
+    probStayOnIntervention,
+    Math.max(0, 1 - probStayOnIntervention - interventionMortality),
+    interventionMortality,
+  ];
+  trans.getRow(3).values = [
+    "Off-Treatment (Intervention)",
+    0.05,
+    Math.max(0, 0.95 - interventionMortality),
+    interventionMortality,
+  ];
   trans.getRow(4).values = ["Dead", 0, 0, 1];
   trans.getRow(5).values = [""];
-  trans.getRow(6).values = ["On-Treatment (Comparator)", 0.6, 0.38, 0.02];
-  trans.getRow(7).values = ["Off-Treatment (Comparator)", 0.05, 0.93, 0.02];
+  trans.getRow(6).values = [
+    "On-Treatment (Comparator)",
+    baselineProbStayOn,
+    Math.max(0, 1 - baselineProbStayOn - comparatorMortality),
+    comparatorMortality,
+  ];
+  trans.getRow(7).values = [
+    "Off-Treatment (Comparator)",
+    0.05,
+    Math.max(0, 0.95 - comparatorMortality),
+    comparatorMortality,
+  ];
   trans.getRow(8).values = ["Dead", 0, 0, 1];
 
   for (let r = 2; r <= 8; r++) {
@@ -223,10 +265,15 @@ export async function ceModelToXlsx(
       const cell = trans.getRow(r).getCell(c);
       if (typeof cell.value === "number") {
         cell.numFmt = "0.0000";
-        cell.fill = INPUT_FILL;
       }
     }
   }
+  trans.getRow(10).getCell(1).value =
+    "Transition probabilities derived from efficacy_delta and mortality_reduction inputs. Values are read-only for transparency — modify efficacy_delta on the Inputs tab to change them.";
+  trans.getRow(10).getCell(1).font = {
+    italic: true,
+    color: { argb: "FF666666" },
+  };
 
   trans.getRow(10).getCell(1).value =
     "Rows must sum to 1.0. Editable — modify to reflect trial-specific transitions.";
@@ -265,7 +312,7 @@ export async function ceModelToXlsx(
     // Summary at the bottom
     const summaryRow = result.psa.scatter.length + 3;
     psaSheet.getRow(summaryRow).values = [
-      "Mean ICER",
+      "ICER of means (E[ΔC] / E[ΔQ])",
       {
         formula: `AVERAGE(B2:B${result.psa.scatter.length + 1})/AVERAGE(C2:C${result.psa.scatter.length + 1})`,
       },
@@ -274,6 +321,18 @@ export async function ceModelToXlsx(
     ];
     psaSheet.getRow(summaryRow).getCell(1).font = { bold: true };
     psaSheet.getRow(summaryRow).getCell(2).numFmt = `"${symbol}"#,##0`;
+
+    // Mean of per-iteration ICERs (the correct "mean ICER" interpretation)
+    psaSheet.getRow(summaryRow + 1).values = [
+      "Mean of per-iteration ICERs",
+      {
+        formula: `AVERAGEIF(D2:D${result.psa.scatter.length + 1},"<>N/A")`,
+      },
+      "",
+      "",
+    ];
+    psaSheet.getRow(summaryRow + 1).getCell(1).font = { bold: true };
+    psaSheet.getRow(summaryRow + 1).getCell(2).numFmt = `"${symbol}"#,##0`;
   }
 
   // --- Tab 5: CEAC ---
@@ -361,7 +420,7 @@ export async function bimToXlsx(
     ["Intervention", params.intervention],
     ["Comparator", params.comparator],
     ["Indication", params.indication],
-    ["Perspective", (params.perspective as string).toUpperCase()],
+    ["Perspective", perspective.toUpperCase()],
     ["Time Horizon (years)", results.length],
     ["Eligible Population (Year 1)", params.eligible_population],
     ["", ""],

@@ -339,8 +339,12 @@ export async function handlePopulationAdjustedComparison(
   audit = setMethodology(
     audit,
     method === "maic"
-      ? "Matching-Adjusted Indirect Comparison (MAIC) — NICE DSU TSD 18 (Phillippo 2016), Signorovitch 2010"
-      : "Simulated Treatment Comparison (STC) — NICE DSU TSD 18 (Phillippo 2016)",
+      ? "Approximate MAIC-style analysis (summary-level): Bucher indirect comparison with ESS-based SE inflation. True MAIC per NICE DSU TSD 18 (Phillippo 2016) / Signorovitch 2010 requires individual patient data to reweight outcomes."
+      : "Approximate STC-style analysis (summary-level): Bucher indirect comparison with linear adjustment scaled by standardized mean differences. True STC per NICE DSU TSD 18 (Phillippo 2016) requires individual patient data for outcome regression with treatment × covariate interactions.",
+  );
+  audit = addWarning(
+    audit,
+    "EXPERIMENTAL: results are for orientation only, not HTA submission. Point estimates are approximate because summary-level data cannot support full MAIC/STC methods. Validate with IPD-based analysis before making reimbursement decisions.",
   );
   audit = addAssumption(
     audit,
@@ -464,7 +468,7 @@ export async function handlePopulationAdjustedComparison(
 export const populationAdjustedComparisonToolSchema = {
   name: "population_adjusted_comparison",
   description:
-    "Perform a population-adjusted indirect comparison using MAIC (Matching-Adjusted Indirect Comparison) or STC (Simulated Treatment Comparison). Adjusts for differences in effect modifiers between two trials that share a common comparator. Follows NICE DSU TSD 18 (Phillippo 2016) and ISPOR guidance. Accepts summary-level statistics (mean, SD per covariate) — no individual patient data required.",
+    "⚠️ EXPERIMENTAL / orientation-only. Approximate population-adjusted indirect comparison using summary-level statistics (mean, SD per covariate). True MAIC/STC per NICE DSU TSD 18 requires individual patient data (IPD) for one trial. This tool inflates the SE of a Bucher indirect comparison based on covariate imbalance (MAIC-style ESS penalty) and applies a simple linear adjustment based on standardized mean differences (STC-style). Point estimates should be interpreted as approximate — not submission-ready. For a definitive analysis, use IPD with an outcome regression model.",
   annotations: {
     title: "Population-Adjusted Comparison (MAIC/STC)",
     readOnlyHint: true,

@@ -72,14 +72,14 @@ function computeBudgetImpact(params: BudgetImpactParams): YearResult[] {
     params.market_share.year_5,
   ];
 
-  // Interpolate/extrapolate market share for missing years
-  let lastDefinedIdx = 0;
-  for (let i = 0; i < shares.length; i++) {
-    if (shares[i] !== undefined) lastDefinedIdx = i;
-  }
+  // Forward-fill market share: each missing year inherits from the most
+  // recent DEFINED year before it (not last-defined-globally).
+  let lastKnown = shares[0]!;
   for (let i = 1; i < years; i++) {
-    if (shares[i] === undefined) {
-      shares[i] = shares[lastDefinedIdx];
+    if (shares[i] !== undefined) {
+      lastKnown = shares[i]!;
+    } else {
+      shares[i] = lastKnown;
     }
   }
 
@@ -107,7 +107,7 @@ function computeBudgetImpact(params: BudgetImpactParams): YearResult[] {
       params.eligible_population *
         Math.pow(1 + params.population_growth_rate, y),
     );
-    const share = shares[y] ?? shares[lastDefinedIdx] ?? 0;
+    const share = shares[y] ?? 0;
     const treated = Math.round(pop * share);
     const untreated = pop - treated;
 
@@ -243,7 +243,7 @@ export async function handleBudgetImpactModel(
     );
     const sizeKb = Math.round(buf.length / 1024);
     return {
-      content: `## Excel Workbook Generated\n\n**File:** \`${savedPath}\`\n**Size:** ${sizeKb} KB\n\nTabs: Summary | Inputs (editable) | Year-by-Year | Audit\n\nYellow cells = editable inputs. Local teams can localize pricing and re-run.\n\nOpen with: \`open "${savedPath}"\``,
+      content: `## Excel Workbook Generated\n\n**File:** \`${savedPath}\`\n**Size:** ${sizeKb} KB\n\nTabs: Summary | Inputs | Year-by-Year | Audit\n\n> **Note:** This is a structured report of the analysis — editing input cells does NOT re-run the model. To recompute with different inputs, call the budget_impact_model tool again with the new values. The workbook shows all inputs transparently so local teams can review and re-submit with modified assumptions.\n\nOpen with: \`open "${savedPath}"\``,
       audit,
     };
   }
@@ -347,7 +347,7 @@ export const budgetImpactModelToolSchema = {
         type: "string",
         enum: ["text", "json", "docx", "xlsx"],
         description:
-          "Use 'xlsx' for editable Excel workbook — local market-access teams can modify inputs and re-run.",
+          "Use 'xlsx' for a structured Excel report with all inputs, year-by-year calculations, and audit trail in separate tabs. The workbook is a REPORT — editing cells does not re-run the model. Re-run by calling the tool again with modified parameters.",
       },
       project: { type: "string", description: "Project ID for persistence" },
     },

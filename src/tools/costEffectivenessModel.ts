@@ -573,7 +573,7 @@ export async function handleCostEffectivenessModel(
       "xlsx",
     );
     const sizeKb = Math.round(buf.length / 1024);
-    const content = `## Excel Workbook Generated\n\n**File:** \`${savedPath}\`\n**Size:** ${sizeKb} KB\n**Intervention:** ${params.intervention}\n**Comparator:** ${params.comparator}\n\nTabs: Summary | Inputs (editable) | Transition Matrix | PSA | CEAC | Audit\n\nYellow cells = editable inputs. Local teams can localize and modify.\n\nOpen with: \`open "${savedPath}"\``;
+    const content = `## Excel Workbook Generated\n\n**File:** \`${savedPath}\`\n**Size:** ${sizeKb} KB\n**Intervention:** ${params.intervention}\n**Comparator:** ${params.comparator}\n\nTabs: Summary | Inputs | Transition Matrix | PSA | CEAC | Audit\n\n> **Note:** This is a structured report — editing cells does NOT re-run the model. Re-run by calling cost_effectiveness_model with modified parameters. The workbook shows all inputs and PSA iterations transparently for review.\n\nOpen with: \`open "${savedPath}"\``;
     return { content, audit };
   }
 
@@ -670,7 +670,7 @@ export const costEffectivenessModelToolSchema = {
         type: "string",
         enum: ["text", "json", "docx", "xlsx"],
         description:
-          "Use 'xlsx' for editable Excel workbook — local market-access teams can modify inputs and re-run.",
+          "Use 'xlsx' for a structured Excel report with inputs, transition matrix, PSA iterations, and CEAC in separate tabs. The workbook is a REPORT — editing cells does not re-run the model. Re-run by calling the tool again with modified parameters.",
       },
       project: {
         type: "string",

@@ -432,7 +432,20 @@ async function runHttp(port: number) {
         for await (const chunk of req) {
           chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
         }
-        const body = JSON.parse(Buffer.concat(chunks).toString());
+
+        let body;
+        try {
+          body = JSON.parse(Buffer.concat(chunks).toString());
+        } catch (err) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify({
+              error: "Invalid JSON in request body",
+              detail: err instanceof Error ? err.message : String(err),
+            }),
+          );
+          return;
+        }
 
         let transport: StreamableHTTPServerTransport;
 

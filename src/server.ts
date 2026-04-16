@@ -67,6 +67,10 @@ import {
   handleScreenAbstracts,
   screenAbstractsToolSchema,
 } from "./tools/screenAbstracts.js";
+import {
+  handleValidateLinks,
+  validateLinksToolSchema,
+} from "./tools/validateLinks.js";
 import { randomUUID } from "node:crypto";
 import { trackToolCall, trackSession, shutdownAnalytics } from "./analytics.js";
 import { createServer } from "node:http";
@@ -93,6 +97,7 @@ function createMcpServer(): Server {
       populationAdjustedComparisonToolSchema,
       survivalFittingToolSchema,
       screenAbstractsToolSchema,
+      validateLinksToolSchema,
     ],
   }));
 
@@ -141,6 +146,9 @@ function createMcpServer(): Server {
           break;
         case "screen_abstracts":
           result = await handleScreenAbstracts(args);
+          break;
+        case "validate_links":
+          result = await handleValidateLinks(args);
           break;
         default:
           trackToolCall(name, Date.now() - callStart, "error");

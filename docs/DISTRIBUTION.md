@@ -15,7 +15,7 @@ Track where HEORAgent MCP server is published and what status each channel is in
 | **Glama.ai** | https://glama.ai/mcp/servers | Listed | Auto-syncs from npm | |
 | **awesome-mcp-servers** | https://github.com/punkpeye/awesome-mcp-servers | Listed | One-time PR | Under Biology/Medicine/Bioinformatics |
 | **PulseMCP** | https://www.pulsemcp.com | Auto-syncing | Within 1 week of registry submission | |
-| **MCP.so** | https://mcp.so/submit | Pending | — | Manual form, large Chinese audience |
+| **MCP.so** | https://mcp.so/submit | Submitted | 2026-04-16 | Manual form, large Chinese audience — pending review |
 | **Cline Marketplace** | https://github.com/cline/mcp-marketplace | Pending | — | GitHub PR; VS Code AI users |
 | **Continue.dev MCP Hub** | https://github.com/continuedev/continue | Pending | — | GitHub PR; JetBrains/VSCode |
 | **Cursor MCP Directory** | Built into Cursor IDE | Pending | — | Submit via Cursor team |

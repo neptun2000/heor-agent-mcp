@@ -1,6 +1,6 @@
 # HEORAgent MCP Server — Features
 
-14 tools, 41 data sources, complete HEOR workflow automation.
+15 tools, 41 data sources, complete HEOR workflow automation.
 
 ## Core Workflow Tools
 
@@ -8,6 +8,7 @@
 |------|-------------|----------------|
 | `literature_search` | Search 41 sources with PRISMA audit trail | Weeks of manual literature review compressed to minutes |
 | `screen_abstracts` | PICO-based relevance scoring + study design classification | Filters noise from search results per Cochrane Handbook Ch. 4 |
+| `risk_of_bias` | Cochrane RoB 2 (RCTs), ROBINS-I (observational), AMSTAR-2 (SRs) with GRADE summary | Replaces heuristic RoB estimates in dossier GRADE tables with structured domain judgments |
 | `evidence_network` | Build treatment comparison network, assess NMA feasibility | Essential prerequisite for indirect comparisons |
 | `indirect_comparison` | Bucher method + Frequentist NMA | Compare treatments when no head-to-head trials exist |
 | `population_adjusted_comparison` | MAIC/STC (experimental, summary-level) | Adjusts for population differences per NICE DSU TSD 18 |
@@ -40,6 +41,9 @@
 | Survival fitting | Latimer 2013, NICE DSU TSD 14 |
 | Budget impact | Mauskopf 2007, Sullivan 2014, ISPOR |
 | GRADE | Guyatt et al. 2008, GRADE Handbook |
+| RoB 2 | Sterne et al. 2019 (BMJ) |
+| ROBINS-I | Sterne et al. 2016 (BMJ) |
+| AMSTAR-2 | Shea et al. 2017 (BMJ) |
 
 ## Data Sources (41)
 
@@ -74,6 +78,7 @@
 - Evidence network mapping
 - Bucher indirect comparison
 - Abstract screening (PICO-based)
+- Risk of bias assessment (RoB 2 / ROBINS-I / AMSTAR-2 with GRADE integration)
 - Link validation
 
 **Experimental / orientation-only:**

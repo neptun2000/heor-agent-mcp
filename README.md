@@ -6,7 +6,7 @@
 
 **AI-powered Health Economics and Outcomes Research (HEOR) agent as a Model Context Protocol server.**
 
-Automates literature review across 41 data sources, state-of-the-art cost-effectiveness modelling, HTA dossier preparation for NICE / EMA / FDA / IQWiG / HAS / EU JCA, and a persistent project knowledge base — all callable as MCP tools from Claude.ai, Claude Code, and any MCP-compatible host.
+Automates literature review across 41 data sources, risk of bias assessment (RoB 2 / ROBINS-I / AMSTAR-2), state-of-the-art cost-effectiveness modelling, HTA dossier preparation for NICE / EMA / FDA / IQWiG / HAS / EU JCA, and a persistent project knowledge base — all callable as MCP tools from Claude.ai, Claude Code, and any MCP-compatible host.
 
 Built for pharmaceutical, biotech, CRO, and medical affairs teams who need rigorous, auditable HEOR workflows without building infrastructure from scratch.
 
@@ -50,8 +50,10 @@ Add to your MCP configuration:
 | Tool | Purpose |
 |------|---------|
 | `literature_search` | Search 41 data sources with a full PRISMA-style audit trail |
+| `screen_abstracts` | PICO-based relevance scoring and study design classification |
+| `risk_of_bias` | Cochrane RoB 2 / ROBINS-I / AMSTAR-2 with GRADE RoB domain summary |
 | `cost_effectiveness_model` | Markov / PartSA / decision-tree CEA with PSA, OWSA, CEAC, EVPI |
-| `hta_dossier_prep` | Draft submissions for NICE, EMA, FDA, IQWiG, HAS, and EU JCA |
+| `hta_dossier_prep` | Draft submissions for NICE, EMA, FDA, IQWiG, HAS, and EU JCA — GRADE table uses structured RoB when `rob_results` passed |
 | `project_create` | Initialize a persistent project workspace |
 | `knowledge_search` | Full-text search across a project's raw/ and wiki/ trees |
 | `knowledge_read` | Read any file from a project's knowledge base |
@@ -113,6 +115,29 @@ Drafts submission-ready sections for six HTA frameworks with gap analysis:
 
 Accepts piped output from `literature_search` and `cost_effectiveness_model`.
 
+### `risk_of_bias`
+
+Assesses risk of bias using the appropriate Cochrane instrument, auto-detected from `study_type`:
+
+| Study type | Instrument |
+|-----------|-----------|
+| RCT | RoB 2 (5 domains: randomization, deviations, missing data, measurement, reporting) |
+| Observational | ROBINS-I (7 domains: confounding, selection, classification, deviations, missing data, measurement, reporting) |
+| Systematic review | AMSTAR-2 (16 items, critical vs non-critical) |
+
+Returns a `rob_results` object you can pass directly to `hta_dossier_prep` — this replaces the heuristic RoB estimate in the GRADE table with structured domain judgments.
+
+**Example call:**
+```json
+{
+  "studies": [{ "id": "pmid_1", "study_type": "RCT", "title": "...", "abstract": "..." }],
+  "output_format": "json"
+}
+```
+
+**Pipeline:**
+> `literature_search` → `screen_abstracts` → `risk_of_bias` → `hta_dossier_prep`
+
 ### Knowledge base tools
 
 Projects live at `~/.heor-agent/projects/{project-id}/` with:
@@ -164,9 +189,9 @@ Copy-paste prompts to try in Claude Code, Claude Desktop, or the [web UI](https:
 ### End-to-end HTA workflow
 
 **Full dossier preparation**
-> Create a project for semaglutide in obesity targeting NICE and ICER. Search literature for evidence, screen the results for adults with obesity comparing semaglutide to placebo for weight loss outcomes, then draft a NICE STA dossier using the screened results.
+> Create a project for semaglutide in obesity targeting NICE and ICER. Search literature for evidence, screen the results for adults with obesity comparing semaglutide to placebo for weight loss outcomes, assess risk of bias on the screened studies, then draft a NICE STA dossier using the screened results and rob_results.
 
-This single prompt exercises: `project_create` → `literature_search` → `screen_abstracts` → `hta_dossier_prep` (with auto-GRADE).
+This single prompt exercises: `project_create` → `literature_search` → `screen_abstracts` → `risk_of_bias` → `hta_dossier_prep` (GRADE RoB from structured assessment).
 
 ---
 

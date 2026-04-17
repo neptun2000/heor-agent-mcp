@@ -70,6 +70,7 @@ import {
   handleScreenAbstracts,
   screenAbstractsToolSchema,
 } from "./tools/screenAbstracts.js";
+import { handleRiskOfBias, riskOfBiasToolSchema } from "./tools/riskOfBias.js";
 import {
   handleValidateLinks,
   validateLinksToolSchema,
@@ -214,6 +215,7 @@ function createMcpServer(): Server {
       populationAdjustedComparisonToolSchema,
       survivalFittingToolSchema,
       screenAbstractsToolSchema,
+      riskOfBiasToolSchema,
       validateLinksToolSchema,
     ],
   }));
@@ -263,6 +265,9 @@ function createMcpServer(): Server {
           break;
         case "screen_abstracts":
           result = await handleScreenAbstracts(args);
+          break;
+        case "risk_of_bias":
+          result = await handleRiskOfBias(args);
           break;
         case "validate_links":
           result = await handleValidateLinks(args);

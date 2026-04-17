@@ -148,6 +148,8 @@ export interface DossierParams {
   output_format?: OutputFormat;
   picos?: PicoDefinition[]; // JCA: list of PICOs. If omitted, single default PICO is generated.
   project?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rob_results?: any;
 }
 
 export interface ToolResult {

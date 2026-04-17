@@ -2,6 +2,14 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v0.9.5 (2026-04-16)
+
+### Added
+- **`risk_of_bias` tool** (15th tool) — structured risk of bias assessment using auto-detected Cochrane instruments: RoB 2 for RCTs (5 domains), ROBINS-I for observational studies (7 domains), AMSTAR-2 for systematic reviews (16 items). Instrument selected automatically from `study_type`; override with `instrument` param. Returns per-study domain judgments (Low / High / Unclear / Some concerns) plus a GRADE Risk of Bias summary object (`rob_judgment`, `downgrade`, `rationale`, `overall_certainty_start`).
+- **`hta_dossier_prep` GRADE integration** — new `rob_results` parameter accepts output from `risk_of_bias`. When provided, the GRADE table uses the structured RoB judgment instead of the previous heuristic estimate. GRADE table note now indicates which source was used. Backward-compatible: falls back to heuristic when `rob_results` is omitted.
+- **System prompt pipeline rule** — Claude now calls `risk_of_bias` after `screen_abstracts` and passes `rob_results` to `hta_dossier_prep` automatically in the standard HEOR workflow.
+- **29 new tests** covering risk_of_bias (23) and hta_dossier_prep rob_results integration (6). 289 tests total, 72 suites, all passing.
+
 ## v0.9.4 (2026-04-16)
 
 ### Added

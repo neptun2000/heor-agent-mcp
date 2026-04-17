@@ -1,8 +1,8 @@
 {
   "serverInfo": {
     "name": "heor-agent-mcp",
-    "version": "0.9.4",
-    "description": "AI-powered Health Economics and Outcomes Research (HEOR) MCP server. 14 tools for literature search (41 data sources), cost-effectiveness modeling (Markov/PartSA with PSA/EVPPI/scenarios), budget impact analysis, abstract screening, survival curve fitting, indirect comparisons (Bucher/NMA/MAIC/STC), HTA dossier prep (NICE/EMA/FDA/IQWiG/HAS/EU JCA) with auto-GRADE."
+    "version": "0.9.5",
+    "description": "AI-powered Health Economics and Outcomes Research (HEOR) MCP server. 15 tools for literature search (41 data sources), risk of bias assessment (RoB 2/ROBINS-I/AMSTAR-2 with GRADE integration), cost-effectiveness modeling (Markov/PartSA with PSA/EVPPI/scenarios), budget impact analysis, abstract screening, survival curve fitting, indirect comparisons (Bucher/NMA/MAIC/STC), HTA dossier prep (NICE/EMA/FDA/IQWiG/HAS/EU JCA) with auto-GRADE."
   },
   "authentication": {
     "required": false,
@@ -27,7 +27,8 @@
     { "name": "survival_fitting", "description": "Fit 5 parametric distributions (Exp/Weibull/Log-logistic/Log-normal/Gompertz) to KM data with AIC/BIC (NICE DSU TSD 14)." },
     { "name": "cost_effectiveness_model", "description": "Markov/PartSA with PSA, OWSA, CEAC, EVPI, EVPPI, scenario analysis. Outputs text/JSON/DOCX/XLSX." },
     { "name": "budget_impact_model", "description": "ISPOR-compliant BIA with market share uptake, population growth, treatment displacement." },
-    { "name": "hta_dossier_prep", "description": "NICE STA, EMA, FDA, IQWiG, HAS, EU JCA templates with auto-GRADE evidence quality tables." },
+    { "name": "risk_of_bias", "description": "Cochrane RoB 2 (RCTs), ROBINS-I (observational), AMSTAR-2 (systematic reviews). Auto-detects instrument from study_type. Returns GRADE Risk of Bias domain summary to pass to hta_dossier_prep." },
+    { "name": "hta_dossier_prep", "description": "NICE STA, EMA, FDA, IQWiG, HAS, EU JCA templates with auto-GRADE evidence quality tables. Accepts rob_results from risk_of_bias for structured RoB domain." },
     { "name": "validate_links", "description": "HTTP validation of URLs to prevent broken citation links." },
     { "name": "project_create", "description": "Initialize persistent project workspace at ~/.heor-agent/projects/." },
     { "name": "knowledge_search", "description": "Full-text search across project raw/ and wiki/." },

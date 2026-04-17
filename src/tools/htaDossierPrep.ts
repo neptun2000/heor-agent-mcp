@@ -32,6 +32,7 @@ const DossierSchema = z.object({
     .optional(),
   output_format: z.enum(["text", "json", "docx"]).optional(),
   project: z.string().optional(),
+  rob_results: z.any().optional(),
 });
 import {
   createAuditRecord,
@@ -128,9 +129,21 @@ const METHODOLOGY_BY_BODY: Record<string, string> = {
  *
  * Uses study type counts and basic heuristics from the evidence set.
  */
+interface RobResultsSummary {
+  rob_judgment: string;
+  downgrade: boolean;
+  rationale: string;
+}
+
+interface RobResults {
+  summary: RobResultsSummary;
+  overall_certainty_start: "High" | "Low";
+}
+
 function generateGradeTable(
   evidence: LiteratureResult[],
   outcomes: string[],
+  robResults?: RobResults,
 ): string {
   if (evidence.length === 0) return "";
 
@@ -174,8 +187,12 @@ function generateGradeTable(
     );
     const nRelevant = relevant.length;
 
-    // Risk of bias
-    const rob = hasRCTs || hasMAs ? "Low" : "High";
+    // Risk of bias — use structured assessment when available, else heuristic
+    const rob = robResults
+      ? robResults.summary.rob_judgment
+      : hasRCTs || hasMAs
+        ? "Low"
+        : "High";
 
     // Inconsistency: if multiple studies, assume some inconsistency possible
     const inconsistency =
@@ -199,7 +216,13 @@ function generateGradeTable(
     if (imprecision === "Serious") downgrades++;
     if (pub_bias === "Suspected") downgrades++;
 
-    const baseLevel = hasRCTs ? 4 : 2; // High=4, Low=2
+    const baseLevel = robResults
+      ? robResults.overall_certainty_start === "High"
+        ? 4
+        : 2
+      : hasRCTs
+        ? 4
+        : 2; // High=4, Low=2
     const finalLevel = Math.max(1, baseLevel - downgrades);
     const certainty =
       finalLevel >= 4
@@ -266,8 +289,11 @@ function generateGradeTable(
   }
 
   lines.push(``);
+  const robSource = robResults
+    ? "structured Risk of Bias assessment (RoB 2/ROBINS-I/AMSTAR-2)"
+    : "study counts and types (heuristic — run `risk_of_bias` tool for structured assessment)";
   lines.push(
-    `> **Note:** This is an automated GRADE assessment based on study counts and types. A definitive GRADE evaluation requires clinical expert judgment on each domain. See [GRADE Handbook](https://gdt.gradepro.org/app/handbook/handbook.html).`,
+    `> **Note:** RoB domain sourced from ${robSource}. All other domains are automated estimates. A definitive GRADE evaluation requires clinical expert judgment. See [GRADE Handbook](https://gdt.gradepro.org/app/handbook/handbook.html).`,
   );
   lines.push(``);
 
@@ -637,6 +663,7 @@ export async function handleHtaDossierPrep(
     const gradeTable = generateGradeTable(
       params.evidence_summary as LiteratureResult[],
       [],
+      params.rob_results as RobResults | undefined,
     );
     if (gradeTable) {
       lines.push(gradeTable);
@@ -772,6 +799,10 @@ export const htaDossierPrepToolSchema = {
         type: "string",
         description:
           "Project ID for knowledge base persistence. When set, dossier draft is saved to ~/.heor-agent/projects/{project}/raw/dossiers/",
+      },
+      rob_results: {
+        description:
+          "Output from the risk_of_bias tool. When provided, the GRADE Risk of Bias domain uses the structured judgment (rob_judgment, downgrade, rationale) instead of a heuristic estimate.",
       },
     },
     required: ["hta_body", "submission_type", "drug_name", "indication"],

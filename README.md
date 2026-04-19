@@ -6,7 +6,7 @@
 
 **AI-powered Health Economics and Outcomes Research (HEOR) agent as a Model Context Protocol server.**
 
-Automates literature review across 41 data sources, risk of bias assessment (RoB 2 / ROBINS-I / AMSTAR-2), state-of-the-art cost-effectiveness modelling, HTA dossier preparation for NICE / EMA / FDA / IQWiG / HAS / EU JCA, and a persistent project knowledge base — all callable as MCP tools from Claude.ai, Claude Code, and any MCP-compatible host.
+Automates literature review across 42 data sources, risk of bias assessment (RoB 2 / ROBINS-I / AMSTAR-2), state-of-the-art cost-effectiveness modelling, HTA dossier preparation for NICE / EMA / FDA / IQWiG / HAS / EU JCA, and a persistent project knowledge base — all callable as MCP tools from Claude.ai, Claude Code, and any MCP-compatible host.
 
 Built for pharmaceutical, biotech, CRO, and medical affairs teams who need rigorous, auditable HEOR workflows without building infrastructure from scratch.
 
@@ -49,7 +49,7 @@ Add to your MCP configuration:
 
 | Tool | Purpose |
 |------|---------|
-| `literature_search` | Search 41 data sources with a full PRISMA-style audit trail |
+| `literature_search` | Search 42 data sources with a full PRISMA-style audit trail |
 | `screen_abstracts` | PICO-based relevance scoring and study design classification |
 | `risk_of_bias` | Cochrane RoB 2 / ROBINS-I / AMSTAR-2 with GRADE RoB domain summary |
 | `cost_effectiveness_model` | Markov / PartSA / decision-tree CEA with PSA, OWSA, CEAC, EVPI |
@@ -61,7 +61,7 @@ Add to your MCP configuration:
 
 ### `literature_search`
 
-Searches across 41 sources in parallel. Every call returns a **source selection table** showing which of the 41 sources were used and why — essential for HTA audit trails.
+Searches across 42 sources in parallel. Every call returns a **source selection table** showing which of the 42 sources were used and why — essential for HTA audit trails.
 
 **Example call:**
 ```json
@@ -197,15 +197,16 @@ This single prompt exercises: `project_create` → `literature_search` → `scre
 
 ## Data Sources
 
-**41 sources across 9 categories.** Every `literature_search` call includes a source selection table showing used/not-used status and reason for each.
+**42 sources across 9 categories.** Every `literature_search` call includes a source selection table showing used/not-used status and reason for each.
 
 <details>
-<summary><b>Biomedical & Clinical Trials (4)</b></summary>
+<summary><b>Biomedical & Clinical Trials (5)</b></summary>
 
 - **PubMed** — 35M+ biomedical citations (NCBI E-utilities)
 - **ClinicalTrials.gov** — NIH/NLM trial registry (CT.gov v2 API)
 - **bioRxiv / medRxiv** — Life sciences and medical preprints
 - **ChEMBL** — Drug bioactivity, mechanisms, ADMET (EMBL-EBI)
+- **Wiley Online Library** — Pharmacoeconomics, Health Economics, Journal of Medical Economics, Value in Health (CrossRef, ~77% abstract coverage, no key required)
 </details>
 
 <details>
@@ -292,7 +293,7 @@ DOCX files are saved to `~/.heor-agent/projects/{project}/reports/` (when a proj
 
 Every tool call returns a full audit record:
 
-- **Source selection table** — all 41 sources with used/not-used and reason
+- **Source selection table** — all 42 sources with used/not-used and reason
 - **Sources queried** — queries sent, response counts, status, latency
 - **Inclusions / exclusions** — counts with reasons
 - **Methodology** — PRISMA-style for literature, ISPOR/NICE for economics
@@ -400,7 +401,7 @@ npm run dev       # Run with tsx (no build step)
 │  │ 7 MCP tools (Zod-validated)          │ │
 │  ├──────────────────────────────────────┤ │
 │  │ DirectProvider (default)             │ │
-│  │   ├─ 41 source fetchers              │ │
+│  │   ├─ 42 source fetchers              │ │
 │  │   ├─ Audit builder + PRISMA trail    │ │
 │  │   ├─ Markov / PartSA economic models │ │
 │  │   ├─ Markdown + DOCX formatters      │ │

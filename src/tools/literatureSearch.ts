@@ -22,6 +22,9 @@ const SOURCE_ALIASES: Record<string, string> = {
   nadac: "cms_nadac",
   nhs: "nhs_costs",
   pbs: "pbs_schedule",
+  "wiley online library": "wiley",
+  pharmacoeconomics: "wiley",
+  "health economics": "wiley",
 };
 
 const LiteratureSearchSchema = z.object({
@@ -70,6 +73,7 @@ const LiteratureSearchSchema = z.object({
         "tlv",
         "inesss",
         "ispor",
+        "wiley",
       ]),
     )
     .optional(),

@@ -316,6 +316,13 @@ export const SOURCE_REGISTRY: SourceMeta[] = [
     category: "other",
     description: "HEOR methodology and conference abstracts",
   },
+  {
+    id: "wiley",
+    name: "Wiley Online Library",
+    category: "biomedical",
+    description:
+      "Pharmacoeconomics, Health Economics, Journal of Medical Economics, Value in Health (via CrossRef — ~77% abstract coverage)",
+  },
 ];
 
 export interface SourceSelectionEntry {

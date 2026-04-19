@@ -2,6 +2,11 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v0.9.6 (2026-04-19)
+
+### Added
+- **Wiley Online Library source** (42nd data source) — CrossRef-based free access to Wiley HEOR journals: Pharmacoeconomics, Health Economics, Journal of Medical Economics, Value in Health. ~77% abstract coverage for recent articles (Wiley joined I4OA 2022). No API key required. Source aliases: `pharmacoeconomics`, `health economics`. Included in default source set.
+
 ## v0.9.5 (2026-04-16)
 
 ### Added

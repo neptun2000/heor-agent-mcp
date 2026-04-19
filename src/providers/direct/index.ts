@@ -56,6 +56,7 @@ import { fetchAifa } from "./aifa.js";
 import { fetchTlv } from "./tlv.js";
 import { fetchInesss } from "./inesss.js";
 import { fetchIspor } from "./ispor.js";
+import { fetchWiley } from "./wiley.js";
 import { getProxyUrl } from "./proxyClient.js";
 import { resultsToMarkdown } from "../../formatters/markdown.js";
 import { resultsToDocx } from "../../formatters/docx.js";
@@ -66,7 +67,13 @@ import {
 import { buildSourceSelectionTable } from "../../sources/registry.js";
 
 function getAllSources(): DataSource[] {
-  const base: DataSource[] = ["pubmed", "clinicaltrials", "biorxiv", "chembl"];
+  const base: DataSource[] = [
+    "pubmed",
+    "clinicaltrials",
+    "biorxiv",
+    "chembl",
+    "wiley",
+  ];
   if (process.env.ELSEVIER_API_KEY) base.push("embase");
   return base;
 }
@@ -116,6 +123,7 @@ const FETCHERS: Record<
   tlv: fetchTlv,
   inesss: fetchInesss,
   ispor: fetchIspor,
+  wiley: fetchWiley,
 };
 
 export class DirectProvider implements IProvider {

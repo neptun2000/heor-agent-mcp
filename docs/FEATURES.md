@@ -1,6 +1,6 @@
 # HEORAgent MCP Server — Features
 
-15 tools, 41 data sources, complete HEOR workflow automation.
+15 tools, 42 data sources, complete HEOR workflow automation.
 
 ## Core Workflow Tools
 
@@ -49,7 +49,7 @@
 
 | Category | Sources |
 |----------|---------|
-| Biomedical | PubMed, ClinicalTrials.gov, bioRxiv/medRxiv, ChEMBL |
+| Biomedical | PubMed, ClinicalTrials.gov, bioRxiv/medRxiv, ChEMBL, Wiley Online Library (Pharmacoeconomics, Health Economics, JME, Value in Health) |
 | Epidemiology | WHO GHO, World Bank, OECD Health, IHME GBD, All of Us |
 | FDA Regulatory | Orange Book, Purple Book |
 | Enterprise (API key) | Embase, ScienceDirect, Cochrane, Citeline, Pharmapendium, Cortellis, Google Scholar |

@@ -50,7 +50,8 @@ export type DataSource =
   | "aifa"
   | "tlv"
   | "inesss"
-  | "ispor";
+  | "ispor"
+  | "wiley";
 export type StudyType = "rct" | "meta_analysis" | "observational" | "review";
 export type TimeHorizon = "lifetime" | "5yr" | "10yr" | number;
 export type Perspective = "nhs" | "us_payer" | "societal";

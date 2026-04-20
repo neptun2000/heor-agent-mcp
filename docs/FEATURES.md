@@ -6,7 +6,7 @@
 
 | Tool | What it does | Why it matters |
 |------|-------------|----------------|
-| `literature_search` | Search 41 sources with PRISMA audit trail | Weeks of manual literature review compressed to minutes |
+| `literature_search` | Search 42 sources with PRISMA audit trail | Weeks of manual literature review compressed to minutes |
 | `screen_abstracts` | PICO-based relevance scoring + study design classification | Filters noise from search results per Cochrane Handbook Ch. 4 |
 | `risk_of_bias` | Cochrane RoB 2 (RCTs), ROBINS-I (observational), AMSTAR-2 (SRs) with GRADE summary | Replaces heuristic RoB estimates in dossier GRADE tables with structured domain judgments |
 | `evidence_network` | Build treatment comparison network, assess NMA feasibility | Essential prerequisite for indirect comparisons |
@@ -45,7 +45,7 @@
 | ROBINS-I | Sterne et al. 2016 (BMJ) |
 | AMSTAR-2 | Shea et al. 2017 (BMJ) |
 
-## Data Sources (41)
+## Data Sources (42)
 
 | Category | Sources |
 |----------|---------|
@@ -70,7 +70,7 @@
 ## Status: What's Production-Ready vs Experimental
 
 **Production-ready:**
-- Literature search (41 sources)
+- Literature search (42 sources)
 - Project knowledge base
 - HTA dossier prep (templates + auto-GRADE from literature)
 - Budget impact model

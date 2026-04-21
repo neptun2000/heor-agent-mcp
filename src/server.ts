@@ -318,25 +318,32 @@ async function runStdio() {
 
 // --- Session management with TTL and limits ---
 
-const MAX_SESSIONS = parseInt(process.env.MCP_MAX_SESSIONS ?? "100", 10);
-const SESSION_TTL_MS = parseInt(
-  process.env.MCP_SESSION_TTL_MS ?? String(30 * 60 * 1000),
-  10,
-); // 30 min default
+const MAX_SESSIONS = Math.max(
+  1,
+  parseInt(process.env.MCP_MAX_SESSIONS ?? "100", 10) || 100,
+);
+const SESSION_TTL_MS = Math.max(
+  60_000,
+  parseInt(process.env.MCP_SESSION_TTL_MS ?? String(30 * 60 * 1000), 10) ||
+    1_800_000,
+); // 30 min default, minimum 60s
+
+const SESSION_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 interface ManagedSession {
   transport: StreamableHTTPServerTransport;
   lastActivity: number;
 }
 
-const sessions: Record<string, ManagedSession> = {};
+const sessions = new Map<string, ManagedSession>();
 
 function evictStaleSessions(): void {
   const now = Date.now();
-  for (const [id, session] of Object.entries(sessions)) {
+  for (const [id, session] of sessions) {
     if (now - session.lastActivity > SESSION_TTL_MS) {
       session.transport.close?.();
-      delete sessions[id];
+      sessions.delete(id);
       trackSession("session_end", id, { reason: "ttl_eviction" });
     }
   }
@@ -429,13 +436,32 @@ async function runHttp(port: number) {
         }
       }
 
-      const sessionId = req.headers["mcp-session-id"] as string | undefined;
+      const rawSessionId = req.headers["mcp-session-id"] as string | undefined;
+      const sessionId =
+        rawSessionId && SESSION_ID_RE.test(rawSessionId)
+          ? rawSessionId
+          : undefined;
+      if (rawSessionId && !sessionId) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid session ID format" }));
+        return;
+      }
 
       if (req.method === "POST") {
-        // Parse body
+        // Parse body with size limit
+        const MAX_BODY_BYTES = 10 * 1024 * 1024; // 10 MB
         const chunks: Buffer[] = [];
+        let totalBytes = 0;
         for await (const chunk of req) {
-          chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+          const buf = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+          totalBytes += buf.length;
+          if (totalBytes > MAX_BODY_BYTES) {
+            res.writeHead(413, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "Request body too large" }));
+            req.destroy();
+            return;
+          }
+          chunks.push(buf);
         }
 
         let body;
@@ -454,13 +480,14 @@ async function runHttp(port: number) {
 
         let transport: StreamableHTTPServerTransport;
 
-        if (sessionId && sessions[sessionId]) {
-          sessions[sessionId].lastActivity = Date.now();
-          transport = sessions[sessionId].transport;
+        if (sessionId && sessions.has(sessionId)) {
+          const session = sessions.get(sessionId)!;
+          session.lastActivity = Date.now();
+          transport = session.transport;
         } else if (!sessionId && body?.method === "initialize") {
           // Enforce session limit
           evictStaleSessions();
-          if (Object.keys(sessions).length >= MAX_SESSIONS) {
+          if (sessions.size >= MAX_SESSIONS) {
             res.writeHead(503, { "Content-Type": "application/json" });
             res.end(
               JSON.stringify({
@@ -475,17 +502,17 @@ async function runHttp(port: number) {
           transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
             onsessioninitialized: (id) => {
-              sessions[id] = { transport, lastActivity: Date.now() };
+              sessions.set(id, { transport, lastActivity: Date.now() });
               trackSession("session_start", id);
             },
           });
           transport.onclose = () => {
-            const id = Object.entries(sessions).find(
-              ([, s]) => s.transport === transport,
-            )?.[0];
-            if (id) {
-              trackSession("session_end", id);
-              delete sessions[id];
+            for (const [id, s] of sessions) {
+              if (s.transport === transport) {
+                trackSession("session_end", id);
+                sessions.delete(id);
+                break;
+              }
             }
           };
           await server.connect(transport);
@@ -500,20 +527,21 @@ async function runHttp(port: number) {
       }
 
       if (req.method === "GET") {
-        if (!sessionId || !sessions[sessionId]) {
+        if (!sessionId || !sessions.has(sessionId)) {
           res.writeHead(400, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: "Invalid session" }));
           return;
         }
-        sessions[sessionId].lastActivity = Date.now();
-        await sessions[sessionId].transport.handleRequest(req, res);
+        const session = sessions.get(sessionId)!;
+        session.lastActivity = Date.now();
+        await session.transport.handleRequest(req, res);
         return;
       }
 
       if (req.method === "DELETE") {
-        if (sessionId && sessions[sessionId]) {
-          await sessions[sessionId].transport.close();
-          delete sessions[sessionId];
+        if (sessionId && sessions.has(sessionId)) {
+          await sessions.get(sessionId)!.transport.close();
+          sessions.delete(sessionId);
         }
         res.writeHead(200);
         res.end();

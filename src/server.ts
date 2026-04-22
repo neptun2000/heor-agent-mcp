@@ -79,6 +79,10 @@ import {
   handleUtilityValueSet,
   utilityValueSetToolSchema,
 } from "./tools/utilityValueSet.js";
+import {
+  handleItcFeasibility,
+  itcFeasibilityToolSchema,
+} from "./tools/itcFeasibility.js";
 import { randomUUID } from "node:crypto";
 import { trackToolCall, trackSession, shutdownAnalytics } from "./analytics.js";
 import { createServer } from "node:http";
@@ -222,6 +226,7 @@ function createMcpServer(): Server {
       riskOfBiasToolSchema,
       validateLinksToolSchema,
       utilityValueSetToolSchema,
+      itcFeasibilityToolSchema,
     ],
   }));
 
@@ -279,6 +284,9 @@ function createMcpServer(): Server {
           break;
         case "utility_value_set":
           result = await handleUtilityValueSet(args);
+          break;
+        case "itc_feasibility":
+          result = await handleItcFeasibility(args);
           break;
         default:
           trackToolCall(name, Date.now() - callStart, "error");

@@ -46,6 +46,48 @@ describe("handleCostEffectivenessModel", () => {
     expect(result.audit.assumptions.length).toBeGreaterThan(0);
   });
 
+  describe("summary_metric (evLYG)", () => {
+    it("does not add alternative metrics section by default", async () => {
+      const result = await handleCostEffectivenessModel(validParams);
+      expect(result.content as string).not.toContain(
+        "Alternative Summary Metric",
+      );
+    });
+
+    it("adds evLYG section when summary_metric='evlyg'", async () => {
+      const result = await handleCostEffectivenessModel({
+        ...validParams,
+        summary_metric: "evlyg",
+      });
+      const text = result.content as string;
+      expect(text).toContain("Alternative Summary Metric");
+      expect(text).toContain("evLYG");
+      expect(text).toContain("CMS");
+      expect(text).toContain("IRA");
+      expect(text).toContain("Primary metric for this analysis: evLYG");
+    });
+
+    it("reports both QALY and evLYG when summary_metric='both'", async () => {
+      const result = await handleCostEffectivenessModel({
+        ...validParams,
+        summary_metric: "both",
+      });
+      const text = result.content as string;
+      expect(text).toContain("Alternative Summary Metric");
+      expect(text).toContain("evLYG");
+      expect(text).toContain("QALY"); // from main section
+      expect(text).toContain("Both QALY and evLYG");
+    });
+
+    it("cites §1194(e)(2)", async () => {
+      const result = await handleCostEffectivenessModel({
+        ...validParams,
+        summary_metric: "evlyg",
+      });
+      expect(result.content as string).toContain("1194");
+    });
+  });
+
   it("ICER direction is correct when intervention costs more than comparator", async () => {
     // drug_cost_annual=800 > comparator_cost_annual=400, so delta_cost must be > 0
     // With positive efficacy_delta, intervention also has better QALYs → ICER > 0

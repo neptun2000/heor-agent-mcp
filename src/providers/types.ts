@@ -123,6 +123,10 @@ export interface CEModelParams {
 
   project?: string;
 
+  // Summary metric for the ICER numerator. 'qaly' (default), 'evlyg'
+  // (equal value life-years gained — CMS IRA-compatible), or 'both'.
+  summary_metric?: "qaly" | "evlyg" | "both";
+
   // PartSA fields (used when model_type === "partsa")
   survival_inputs?: {
     os_median_months?: number;

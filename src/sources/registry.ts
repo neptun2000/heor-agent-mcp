@@ -323,6 +323,20 @@ export const SOURCE_REGISTRY: SourceMeta[] = [
     description:
       "Pharmacoeconomics, Health Economics, Journal of Medical Economics, Value in Health (via CrossRef — ~77% abstract coverage)",
   },
+  {
+    id: "ohe",
+    name: "OHE (Office of Health Economics)",
+    category: "other",
+    description:
+      "World's oldest independent health economics research organisation (UK). Publishes HEOR methodology reports, value set analyses, HTA policy research.",
+  },
+  {
+    id: "euroqol",
+    name: "EuroQol Group",
+    category: "other",
+    description:
+      "Official publisher of the EQ-5D instrument and country-specific value sets. Reference registry for EQ-5D-3L and EQ-5D-5L value sets worldwide.",
+  },
 ];
 
 export interface SourceSelectionEntry {

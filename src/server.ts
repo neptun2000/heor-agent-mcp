@@ -75,6 +75,10 @@ import {
   handleValidateLinks,
   validateLinksToolSchema,
 } from "./tools/validateLinks.js";
+import {
+  handleUtilityValueSet,
+  utilityValueSetToolSchema,
+} from "./tools/utilityValueSet.js";
 import { randomUUID } from "node:crypto";
 import { trackToolCall, trackSession, shutdownAnalytics } from "./analytics.js";
 import { createServer } from "node:http";
@@ -217,6 +221,7 @@ function createMcpServer(): Server {
       screenAbstractsToolSchema,
       riskOfBiasToolSchema,
       validateLinksToolSchema,
+      utilityValueSetToolSchema,
     ],
   }));
 
@@ -271,6 +276,9 @@ function createMcpServer(): Server {
           break;
         case "validate_links":
           result = await handleValidateLinks(args);
+          break;
+        case "utility_value_set":
+          result = await handleUtilityValueSet(args);
           break;
         default:
           trackToolCall(name, Date.now() - callStart, "error");

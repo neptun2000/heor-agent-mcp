@@ -2,6 +2,34 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v0.9.8 (2026-04-22) — ITC methods, evLYG, CMS IRA context
+
+### Added
+- **Heterogeneity statistics** in `indirect_comparison` NMA output — I² statistic, Cochran Q, degrees of freedom, p-value, τ², and interpretation band (Cochrane Handbook: 0–40% might not be important / 30–60% moderate / 50–90% substantial / 75–100% considerable).
+- **`itc_feasibility` tool** (17th tool) — walks through the 3 ITC assumptions (exchangeability, homogeneity, consistency) and recommends a method (Bucher / NMA / anchored MAIC / unanchored MAIC / ML-NMR required / infeasible). Cites Cope 2014 (BMC Med), NICE DSU TSD 18 (Phillippo), Signorovitch 2023 (J Dermatol Treatment), Cochrane Handbook Ch 11.
+- **evLYG (Equal Value Life-Years Gained)** as optional summary metric in `cost_effectiveness_model` — CMS IRA-compatible alternative to QALYs. Controlled via `summary_metric` parameter: `"qaly"` (default), `"evlyg"`, or `"both"`.
+- **System prompt** updated with CMS IRA QALY prohibition (§1194(e)(2)) and AHA/ACC 2025 $120K/QALY threshold for cardiovascular interventions.
+
+### Security
+- **`.gitignore` hardening** — added defense-in-depth block patterns for common confidential client filename markers.
+- **Provider comments sanitised** — removed specific client references from enterprise fetcher comments (pharmapendium, citeline, cochrane, cortellis) and generalised to "institutional/enterprise proxy".
+- **Pre-commit hook** installed (`.git/hooks/pre-commit`) that blocks commits containing confidential client name keywords.
+
+## v0.9.7 (2026-04-22) — UK EQ-5D-5L transition
+
+### Added
+- **`utility_value_set` tool** (16th tool) — reference data and impact estimator for the new UK EQ-5D-5L value set (NICE consultation 2026-04-15 to 2026-05-13). Three actions:
+  - `lookup` — full characteristics of UK 3L, England 5L, UK 5L (new 2026), or DSU mapping
+  - `compare` — side-by-side comparison of all four value sets
+  - `estimate_impact` — projects ICER/QALY change per Biz, Hernández Alava, Wailoo (2026) *Value in Health* (forthcoming).
+- **OHE and EuroQol data sources** (43rd and 44th) — curated pointers to Office of Health Economics publications (ohe.org) and EuroQol Group resources (euroqol.org). Category: `other`. No API key required.
+- **`htaDossierPrep` UK 5L transition warning** — when `hta_body="nice"`, dossier draft now appends a "UK EQ-5D-5L Value Set Transition" section flagging consultation dates and Biz et al. 2026 impact estimates by indication type.
+- **`cost_effectiveness_model` description** updated with value-set-dependency note pointing to `utility_value_set`.
+- **15 new tests** covering the `utility_value_set` tool; 6 for OHE + EuroQol fetchers.
+
+### Source
+Implements design log 09 — based on public OHE / EuroQol materials + Biz, Hernández Alava, Wailoo (2026). *Switching from EQ-5D-3L to EQ-5D-5L in England: the impact in NICE technology appraisals.* Value in Health (forthcoming).
+
 ## v0.9.6 (2026-04-19)
 
 ### Added

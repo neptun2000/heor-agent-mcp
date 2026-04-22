@@ -51,7 +51,9 @@ export type DataSource =
   | "tlv"
   | "inesss"
   | "ispor"
-  | "wiley";
+  | "wiley"
+  | "ohe"
+  | "euroqol";
 export type StudyType = "rct" | "meta_analysis" | "observational" | "review";
 export type TimeHorizon = "lifetime" | "5yr" | "10yr" | number;
 export type Perspective = "nhs" | "us_payer" | "societal";

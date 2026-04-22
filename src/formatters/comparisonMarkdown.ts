@@ -10,9 +10,7 @@ function formatP(p: number): string {
   return formatNum(p, 3);
 }
 
-export function comparisonToMarkdown(
-  result: IndirectComparisonResult,
-): string {
+export function comparisonToMarkdown(result: IndirectComparisonResult): string {
   const lines: string[] = [];
 
   lines.push("## Indirect Treatment Comparisons");
@@ -25,9 +23,7 @@ export function comparisonToMarkdown(
         ? "Frequentist Network Meta-Analysis"
         : "Mixed Methods";
   lines.push(`**Method:** ${methodLabel}`);
-  lines.push(
-    `**Comparisons:** ${result.estimates.length}`,
-  );
+  lines.push(`**Comparisons:** ${result.estimates.length}`);
   lines.push("");
 
   if (result.estimates.length === 0) {
@@ -51,26 +47,49 @@ export function comparisonToMarkdown(
     const measure = estimates[0].measure;
     const label = measure === "MD" ? "MD" : measure;
 
-    lines.push(
-      `| Comparison | ${label} | 95% CI | p-value | Via | Method |`,
-    );
-    lines.push(
-      "|------------|---------|--------|---------|-----|--------|",
-    );
+    lines.push(`| Comparison | ${label} | 95% CI | p-value | Via | Method |`);
+    lines.push("|------------|---------|--------|---------|-----|--------|");
 
     for (const e of estimates) {
       const est =
-        measure === "MD"
-          ? formatNum(e.estimate)
-          : formatNum(e.estimate);
+        measure === "MD" ? formatNum(e.estimate) : formatNum(e.estimate);
       const ci = `[${formatNum(e.ci_lower)}, ${formatNum(e.ci_upper)}]`;
       const p = formatP(e.p_value);
       const via = e.commonComparator;
-      const method =
-        e.method === "bucher" ? "Bucher" : "Freq. NMA";
+      const method = e.method === "bucher" ? "Bucher" : "Freq. NMA";
 
       lines.push(
         `| ${e.intervention} vs ${e.comparator} | ${est} | ${ci} | ${p} | ${via} | ${method} |`,
+      );
+    }
+    lines.push("");
+  }
+
+  // Heterogeneity statistics (I², Cochran Q)
+  if (result.heterogeneity && result.heterogeneity.length > 0) {
+    lines.push("### Heterogeneity Statistics");
+    lines.push(
+      `Per-comparison heterogeneity across trials of the same pair/outcome/measure. Interpretation bands per Cochrane Handbook Ch. 10.10.`,
+    );
+    lines.push("");
+    lines.push(
+      `| Comparison | k | Cochran Q | df | p-value | I² (%) | τ² | Interpretation |`,
+    );
+    lines.push(`|---|---:|---:|---:|---:|---:|---:|---|`);
+    for (const h of result.heterogeneity) {
+      lines.push(
+        `| ${h.comparison_label} | ${h.n_studies} | ${h.cochran_q.toFixed(2)} | ${h.df} | ${h.p_value.toFixed(4)} | ${h.i_squared_pct.toFixed(1)} | ${h.tau_squared.toFixed(4)} | ${h.interpretation_band} |`,
+      );
+    }
+    const anyHigh = result.heterogeneity.some(
+      (h) =>
+        h.interpretation === "substantial" ||
+        h.interpretation === "considerable",
+    );
+    if (anyHigh) {
+      lines.push("");
+      lines.push(
+        `> ⚠️ Substantial or considerable heterogeneity detected in at least one comparison. Consider subgroup analysis, meta-regression, or random-effects pooling. Investigate effect modifiers via \`itc_feasibility\`.`,
       );
     }
     lines.push("");

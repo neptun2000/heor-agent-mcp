@@ -21,7 +21,7 @@ export async function fetchCochrane(
   query: string,
   maxResults: number,
 ): Promise<LiteratureResult[]> {
-  // Try proxy first (user has Teva access via proxy)
+  // Try institutional/enterprise proxy first if configured
   if (getProxyUrl()) {
     const proxyResults = await fetchViaProxy("cochrane", query, maxResults);
     if (proxyResults.length > 0) return proxyResults;

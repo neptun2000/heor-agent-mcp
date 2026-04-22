@@ -83,11 +83,28 @@ export interface IndirectEstimate {
   pooled_bc: PooledEstimate;
 }
 
+export interface HeterogeneitySummary {
+  comparison_label: string;
+  n_studies: number;
+  cochran_q: number;
+  df: number;
+  p_value: number;
+  i_squared_pct: number;
+  tau_squared: number;
+  interpretation:
+    | "might_not_be_important"
+    | "moderate"
+    | "substantial"
+    | "considerable";
+  interpretation_band: string;
+}
+
 export interface IndirectComparisonResult {
   estimates: IndirectEstimate[];
   method: "bucher" | "frequentist_nma" | "mixed";
   warnings: string[];
   limitations: string[];
+  heterogeneity?: HeterogeneitySummary[];
 }
 
 export interface IndirectPath {

@@ -3,10 +3,12 @@ import type { ToolResult } from "../providers/types.js";
 import type {
   DirectComparison,
   IndirectComparisonResult,
+  HeterogeneitySummary,
 } from "../network/types.js";
 import { findIndirectPaths } from "../network/pathfinder.js";
 import { computeIndirectComparison } from "../network/bucher.js";
 import { frequentistNMA } from "../network/frequentistNma.js";
+import { computeHeterogeneity } from "../network/heterogeneity.js";
 import { comparisonToMarkdown } from "../formatters/comparisonMarkdown.js";
 import { createAuditRecord, setMethodology } from "../audit/builder.js";
 
@@ -165,11 +167,51 @@ export async function handleIndirectComparison(
     methodUsed = "mixed";
   }
 
+  // Per-comparison heterogeneity across studies sharing the same edge + outcome + measure
+  const heterogeneity: HeterogeneitySummary[] = [];
+  const groupMap = new Map<string, DirectComparison[]>();
+  for (const c of comparisons) {
+    const key = [c.intervention.toLowerCase(), c.comparator.toLowerCase()]
+      .sort()
+      .concat([c.outcome, c.measure])
+      .join("||");
+    const arr = groupMap.get(key) ?? [];
+    arr.push(c);
+    groupMap.set(key, arr);
+  }
+  for (const [key, group] of groupMap) {
+    if (group.length < 2) continue;
+    const [, , outcome, measure] = key.split("||");
+    const effects = group.map((c) => {
+      const logScale =
+        c.measure === "OR" || c.measure === "RR" || c.measure === "HR";
+      const y = logScale ? Math.log(c.estimate) : c.estimate;
+      const se = logScale
+        ? (Math.log(c.ci_upper) - Math.log(c.ci_lower)) / (2 * 1.96)
+        : (c.ci_upper - c.ci_lower) / (2 * 1.96);
+      return { estimate: y, se: Math.max(se, 1e-9) };
+    });
+    const h = computeHeterogeneity(effects);
+    const label = `${group[0].intervention} vs ${group[0].comparator} (${outcome}, ${measure})`;
+    heterogeneity.push({
+      comparison_label: label,
+      n_studies: h.n_studies,
+      cochran_q: h.cochran_q,
+      df: h.df,
+      p_value: h.p_value,
+      i_squared_pct: h.i_squared_pct,
+      tau_squared: h.tau_squared,
+      interpretation: h.interpretation,
+      interpretation_band: h.interpretation_band,
+    });
+  }
+
   const result: IndirectComparisonResult = {
     estimates: allEstimates,
     method: methodUsed,
     warnings,
     limitations: LIMITATIONS,
+    heterogeneity: heterogeneity.length > 0 ? heterogeneity : undefined,
   };
 
   const markdown = comparisonToMarkdown(result);

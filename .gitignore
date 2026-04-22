@@ -3,3 +3,23 @@ dist/
 *.tsbuildinfo
 .vercel
 .env*.local
+
+# Defense-in-depth: block patterns of confidential client material.
+# Parent docs live outside this repo's tree anyway, but this catches
+# accidental copy/paste of named client files into heor-agent-mcp/.
+*TEVA*
+*Teva*
+*teva*
+*Evimed*
+*evimed*
+*Gunsoy*
+*gunsoy*
+*GHEVO*
+*ghevo*
+*Becaris*
+*becaris*
+*Shafrin*
+*shafrin*
+*pre-read*
+*Pre-read*
+*.pdf

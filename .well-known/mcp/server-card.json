@@ -1,8 +1,8 @@
 {
   "serverInfo": {
     "name": "heor-agent-mcp",
-    "version": "0.9.6",
-    "description": "AI-powered Health Economics and Outcomes Research (HEOR) MCP server. 15 tools for literature search (42 data sources), risk of bias assessment (RoB 2/ROBINS-I/AMSTAR-2 with GRADE integration), cost-effectiveness modeling (Markov/PartSA with PSA/EVPPI/scenarios), budget impact analysis, abstract screening, survival curve fitting, indirect comparisons (Bucher/NMA/MAIC/STC), HTA dossier prep (NICE/EMA/FDA/IQWiG/HAS/EU JCA) with auto-GRADE."
+    "version": "0.9.8",
+    "description": "AI-powered Health Economics and Outcomes Research (HEOR) MCP server. 16 tools for literature search (44 data sources incl. OHE and EuroQol), risk of bias assessment (RoB 2/ROBINS-I/AMSTAR-2 with GRADE integration), cost-effectiveness modeling (Markov/PartSA with PSA/EVPPI/scenarios), budget impact analysis, abstract screening, survival curve fitting, indirect comparisons (Bucher/NMA/MAIC/STC), HTA dossier prep (NICE/EMA/FDA/IQWiG/HAS/EU JCA) with auto-GRADE, UK EQ-5D-5L value set impact estimator."
   },
   "authentication": {
     "required": false,
@@ -33,7 +33,8 @@
     { "name": "project_create", "description": "Initialize persistent project workspace at ~/.heor-agent/projects/." },
     { "name": "knowledge_search", "description": "Full-text search across project raw/ and wiki/." },
     { "name": "knowledge_read", "description": "Read files from a project knowledge base." },
-    { "name": "knowledge_write", "description": "Write to project wiki/ (Obsidian-compatible, YAML frontmatter + wikilinks)." }
+    { "name": "knowledge_write", "description": "Write to project wiki/ (Obsidian-compatible, YAML frontmatter + wikilinks)." },
+    { "name": "utility_value_set", "description": "EQ-5D value set reference (UK 3L/England 5L/new UK 5L 2026/DSU mapping) and NICE 5L transition impact estimator. Cites Biz, Hernández Alava, Wailoo (2026) Value in Health." }
   ],
   "keywords": [
     "healthcare",
@@ -51,6 +52,9 @@
     "cost-effectiveness",
     "markov",
     "nma",
-    "maic"
+    "maic",
+    "eq-5d",
+    "qaly",
+    "utility-value-set"
   ]
 }

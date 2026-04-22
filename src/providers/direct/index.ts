@@ -57,6 +57,8 @@ import { fetchTlv } from "./tlv.js";
 import { fetchInesss } from "./inesss.js";
 import { fetchIspor } from "./ispor.js";
 import { fetchWiley } from "./wiley.js";
+import { fetchOhe } from "./ohe.js";
+import { fetchEuroqol } from "./euroqol.js";
 import { getProxyUrl } from "./proxyClient.js";
 import { resultsToMarkdown } from "../../formatters/markdown.js";
 import { resultsToDocx } from "../../formatters/docx.js";
@@ -124,6 +126,8 @@ const FETCHERS: Record<
   inesss: fetchInesss,
   ispor: fetchIspor,
   wiley: fetchWiley,
+  ohe: fetchOhe,
+  euroqol: fetchEuroqol,
 };
 
 export class DirectProvider implements IProvider {

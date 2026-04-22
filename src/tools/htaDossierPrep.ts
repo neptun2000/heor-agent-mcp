@@ -684,6 +684,37 @@ export async function handleHtaDossierPrep(
     lines.push("");
   }
 
+  if (params.hta_body === "nice") {
+    lines.push(`---`);
+    lines.push(`## ⚠️ UK EQ-5D-5L Value Set Transition (2026)`);
+    lines.push(
+      `NICE consultation on adopting the **new UK EQ-5D-5L value set** is open **2026-04-15 to 2026-05-13**. This replaces the interim DSU 3L→5L mapping algorithm.`,
+    );
+    lines.push(``);
+    lines.push(
+      `**Anticipated impact** (Biz, Hernández Alava, Wailoo 2026, *Value in Health* forthcoming — 39 decisions across 37 NICE TAs):`,
+    );
+    lines.push(``);
+    lines.push(`| Indication type | ΔQALY (median) | ΔICER (median) |`);
+    lines.push(`|---|---|---|`);
+    lines.push(
+      `| Cancer, life-extending | +13.7% | −12% (more cost-effective) |`,
+    );
+    lines.push(
+      `| Non-cancer, QoL-only (migraine, UC, atopic dermatitis, HS, plaque psoriasis) | **−37%** | **+59%** (less cost-effective) |`,
+    );
+    lines.push(`| Non-cancer, life-extending | mixed | −9.6% |`);
+    lines.push(``);
+    lines.push(
+      `**Action items:** (1) Confirm whether trial collected native EQ-5D-5L or only 3L; (2) if only 3L, check whether direct UK 5L mapping algorithm exists (DSU mapping algorithm derives 3L via indirect crosswalk, not 5L directly); (3) run utility_value_set (action="estimate_impact") with your indication type to quantify expected ICER change; (4) consider requesting existing NICE flexibilities (e.g., non-EQ-5D evidence where instrument is demonstrably inappropriate).`,
+    );
+    lines.push(``);
+    audit = addAssumption(
+      audit,
+      "UK EQ-5D-5L value set transition flagged (NICE consultation 2026-04-15 to 2026-05-13)",
+    );
+  }
+
   lines.push(auditToMarkdown(audit));
 
   const dossierTextContent = lines.join("\n");

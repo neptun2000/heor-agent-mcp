@@ -73,6 +73,12 @@ const CEModelSchema = z.object({
     .optional(),
   output_format: z.enum(["text", "json", "docx", "xlsx"]).optional(),
   project: z.string().optional(),
+  summary_metric: z
+    .enum(["qaly", "evlyg", "both"])
+    .optional()
+    .describe(
+      "Summary metric for the ICER numerator: 'qaly' (default, NICE reference case), 'evlyg' (equal value life-years gained — CMS IRA-compatible, treats every life-year as utility 1.0), or 'both' (reports both). CMS prohibits QALYs in IRA drug price negotiations (§1194(e)(2)); use 'evlyg' for those contexts.",
+    ),
 });
 import { runPartSA } from "../models/partsa.js";
 import { runPSA } from "../models/psa.js";
@@ -180,6 +186,49 @@ function buildScenarioSection(
     );
   }
 
+  lines.push(``);
+  return lines;
+}
+
+function buildAlternativeMetricsSection(
+  summary_metric: "qaly" | "evlyg" | "both" | undefined,
+  delta_cost: number,
+  incremental_lys: number,
+  evlyg_icer: number,
+  symbol: string,
+): string[] {
+  if (!summary_metric || summary_metric === "qaly") return [];
+
+  const lines: string[] = [];
+  lines.push(`### Alternative Summary Metric — evLYG`);
+  lines.push(
+    `**evLYG (Equal Value Life-Years Gained):** treats every incremental life-year as utility 1.0 regardless of health state. Used as a QALY alternative where QALYs are restricted (e.g., **CMS prohibits QALYs in Medicare IRA drug price negotiations per §1194(e)(2)**).`,
+  );
+  lines.push(``);
+  lines.push(`| Metric | Value |`);
+  lines.push(`|---|---|`);
+  lines.push(
+    `| Incremental cost | ${symbol}${Math.round(delta_cost).toLocaleString()} |`,
+  );
+  lines.push(
+    `| Incremental life-years (evLYG) | ${incremental_lys.toFixed(3)} |`,
+  );
+  const evlygStr = isFinite(evlyg_icer)
+    ? incremental_lys > 0
+      ? `${symbol}${Math.round(evlyg_icer).toLocaleString()}/LY`
+      : "N/A (no life-year gain)"
+    : "N/A";
+  lines.push(`| Cost per evLYG | ${evlygStr} |`);
+  lines.push(``);
+  if (summary_metric === "evlyg") {
+    lines.push(
+      `> Primary metric for this analysis: evLYG (QALY result shown above for reference only).`,
+    );
+  } else {
+    lines.push(
+      `> Both QALY and evLYG reported (summary_metric="both"). Choose the appropriate primary metric for your stakeholder context.`,
+    );
+  }
   lines.push(``);
   return lines;
 }
@@ -330,6 +379,13 @@ export async function handleCostEffectivenessModel(
   }
 
   const incremental_lys = intervention_lys - comparator_lys;
+
+  // evLYG (equal value life-years gained) — treats every life-year as utility 1.0.
+  // Used as a QALY alternative for CMS IRA contexts where QALYs are prohibited.
+  const evlyg_icer =
+    incremental_lys > 0
+      ? delta_cost / incremental_lys
+      : Number.POSITIVE_INFINITY;
 
   // --- PSA ---
   let psaSummary: PSASummary | undefined;
@@ -520,6 +576,13 @@ export async function handleCostEffectivenessModel(
     `| Total QALYs | ${intervention_qaly.toFixed(3)} | ${comparator_qaly.toFixed(3)} | ${delta_qaly.toFixed(3)} |`,
     `| Life Years | ${intervention_lys.toFixed(2)} | ${comparator_lys.toFixed(2)} | ${incremental_lys.toFixed(2)} |`,
     ``,
+    ...buildAlternativeMetricsSection(
+      params.summary_metric,
+      delta_cost,
+      incremental_lys,
+      evlyg_icer,
+      symbol,
+    ),
     ...psaSection,
     ...owsaSection,
     ...buildScenarioSection(params, symbol),
@@ -719,6 +782,12 @@ export const costEffectivenessModelToolSchema = {
         type: "string",
         description:
           "Project ID for knowledge base persistence. When set, model run is saved to ~/.heor-agent/projects/{project}/raw/models/",
+      },
+      summary_metric: {
+        type: "string",
+        enum: ["qaly", "evlyg", "both"],
+        description:
+          "Summary metric for the ICER numerator. 'qaly' (default, NICE reference case), 'evlyg' (equal value life-years gained — CMS IRA-compatible; CMS prohibits QALYs in Medicare IRA drug price negotiations per §1194(e)(2)), or 'both' to report both side-by-side.",
       },
     },
     required: [

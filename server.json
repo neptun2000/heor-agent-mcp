@@ -6,12 +6,12 @@
     "url": "https://github.com/neptun2000/heor-agent-mcp",
     "source": "github"
   },
-  "version": "1.0.1",
+  "version": "1.0.2",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "heor-agent-mcp",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "transport": {
         "type": "stdio"
       }

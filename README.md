@@ -6,7 +6,7 @@
 
 **AI-powered Health Economics and Outcomes Research (HEOR) agent as a Model Context Protocol server.**
 
-Automates literature review across 42 data sources, risk of bias assessment (RoB 2 / ROBINS-I / AMSTAR-2), state-of-the-art cost-effectiveness modelling, HTA dossier preparation for NICE / EMA / FDA / IQWiG / HAS / EU JCA, and a persistent project knowledge base — all callable as MCP tools from Claude.ai, Claude Code, and any MCP-compatible host.
+Automates literature review across 44 data sources, risk of bias assessment (RoB 2 / ROBINS-I / AMSTAR-2), EQ-5D value set impact estimation, state-of-the-art cost-effectiveness modelling, HTA dossier preparation for NICE / EMA / FDA / IQWiG / HAS / EU JCA, and a persistent project knowledge base — all callable as MCP tools from Claude.ai, Claude Code, and any MCP-compatible host.
 
 Built for pharmaceutical, biotech, CRO, and medical affairs teams who need rigorous, auditable HEOR workflows without building infrastructure from scratch.
 

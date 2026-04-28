@@ -2,6 +2,15 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.0.1 (2026-04-28) — Risk of Bias assessment tool
+
+### Added
+- **`risk_of_bias` tool** (17th tool) — Cochrane RoB 2 (RCTs), ROBINS-I (observational), AMSTAR-2 (SRs). Auto-detects instrument from study type, infers domain judgments from abstract text, marks "Unclear" when evidence absent. Output includes per-study RoB table and rob_results object for evidence-based GRADE assessment in `hta_dossier_prep`.
+- **htaDossierPrep integration** — `rob_results` parameter now replaces heuristic RoB judgments with structured domain assessments for GRADE tables.
+
+### Source
+Implements design log 07 — based on Cochrane RoB 2 (Sterne et al. 2019), ROBINS-I (Sterne et al. 2016), AMSTAR-2 (Shea et al. 2017).
+
 ## v0.9.8 (2026-04-22) — ITC methods, evLYG, CMS IRA context
 
 ### Added

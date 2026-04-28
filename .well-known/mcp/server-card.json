@@ -1,7 +1,7 @@
 {
   "serverInfo": {
     "name": "heor-agent-mcp",
-    "version": "0.9.8",
+    "version": "1.0.1",
     "description": "AI-powered Health Economics and Outcomes Research (HEOR) MCP server. 17 tools for literature search (44 data sources incl. OHE and EuroQol), risk of bias assessment (RoB 2/ROBINS-I/AMSTAR-2 with GRADE integration), cost-effectiveness modeling (Markov/PartSA with PSA/EVPPI/scenarios, QALY + evLYG summary metrics), budget impact analysis, abstract screening, survival curve fitting, indirect comparisons (Bucher/NMA/MAIC/STC) with I²/Cochran Q heterogeneity, ITC feasibility assessment (3-assumption framework), HTA dossier prep (NICE/EMA/FDA/IQWiG/HAS/EU JCA) with auto-GRADE, UK EQ-5D-5L value set impact estimator."
   },
   "authentication": {
@@ -19,23 +19,23 @@
   "homepage": "https://github.com/neptun2000/heor-agent-mcp",
   "license": "MIT",
   "tools": [
-    { "name": "literature_search", "description": "Search 41 data sources with PRISMA audit trail and runs=3 stability deduplication." },
-    { "name": "screen_abstracts", "description": "PICO-based abstract screening with study design classification (Cochrane Handbook Ch. 4)." },
-    { "name": "evidence_network", "description": "Build treatment comparison network, assess NMA feasibility." },
-    { "name": "indirect_comparison", "description": "Bucher method and Frequentist NMA for indirect treatment comparisons." },
-    { "name": "population_adjusted_comparison", "description": "MAIC/STC per NICE DSU TSD 18 (summary-level data, no IPD required)." },
-    { "name": "survival_fitting", "description": "Fit 5 parametric distributions (Exp/Weibull/Log-logistic/Log-normal/Gompertz) to KM data with AIC/BIC (NICE DSU TSD 14)." },
-    { "name": "cost_effectiveness_model", "description": "Markov/PartSA with PSA, OWSA, CEAC, EVPI, EVPPI, scenario analysis. Outputs text/JSON/DOCX/XLSX." },
-    { "name": "budget_impact_model", "description": "ISPOR-compliant BIA with market share uptake, population growth, treatment displacement." },
-    { "name": "risk_of_bias", "description": "Cochrane RoB 2 (RCTs), ROBINS-I (observational), AMSTAR-2 (systematic reviews). Auto-detects instrument from study_type. Returns GRADE Risk of Bias domain summary to pass to hta_dossier_prep." },
-    { "name": "hta_dossier_prep", "description": "NICE STA, EMA, FDA, IQWiG, HAS, EU JCA templates with auto-GRADE evidence quality tables. Accepts rob_results from risk_of_bias for structured RoB domain." },
-    { "name": "validate_links", "description": "HTTP validation of URLs to prevent broken citation links." },
-    { "name": "project_create", "description": "Initialize persistent project workspace at ~/.heor-agent/projects/." },
-    { "name": "knowledge_search", "description": "Full-text search across project raw/ and wiki/." },
-    { "name": "knowledge_read", "description": "Read files from a project knowledge base." },
-    { "name": "knowledge_write", "description": "Write to project wiki/ (Obsidian-compatible, YAML frontmatter + wikilinks)." },
-    { "name": "utility_value_set", "description": "EQ-5D value set reference (UK 3L/England 5L/new UK 5L 2026/DSU mapping) and NICE 5L transition impact estimator. Cites Biz, Hernández Alava, Wailoo (2026) Value in Health." },
-    { "name": "itc_feasibility", "description": "Assess ITC feasibility via the 3-assumption framework (exchangeability, homogeneity, consistency). Recommends Bucher/NMA/MAIC/STC/ML-NMR or infeasible. Cites Cope 2014, NICE DSU TSD 18, Signorovitch 2023, Cochrane Ch 10-11." }
+    { "name": "literature.search", "description": "Search 41 data sources with PRISMA audit trail and runs=3 stability deduplication." },
+    { "name": "literature.screen", "description": "PICO-based abstract screening with study design classification (Cochrane Handbook Ch. 4)." },
+    { "name": "evidence.network", "description": "Build treatment comparison network, assess NMA feasibility." },
+    { "name": "evidence.indirect", "description": "Bucher method and Frequentist NMA for indirect treatment comparisons." },
+    { "name": "evidence.population_adjusted", "description": "MAIC/STC per NICE DSU TSD 18 (summary-level data, no IPD required)." },
+    { "name": "evidence.survival", "description": "Fit 5 parametric distributions (Exp/Weibull/Log-logistic/Log-normal/Gompertz) to KM data with AIC/BIC (NICE DSU TSD 14)." },
+    { "name": "models.cost_effectiveness", "description": "Markov/PartSA with PSA, OWSA, CEAC, EVPI, EVPPI, scenario analysis. Outputs text/JSON/DOCX/XLSX." },
+    { "name": "models.budget_impact", "description": "ISPOR-compliant BIA with market share uptake, population growth, treatment displacement." },
+    { "name": "evidence.risk_of_bias", "description": "Cochrane RoB 2 (RCTs), ROBINS-I (observational), AMSTAR-2 (systematic reviews). Auto-detects instrument from study_type. Returns GRADE Risk of Bias domain summary to pass to hta_dossier_prep." },
+    { "name": "hta.dossier", "description": "NICE STA, EMA, FDA, IQWiG, HAS, EU JCA templates with auto-GRADE evidence quality tables. Accepts rob_results from risk_of_bias for structured RoB domain." },
+    { "name": "utils.validate_links", "description": "HTTP validation of URLs to prevent broken citation links." },
+    { "name": "project.create", "description": "Initialize persistent project workspace at ~/.heor-agent/projects/." },
+    { "name": "knowledge.search", "description": "Full-text search across project raw/ and wiki/." },
+    { "name": "knowledge.read", "description": "Read files from a project knowledge base." },
+    { "name": "knowledge.write", "description": "Write to project wiki/ (Obsidian-compatible, YAML frontmatter + wikilinks)." },
+    { "name": "hta.utility", "description": "EQ-5D value set reference (UK 3L/England 5L/new UK 5L 2026/DSU mapping) and NICE 5L transition impact estimator. Cites Biz, Hernández Alava, Wailoo (2026) Value in Health." },
+    { "name": "evidence.itc", "description": "Assess ITC feasibility via the 3-assumption framework (exchangeability, homogeneity, consistency). Recommends Bucher/NMA/MAIC/STC/ML-NMR or infeasible. Cites Cope 2014, NICE DSU TSD 18, Signorovitch 2023, Cochrane Ch 10-11." }
   ],
   "keywords": [
     "healthcare",

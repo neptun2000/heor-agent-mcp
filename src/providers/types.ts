@@ -162,6 +162,15 @@ export interface DossierParams {
     string,
     { i_squared_pct: number; n_studies: number }
   >;
+  /** Optional GRADE upgrading flags per outcome (Guyatt 2011). Only applies to observational evidence. */
+  upgrading_per_outcome?: Record<
+    string,
+    {
+      large_effect?: "none" | "large" | "very_large";
+      dose_response?: boolean;
+      plausible_confounding_toward_null?: boolean;
+    }
+  >;
 }
 
 export interface ToolResult {

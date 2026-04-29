@@ -2,6 +2,21 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.0.3 (2026-04-29) — Senior HEOR methodology fixes
+
+### Fixed
+- **GRADE inconsistency now uses I² instead of study count.** Single-study comparisons no longer auto-downgraded as "Serious" — they return `not_assessable` (single study cannot be inconsistent with itself, per Cochrane Handbook 10.10). When I² is supplied via the new `heterogeneity_per_outcome` param on `hta_dossier`, GRADE applies Cochrane bands: <50% Low, 50–74% Moderate (1-step downgrade), 75–89% Serious, ≥90% Very Serious (2-step). Rationale cites the actual I² value.
+- **GRADE upgrading (Guyatt 2011)** — observational evidence with strong indicators can now be upgraded from Low. Three criteria via the new `upgrading_per_outcome` param: large effect (RR <0.5/>2.0 → +1; <0.2/>5.0 → +2), dose-response gradient (+1), plausible confounding biasing toward null (+1). Capped at +2 steps. Skipped when starting certainty is High (RCTs).
+- **EQ-5D 3L→5L impact estimator now baseline-utility-aware.** Biz 2026 reports category-level medians but the magnitude depends on cohort baseline utility — 5L compresses utilities most in the 0.6–0.9 range, so mild plaque psoriasis (baseline ~0.85) sees +77% ICER vs severe HS (baseline ~0.45) at +41%, even though both are `non_cancer_qol_only`. New `baseline_utility` param on `utility_value_set` tool.
+- **Bucher consistency check** — when direct head-to-head A-vs-C evidence exists alongside the indirect A-vs-C estimate, the tool now empirically tests Bucher's consistency assumption: z = (direct − indirect) / SE_diff. Severity bands per Cochrane Ch. 11.4.3 / NICE DSU TSD 18: |z|<1.5 no conflict, 1.5–1.96 moderate (⚠️), ≥1.96 substantial (🚨), opposite-direction with both significant → substantial. Conflicts surfaced in markdown output and warnings.
+
+### Added
+- New modules: `src/grade/inconsistency.ts`, `src/grade/upgrading.ts`, `src/grade/eq5dImpact.ts`, `src/network/consistency.ts`
+- 41 new tests (4 new test files); total 385/385 passing.
+
+### References
+Cochrane Handbook for Systematic Reviews of Interventions Ch. 10.10, 11.4.3; GRADE Handbook 5.1; Guyatt GH et al. J Clin Epidemiol. 2011;64(12):1311-1316; Higgins & Thompson Stat Med 2002; Bucher HC et al. J Clin Epidemiol. 1997;50(6):683-691; NICE DSU TSD 18; Biz, Hernández Alava, Wailoo (2026) Value in Health forthcoming.
+
 ## v1.0.1 (2026-04-28) — Risk of Bias assessment tool
 
 ### Added

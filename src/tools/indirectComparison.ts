@@ -56,7 +56,7 @@ const LIMITATIONS = [
   "Transitivity assumption: populations across trials must be similar enough for the common comparator to act as a valid bridge",
   "Fixed-effect model: does not account for between-study heterogeneity beyond sampling error",
   "Indirect comparisons are always less precise (wider CIs) than direct head-to-head evidence",
-  "No inconsistency testing: when both direct and indirect evidence exist, this tool does not test whether they agree",
+  "Consistency check (direct vs indirect when h2h available) flags violations only — interpretation requires examining trial population differences for effect-modifier imbalance",
   "User-supplied data: accuracy depends on correctly entered effect sizes and confidence intervals",
 ];
 
@@ -140,6 +140,14 @@ export async function handleIndirectComparison(
 
         for (const path of paths) {
           try {
+            // Find any direct A-vs-C h2h evidence for the consistency check
+            const directAC = measureComparisons.filter((c) => {
+              const i = c.intervention.toLowerCase();
+              const j = c.comparator.toLowerCase();
+              const a = path.a.toLowerCase();
+              const cc = path.c.toLowerCase();
+              return (i === a && j === cc) || (i === cc && j === a);
+            });
             const est = computeIndirectComparison(
               path.a,
               path.c,
@@ -148,8 +156,18 @@ export async function handleIndirectComparison(
               path.bcComparisons,
               outcome,
               measure,
+              directAC.length > 0 ? directAC : undefined,
             );
             allEstimates.push(est);
+            // Surface conflict warnings to the audit trail
+            if (
+              est.consistency_check?.has_conflict &&
+              est.consistency_check.severity === "substantial"
+            ) {
+              warnings.push(
+                `⚠️ Consistency violation for ${path.a} vs ${path.c}: ${est.consistency_check.rationale}`,
+              );
+            }
           } catch (err) {
             warnings.push(
               `Failed to compute ${path.a} vs ${path.c} via ${path.bridge}: ${err instanceof Error ? err.message : String(err)}`,

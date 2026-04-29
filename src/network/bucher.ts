@@ -4,6 +4,7 @@ import type {
   DirectComparison,
   IndirectEstimate,
 } from "./types.js";
+import { assessConsistencyConflict } from "./consistency.js";
 
 /** Standard error from 95% CI */
 export function seFromCI(lower: number, upper: number): number {
@@ -20,7 +21,7 @@ export function normalCDF(x: number): number {
     d *
     Math.exp((-z * z) / 2.0) *
     (t *
-      (0.319381530 +
+      (0.31938153 +
         t *
           (-0.356563782 +
             t * (1.781477937 + t * (-1.821255978 + t * 1.330274429)))));
@@ -133,6 +134,7 @@ export function computeIndirectComparison(
   directCB: DirectComparison[],
   outcome: string,
   measure: EffectMeasure,
+  directAC?: DirectComparison[],
 ): IndirectEstimate {
   // Convert to working scale and pool
   const abStudies = directAB.map((d) => ({
@@ -169,6 +171,32 @@ export function computeIndirectComparison(
     measure,
   );
 
+  // Optional Bucher consistency check vs direct h2h evidence
+  let consistency_check: IndirectEstimate["consistency_check"] | undefined;
+  if (directAC && directAC.length > 0) {
+    const acStudies = directAC.map((d) => ({
+      value: toWorkingScale(
+        d.estimate,
+        seOnWorkingScale(d.estimate, d.ci_lower, d.ci_upper, measure),
+        measure,
+      ).value,
+      se: seOnWorkingScale(d.estimate, d.ci_lower, d.ci_upper, measure),
+    }));
+    const pooledAC = poolFixedEffect(acStudies);
+    const assessment = assessConsistencyConflict({
+      indirect: { value: indirect.value, se: indirect.se },
+      direct: { value: pooledAC.value, se: pooledAC.se },
+    });
+    consistency_check = {
+      has_conflict: assessment.has_conflict,
+      severity: assessment.severity,
+      direct_estimate: pooledAC.value,
+      direct_n_studies: pooledAC.n_studies,
+      z_difference: assessment.z_difference,
+      rationale: assessment.rationale,
+    };
+  }
+
   return {
     intervention,
     comparator,
@@ -184,5 +212,6 @@ export function computeIndirectComparison(
     p_value: indirect.p_value,
     pooled_ab: pooledAB,
     pooled_bc: pooledCB,
+    consistency_check,
   };
 }

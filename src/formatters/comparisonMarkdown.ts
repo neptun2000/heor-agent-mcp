@@ -63,6 +63,28 @@ export function comparisonToMarkdown(result: IndirectComparisonResult): string {
       );
     }
     lines.push("");
+
+    // Bucher consistency check (when direct h2h evidence available)
+    const conflicts = estimates.filter(
+      (e) => e.consistency_check && e.consistency_check.severity !== "none",
+    );
+    if (conflicts.length > 0) {
+      lines.push("**Bucher consistency check (direct vs indirect):**");
+      lines.push("");
+      for (const e of conflicts) {
+        const c = e.consistency_check!;
+        const icon =
+          c.severity === "substantial"
+            ? "🚨"
+            : c.severity === "moderate"
+              ? "⚠️"
+              : "ℹ️";
+        lines.push(
+          `${icon} **${e.intervention} vs ${e.comparator}** (severity: ${c.severity}): ${c.rationale}`,
+        );
+      }
+      lines.push("");
+    }
   }
 
   // Heterogeneity statistics (I², Cochran Q)

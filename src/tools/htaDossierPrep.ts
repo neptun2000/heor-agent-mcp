@@ -33,6 +33,18 @@ const DossierSchema = z.object({
   output_format: z.enum(["text", "json", "docx"]).optional(),
   project: z.string().optional(),
   rob_results: z.any().optional(),
+  heterogeneity_per_outcome: z
+    .record(
+      z.string(),
+      z.object({
+        i_squared_pct: z.number().min(0).max(100),
+        n_studies: z.number().int().min(1),
+      }),
+    )
+    .optional()
+    .describe(
+      "Optional: I² and study count per outcome (from evidence_indirect tool). When provided, GRADE inconsistency is computed from I² instead of heuristic. Example: { 'overall survival': { i_squared_pct: 45, n_studies: 6 } }",
+    ),
 });
 import {
   createAuditRecord,
@@ -40,6 +52,7 @@ import {
   addWarning,
   setMethodology,
 } from "../audit/builder.js";
+import { assessInconsistency } from "../grade/inconsistency.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
 import { contentToDocx } from "../formatters/docx.js";
 import { saveReport } from "../knowledge/index.js";
@@ -140,10 +153,16 @@ interface RobResults {
   overall_certainty_start: "High" | "Low";
 }
 
+type HeterogeneityPerOutcome = Record<
+  string,
+  { i_squared_pct: number; n_studies: number }
+>;
+
 function generateGradeTable(
   evidence: LiteratureResult[],
   outcomes: string[],
   robResults?: RobResults,
+  heterogeneityPerOutcome?: HeterogeneityPerOutcome,
 ): string {
   if (evidence.length === 0) return "";
 
@@ -194,9 +213,17 @@ function generateGradeTable(
         ? "Low"
         : "High";
 
-    // Inconsistency: if multiple studies, assume some inconsistency possible
-    const inconsistency =
-      nRelevant > 3 ? "Low" : nRelevant > 1 ? "Moderate" : "Serious";
+    // Inconsistency: prefer I² from heterogeneity tool; fall back to k-based
+    // assessment that correctly returns "not_assessable" for k≤1 (single
+    // study cannot be inconsistent with itself — Cochrane Handbook 10.10).
+    const heteroForOutcome = heterogeneityPerOutcome?.[outcome];
+    const inconsistencyAssessment = heteroForOutcome
+      ? assessInconsistency(
+          heteroForOutcome.n_studies,
+          heteroForOutcome.i_squared_pct,
+        )
+      : assessInconsistency(nRelevant, null);
+    const inconsistency = inconsistencyAssessment.level;
 
     // Indirectness: assume moderate unless direct evidence exists
     const indirectness = nRelevant > 0 ? "Low" : "Serious";
@@ -208,10 +235,11 @@ function generateGradeTable(
     // Publication bias
     const pub_bias = hasMAs ? "Low" : nRelevant >= 5 ? "Low" : "Suspected";
 
-    // Overall certainty
+    // Overall certainty — use principled downgrade_steps from inconsistency
+    // assessment (0/1/2) instead of binary string match
     let downgrades = 0;
     if (rob === "High") downgrades++;
-    if (inconsistency === "Serious") downgrades++;
+    downgrades += inconsistencyAssessment.downgrade_steps;
     if (indirectness === "Serious") downgrades++;
     if (imprecision === "Serious") downgrades++;
     if (pub_bias === "Suspected") downgrades++;
@@ -235,7 +263,9 @@ function generateGradeTable(
 
     const rationale = [
       rob !== "Low" ? `RoB: ${rob}` : "",
-      inconsistency !== "Low" ? `Inconsistency: ${inconsistency}` : "",
+      inconsistency !== "Low" && inconsistency !== "not_assessable"
+        ? `Inconsistency: ${inconsistencyAssessment.rationale}`
+        : "",
       indirectness !== "Low" ? `Indirectness: ${indirectness}` : "",
       imprecision !== "Low" ? `Imprecision: ${imprecision}` : "",
       pub_bias !== "Low" ? `Pub. bias: ${pub_bias}` : "",
@@ -291,7 +321,7 @@ function generateGradeTable(
   lines.push(``);
   const robSource = robResults
     ? "structured Risk of Bias assessment (RoB 2/ROBINS-I/AMSTAR-2)"
-    : "study counts and types (heuristic — run `risk_of_bias` tool for structured assessment)";
+    : "study counts and types (heuristic — run `evidence.risk_of_bias` tool for structured assessment)";
   lines.push(
     `> **Note:** RoB domain sourced from ${robSource}. All other domains are automated estimates. A definitive GRADE evaluation requires clinical expert judgment. See [GRADE Handbook](https://gdt.gradepro.org/app/handbook/handbook.html).`,
   );
@@ -340,12 +370,12 @@ function buildSection(
       return evidence
         ? { content: evidence, status: "complete" }
         : {
-            content: `⚠️ Clinical evidence not provided. Pipe output from literature_search to populate this section.`,
+            content: `⚠️ Clinical evidence not provided. Pipe output from literature.search to populate this section.`,
             status: "missing",
           };
     case "Economic Evidence Summary":
       return {
-        content: `⚠️ Economic model results not provided. Run cost_effectiveness_model and pipe results here.`,
+        content: `⚠️ Economic model results not provided. Run models.cost_effectiveness and pipe results here.`,
         status: "missing",
       };
     default:
@@ -419,7 +449,7 @@ function buildJCASection(
             status: "partial",
           }
         : {
-            content: `⚠️ No clinical evidence provided. Pipe output from literature_search to populate relative effects for ${pico.comparator}.`,
+            content: `⚠️ No clinical evidence provided. Pipe output from literature.search to populate relative effects for ${pico.comparator}.`,
             status: "missing",
           };
     case "Indirect Treatment Comparison":
@@ -606,7 +636,7 @@ export async function handleHtaDossierPrep(
   const params = DossierSchema.parse(rawParams) as DossierParams;
   const outputFormat = params.output_format ?? "text";
   let audit = createAuditRecord(
-    "hta_dossier_prep",
+    "hta.dossier",
     params as unknown as Record<string, unknown>,
     outputFormat,
   );
@@ -664,6 +694,7 @@ export async function handleHtaDossierPrep(
       params.evidence_summary as LiteratureResult[],
       [],
       params.rob_results as RobResults | undefined,
+      params.heterogeneity_per_outcome,
     );
     if (gradeTable) {
       lines.push(gradeTable);
@@ -706,7 +737,7 @@ export async function handleHtaDossierPrep(
     lines.push(`| Non-cancer, life-extending | mixed | −9.6% |`);
     lines.push(``);
     lines.push(
-      `**Action items:** (1) Confirm whether trial collected native EQ-5D-5L or only 3L; (2) if only 3L, check whether direct UK 5L mapping algorithm exists (DSU mapping algorithm derives 3L via indirect crosswalk, not 5L directly); (3) run utility_value_set (action="estimate_impact") with your indication type to quantify expected ICER change; (4) consider requesting existing NICE flexibilities (e.g., non-EQ-5D evidence where instrument is demonstrably inappropriate).`,
+      `**Action items:** (1) Confirm whether trial collected native EQ-5D-5L or only 3L; (2) if only 3L, check whether direct UK 5L mapping algorithm exists (DSU mapping algorithm derives 3L via indirect crosswalk, not 5L directly); (3) run hta.utility (action="estimate_impact") with your indication type to quantify expected ICER change; (4) consider requesting existing NICE flexibilities (e.g., non-EQ-5D evidence where instrument is demonstrably inappropriate).`,
     );
     lines.push(``);
     audit = addAssumption(
@@ -750,9 +781,9 @@ export async function handleHtaDossierPrep(
 }
 
 export const htaDossierPrepToolSchema = {
-  name: "hta_dossier_prep",
+  name: "hta.dossier",
   description:
-    "Structure evidence into HTA body-specific submission format (NICE STA, EMA, FDA, IQWiG, HAS, EU JCA, or Global Value Dossier). Produces draft sections with gap analysis and auto-GRADE evidence quality tables. Accepts output from literature_search and cost_effectiveness_model.",
+    "Structure evidence into HTA body-specific submission format (NICE STA, EMA, FDA, IQWiG, HAS, EU JCA, or Global Value Dossier). Produces draft sections with gap analysis and auto-GRADE evidence quality tables. Accepts output from literature.search and models.cost_effectiveness.",
   annotations: {
     title: "HTA Dossier Preparation",
     readOnlyHint: true,
@@ -786,11 +817,11 @@ export const htaDossierPrepToolSchema = {
       },
       evidence_summary: {
         description:
-          "Clinical evidence input. Accepts: a text summary string, OR a JSON array of LiteratureResult objects from literature_search (use output_format='json'). When passed as array, auto-generates a GRADE evidence quality table.",
+          "Clinical evidence input. Accepts: a text summary string, OR a JSON array of LiteratureResult objects from literature.search (use output_format='json'). When passed as array, auto-generates a GRADE evidence quality table.",
       },
       model_results: {
         description:
-          "JSON output from cost_effectiveness_model — used to populate the Economic Evidence Summary section.",
+          "JSON output from models.cost_effectiveness — used to populate the Economic Evidence Summary section.",
       },
       picos: {
         type: "array",
@@ -833,7 +864,7 @@ export const htaDossierPrepToolSchema = {
       },
       rob_results: {
         description:
-          "Output from the risk_of_bias tool. When provided, the GRADE Risk of Bias domain uses the structured judgment (rob_judgment, downgrade, rationale) instead of a heuristic estimate.",
+          "Output from the evidence.risk_of_bias tool. When provided, the GRADE Risk of Bias domain uses the structured judgment (rob_judgment, downgrade, rationale) instead of a heuristic estimate.",
       },
     },
     required: ["hta_body", "submission_type", "drug_name", "indication"],

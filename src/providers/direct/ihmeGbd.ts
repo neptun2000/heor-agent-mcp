@@ -45,6 +45,7 @@ export async function fetchIhmeGbd(
     const url = `https://ghdx.healthdata.org/search/site/${encodeURIComponent(query)}?f[0]=field_record_type%3A3&json=true`;
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
     });
 
     // If the search API doesn't return JSON, fall back to providing reference links
@@ -64,8 +65,7 @@ export async function fetchIhmeGbd(
             source: "ihme_gbd" as const,
             title: (r.title as string) ?? `GBD Result: ${query}`,
             authors: ["Institute for Health Metrics and Evaluation"],
-            date:
-              (r.year as string) ?? new Date().getFullYear().toString(),
+            date: (r.year as string) ?? new Date().getFullYear().toString(),
             study_type: "registry",
             abstract:
               (r.snippet as string) ??

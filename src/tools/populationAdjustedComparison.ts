@@ -309,7 +309,7 @@ export async function handlePopulationAdjustedComparison(
   const outputFormat = params.output_format ?? "text";
 
   let audit = createAuditRecord(
-    "population_adjusted_comparison",
+    "evidence.population_adjusted",
     params as unknown as Record<string, unknown>,
     outputFormat,
   );
@@ -466,7 +466,7 @@ export async function handlePopulationAdjustedComparison(
 }
 
 export const populationAdjustedComparisonToolSchema = {
-  name: "population_adjusted_comparison",
+  name: "evidence.population_adjusted",
   description:
     "⚠️ EXPERIMENTAL / orientation-only. Approximate population-adjusted indirect comparison using summary-level statistics (mean, SD per covariate). True MAIC/STC per NICE DSU TSD 18 requires individual patient data (IPD) for one trial. This tool inflates the SE of a Bucher indirect comparison based on covariate imbalance (MAIC-style ESS penalty) and applies a simple linear adjustment based on standardized mean differences (STC-style). Point estimates should be interpreted as approximate — not submission-ready. For a definitive analysis, use IPD with an outcome regression model.",
   annotations: {

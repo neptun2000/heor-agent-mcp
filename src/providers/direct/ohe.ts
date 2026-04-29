@@ -6,19 +6,19 @@ export async function fetchOhe(
 ): Promise<LiteratureResult[]> {
   const entries = [
     {
-      title: `OHE Publications Search: ${query}`,
-      abstract: `Office of Health Economics (OHE) publications catalogue — contract reports, working papers, briefings, and journal articles from the world's oldest independent health economics research organisation. Covers HTA methodology, value assessment, pharmaceutical pricing, and health policy. Search "${query}" to find OHE's analysis relevant to this topic.`,
-      url: `https://www.ohe.org/research-and-publications/?search=${encodeURIComponent(query)}`,
+      title: "OHE EQ-5D value set research and analysis",
+      abstract: `OHE publishes research on EQ-5D value sets for NICE appraisals, including the UK 3L value set, England 5L (Devlin 2018), NICE DSU 3L→5L mapping (2022), and the new UK EQ-5D-5L consultation (2026). Essential reference for understanding utility weighting algorithms and ICER impact under different value sets.`,
+      url: "https://www.ohe.org/publications?search=EQ-5D",
     },
     {
-      title: `OHE Research — Measuring and Valuing Outcomes`,
-      abstract: `OHE's Measuring and Valuing Outcomes (MVO) research theme leads work on EQ-5D value sets, QALY methodology, carer quality of life, and preference-based measures. Key publications on the UK EQ-5D-5L value set (2026), bolt-ons, and child/adolescent health valuation.`,
-      url: "https://www.ohe.org/themes/measuring-and-valuing-outcomes/",
+      title: "OHE — Health Economics Resources and Guidelines",
+      abstract: `OHE provides authoritative guidance on HTA methodology, NICE reference case implementation, EQ-5D value set transitions, ICER estimation, and probabilistic sensitivity analysis. OHE researchers contribute to NICE, Cochrane, and international HTA standards. Access free downloadable reports on economic evaluation methodology and healthcare system analysis.`,
+      url: "https://www.ohe.org/",
     },
     {
-      title: `OHE HTA Policy and Methods`,
-      abstract: `Independent analyses of HTA agency decisions including NICE, EMA, and international HTA bodies. Includes the "NICE Enough?" series examining how NICE decisions impact international HTA decision-making.`,
-      url: "https://www.ohe.org/themes/health-technology-assessment/",
+      title: "OHE Research Reports and Publications",
+      abstract: `The Office of Health Economics (OHE) is an independent research organization specializing in health economics and outcomes research. OHE publications cover HEOR methodology, economic evaluation, health technology assessment, and healthcare policy. Browse publications at https://www.ohe.org/publications to find peer-reviewed reports and guidance on pharmacoeconomics, cost-effectiveness analysis, and health policy relevant to "${query}".`,
+      url: `https://www.ohe.org/publications?search=${encodeURIComponent(query)}`,
     },
   ];
 
@@ -28,7 +28,7 @@ export async function fetchOhe(
     title: e.title,
     authors: ["Office of Health Economics (OHE)"],
     date: new Date().getFullYear().toString(),
-    study_type: "heor_research_report",
+    study_type: "heor_methods",
     abstract: e.abstract,
     url: e.url,
   }));

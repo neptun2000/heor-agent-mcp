@@ -82,7 +82,9 @@ export async function fetchWiley(
     );
     url.searchParams.set("mailto", "heor-agent-mcp@example.com");
 
-    const res = await fetch(url.toString());
+    const res = await fetch(url.toString(), {
+      signal: AbortSignal.timeout(15_000),
+    });
     if (!res.ok) return [];
 
     const data = (await res.json()) as { message: { items: CrossrefItem[] } };

@@ -5,7 +5,7 @@ jest.mock("../../src/providers/factory.js", () => ({
     searchLiterature: jest.fn().mockResolvedValue({
       content: "## Literature Search Results\n\n### 1. Test Study",
       audit: {
-        tool: "literature_search",
+        tool: "literature.search",
         timestamp: new Date().toISOString(),
         query: { query: "semaglutide" },
         sources_queried: [{ source: "pubmed", query_sent: "semaglutide", results_returned: 5, results_included: 5, latency_ms: 200, status: "ok" }],
@@ -24,7 +24,7 @@ describe("handleLiteratureSearch", () => {
   it("validates and passes params to provider", async () => {
     const result = await handleLiteratureSearch({ query: "semaglutide" });
     expect(result.content).toContain("Literature Search Results");
-    expect(result.audit.tool).toBe("literature_search");
+    expect(result.audit.tool).toBe("literature.search");
   });
 
   it("throws on missing query", async () => {

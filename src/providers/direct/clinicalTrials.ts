@@ -4,7 +4,11 @@ const BASE = "https://clinicaltrials.gov/api/v2/studies";
 
 interface CTStudy {
   protocolSection: {
-    identificationModule: { nctId: string; briefTitle: string; officialTitle?: string };
+    identificationModule: {
+      nctId: string;
+      briefTitle: string;
+      officialTitle?: string;
+    };
     statusModule: { startDateStruct?: { date: string } };
     descriptionModule?: { briefSummary?: string };
     contactsLocationsModule?: { overallOfficials?: { name: string }[] };
@@ -12,10 +16,13 @@ interface CTStudy {
   };
 }
 
-export async function fetchClinicalTrials(query: string, maxResults: number): Promise<LiteratureResult[]> {
+export async function fetchClinicalTrials(
+  query: string,
+  maxResults: number,
+): Promise<LiteratureResult[]> {
   try {
     const url = `${BASE}?query.term=${encodeURIComponent(query)}&pageSize=${maxResults}&format=json`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
     if (!res.ok) return [];
 
     const data = (await res.json()) as { studies: CTStudy[] };
@@ -29,7 +36,9 @@ export async function fetchClinicalTrials(query: string, maxResults: number): Pr
         title: id.briefTitle,
         authors: contacts?.overallOfficials?.map((o) => o.name) ?? [],
         date: study.protocolSection.statusModule.startDateStruct?.date ?? "",
-        study_type: study.protocolSection.designModule?.studyType?.toLowerCase() ?? "unknown",
+        study_type:
+          study.protocolSection.designModule?.studyType?.toLowerCase() ??
+          "unknown",
         abstract: desc?.briefSummary ?? "",
         url: `https://clinicaltrials.gov/study/${id.nctId}`,
       };

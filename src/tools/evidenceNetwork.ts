@@ -24,7 +24,7 @@ const EvidenceNetworkSchema = z.object({
     )
     .max(500)
     .describe(
-      "Array of LiteratureResult objects from a prior literature_search call",
+      "Array of LiteratureResult objects from a prior literature.search call",
     ),
   query: z.string().optional().describe("Original search query (for context)"),
 });
@@ -36,7 +36,7 @@ export async function handleEvidenceNetwork(
   const results = params.results as LiteratureResult[];
 
   let audit = createAuditRecord(
-    "evidence_network",
+    "evidence.network",
     { query: params.query, resultCount: results.length },
     "text",
   );
@@ -65,9 +65,9 @@ export async function handleEvidenceNetwork(
 }
 
 export const evidenceNetworkToolSchema = {
-  name: "evidence_network",
+  name: "evidence.network",
   description:
-    "Analyze literature search results to build an evidence network map. Extracts intervention-comparator pairs from titles and abstracts, constructs a treatment comparison network, and assesses NMA (network meta-analysis) feasibility. Pass the results array from a prior literature_search call.",
+    "Analyze literature search results to build an evidence network map. Extracts intervention-comparator pairs from titles and abstracts, constructs a treatment comparison network, and assesses NMA (network meta-analysis) feasibility. Pass the results array from a prior literature.search call.",
   annotations: {
     title: "Evidence Network Analysis",
     readOnlyHint: true,
@@ -104,7 +104,7 @@ export const evidenceNetworkToolSchema = {
           ],
         },
         description:
-          "Array of LiteratureResult objects from a prior literature_search call (use output_format='json')",
+          "Array of LiteratureResult objects from a prior literature.search call (use output_format='json')",
       },
       query: {
         type: "string",

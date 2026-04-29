@@ -93,7 +93,7 @@ const HEOR_PROMPTS = [
   {
     name: "literature-review",
     description:
-      "Systematic literature review with PRISMA audit trail — runs literature_search across 41 sources then screens by PICO criteria.",
+      "Systematic literature review with PRISMA audit trail — runs literature.search across 41 sources then screens by PICO criteria.",
     arguments: [
       {
         name: "drug",
@@ -237,55 +237,55 @@ function createMcpServer(): Server {
     try {
       let result;
       switch (name) {
-        case "literature_search":
+        case "literature.search":
           result = await handleLiteratureSearch(args);
           break;
-        case "cost_effectiveness_model":
+        case "models.cost_effectiveness":
           result = await handleCostEffectivenessModel(args);
           break;
-        case "hta_dossier_prep":
+        case "hta.dossier":
           result = await handleHtaDossierPrep(args);
           break;
-        case "knowledge_search":
+        case "knowledge.search":
           result = await handleKnowledgeSearch(args);
           break;
-        case "knowledge_read":
+        case "knowledge.read":
           result = await handleKnowledgeRead(args);
           break;
-        case "knowledge_write":
+        case "knowledge.write":
           result = await handleKnowledgeWrite(args);
           break;
-        case "project_create":
+        case "project.create":
           result = await handleProjectCreate(args);
           break;
-        case "evidence_network":
+        case "evidence.network":
           result = await handleEvidenceNetwork(args);
           break;
-        case "indirect_comparison":
+        case "evidence.indirect":
           result = await handleIndirectComparison(args);
           break;
-        case "budget_impact_model":
+        case "models.budget_impact":
           result = await handleBudgetImpactModel(args);
           break;
-        case "population_adjusted_comparison":
+        case "evidence.population_adjusted":
           result = await handlePopulationAdjustedComparison(args);
           break;
-        case "survival_fitting":
+        case "evidence.survival":
           result = await handleSurvivalFitting(args);
           break;
-        case "screen_abstracts":
+        case "literature.screen":
           result = await handleScreenAbstracts(args);
           break;
-        case "risk_of_bias":
+        case "evidence.risk_of_bias":
           result = await handleRiskOfBias(args);
           break;
-        case "validate_links":
+        case "utils.validate_links":
           result = await handleValidateLinks(args);
           break;
-        case "utility_value_set":
+        case "hta.utility":
           result = await handleUtilityValueSet(args);
           break;
-        case "itc_feasibility":
+        case "evidence.itc":
           result = await handleItcFeasibility(args);
           break;
         default:

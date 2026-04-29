@@ -94,6 +94,6 @@ describe("handleHtaDossierPrep — rob_results integration", () => {
   it("returns an audit record", async () => {
     const result = await handleHtaDossierPrep({ ...baseParams });
     expect(result.audit).toBeDefined();
-    expect(result.audit.tool).toBe("hta_dossier_prep");
+    expect(result.audit.tool).toBe("hta.dossier");
   });
 });

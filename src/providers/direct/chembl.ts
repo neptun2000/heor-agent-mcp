@@ -10,13 +10,16 @@ interface ChemblMolecule {
   molecule_properties: { full_mwt: string } | null;
 }
 
-export async function fetchChembl(query: string, maxResults: number): Promise<LiteratureResult[]> {
+export async function fetchChembl(
+  query: string,
+  maxResults: number,
+): Promise<LiteratureResult[]> {
   try {
     const url = `${BASE}/molecule.json?pref_name__icontains=${encodeURIComponent(query)}&limit=${maxResults}`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
     if (!res.ok) return [];
 
-    const data = await res.json() as { molecules: ChemblMolecule[] };
+    const data = (await res.json()) as { molecules: ChemblMolecule[] };
     return (data.molecules ?? []).map((mol) => ({
       id: `chembl_${mol.molecule_chembl_id}`,
       source: "chembl" as const,

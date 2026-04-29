@@ -15,7 +15,7 @@ const validParams: CEModelParams = {
 describe("handleCostEffectivenessModel", () => {
   it("returns ToolResult with audit", async () => {
     const result = await handleCostEffectivenessModel(validParams);
-    expect(result.audit.tool).toBe("cost_effectiveness_model");
+    expect(result.audit.tool).toBe("models.cost_effectiveness");
     expect(result.audit.methodology).toContain("Markov");
     expect(result.content).toBeDefined();
   });
@@ -108,6 +108,6 @@ describe("handleCostEffectivenessModel", () => {
 
   it("accepts valid params as unknown input", async () => {
     const result = await handleCostEffectivenessModel(validParams as unknown);
-    expect(result.audit.tool).toBe("cost_effectiveness_model");
+    expect(result.audit.tool).toBe("models.cost_effectiveness");
   });
 });

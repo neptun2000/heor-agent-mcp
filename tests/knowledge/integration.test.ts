@@ -39,7 +39,7 @@ jest.mock("../../src/providers/factory.js", () => ({
       return {
         content: "mock content",
         audit: {
-          tool: "literature_search",
+          tool: "literature.search",
           timestamp: new Date().toISOString(),
           query: {},
           sources_queried: [],

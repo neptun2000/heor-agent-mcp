@@ -30,7 +30,7 @@ export async function handleProjectCreate(
 ): Promise<ToolResult> {
   const params = ProjectCreateSchema.parse(rawParams);
   const audit = createAuditRecord(
-    "project_create",
+    "project.create",
     params as unknown as Record<string, unknown>,
     "text",
   );
@@ -47,9 +47,9 @@ export async function handleProjectCreate(
     lines.push(`Path: ${path}`);
     lines.push("");
     lines.push("Directory skeleton created:");
-    lines.push("- raw/literature/ (auto-populated by literature_search)");
-    lines.push("- raw/models/ (auto-populated by cost_effectiveness_model)");
-    lines.push("- raw/dossiers/ (auto-populated by hta_dossier_prep)");
+    lines.push("- raw/literature/ (auto-populated by literature.search)");
+    lines.push("- raw/models/ (auto-populated by models.cost_effectiveness)");
+    lines.push("- raw/dossiers/ (auto-populated by hta.dossier)");
     lines.push("- wiki/index.md (starter index for manual organization)");
     lines.push("");
     lines.push(
@@ -69,7 +69,7 @@ export async function handleProjectCreate(
 }
 
 export const projectCreateToolSchema = {
-  name: "project_create",
+  name: "project.create",
   description:
     "Initialize a new HEOR project workspace with directory skeleton and project.yaml metadata. Idempotent — returns existing project if already created. Required before using the `project` parameter in other tools.",
   annotations: {

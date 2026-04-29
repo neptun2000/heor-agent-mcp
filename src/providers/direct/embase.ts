@@ -9,8 +9,8 @@ interface ElsevierEntry {
   "dc:description"?: string;
   "prism:url"?: string;
   "prism:doi"?: string;
-  "pii"?: string;
-  "subtypeDescription"?: string;
+  pii?: string;
+  subtypeDescription?: string;
 }
 
 interface ElsevierResponse {
@@ -32,8 +32,9 @@ export async function fetchEmbase(
     const res = await fetch(url, {
       headers: {
         "X-ELS-APIKey": apiKey,
-        "Accept": "application/json",
+        Accept: "application/json",
       },
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) return [];
 
@@ -54,9 +55,7 @@ export async function fetchEmbase(
           date: e["prism:coverDate"] ?? "",
           study_type: mapSubtype(e["subtypeDescription"]),
           abstract: e["dc:description"] ?? "",
-          url: doi
-            ? `https://doi.org/${doi}`
-            : (e["prism:url"] ?? ""),
+          url: doi ? `https://doi.org/${doi}` : (e["prism:url"] ?? ""),
         };
       });
   } catch {
@@ -69,6 +68,7 @@ function mapSubtype(subtype?: string): string {
   const s = subtype.toLowerCase();
   if (s.includes("review") || s.includes("meta")) return "review";
   if (s.includes("randomized") || s.includes("controlled")) return "rct";
-  if (s.includes("observational") || s.includes("cohort")) return "observational";
+  if (s.includes("observational") || s.includes("cohort"))
+    return "observational";
   return "unknown";
 }

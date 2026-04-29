@@ -2,8 +2,8 @@ import { createAuditRecord, addSource, addExclusion } from "../../src/audit/buil
 
 describe("createAuditRecord", () => {
   it("creates a record with required fields", () => {
-    const record = createAuditRecord("literature_search", { query: "semaglutide" }, "text");
-    expect(record.tool).toBe("literature_search");
+    const record = createAuditRecord("literature.search", { query: "semaglutide" }, "text");
+    expect(record.tool).toBe("literature.search");
     expect(record.query).toEqual({ query: "semaglutide" });
     expect(record.output_format).toBe("text");
     expect(record.sources_queried).toEqual([]);
@@ -17,7 +17,7 @@ describe("createAuditRecord", () => {
 
 describe("addSource", () => {
   it("appends a SourceAudit and updates inclusions count", () => {
-    let record = createAuditRecord("literature_search", {}, "text");
+    let record = createAuditRecord("literature.search", {}, "text");
     record = addSource(record, {
       source: "pubmed",
       query_sent: "semaglutide diabetes",
@@ -32,7 +32,7 @@ describe("addSource", () => {
   });
 
   it("accumulates inclusions across multiple sources", () => {
-    let record = createAuditRecord("literature_search", {}, "text");
+    let record = createAuditRecord("literature.search", {}, "text");
     record = addSource(record, { source: "pubmed", query_sent: "q", results_returned: 10, results_included: 5, latency_ms: 100, status: "ok" });
     record = addSource(record, { source: "biorxiv", query_sent: "q", results_returned: 8, results_included: 3, latency_ms: 80, status: "ok" });
     expect(record.inclusions).toBe(8);
@@ -41,7 +41,7 @@ describe("addSource", () => {
 
 describe("addExclusion", () => {
   it("appends an ExclusionRecord", () => {
-    let record = createAuditRecord("literature_search", {}, "text");
+    let record = createAuditRecord("literature.search", {}, "text");
     record = addExclusion(record, { id: "pmid_123", title: "Old study", reason: "date filter" });
     expect(record.exclusions).toHaveLength(1);
     expect(record.exclusions[0].reason).toBe("date filter");

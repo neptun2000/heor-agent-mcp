@@ -148,7 +148,7 @@ describe("handleUtilityValueSet", () => {
     it("returns an audit record", async () => {
       const result = await handleUtilityValueSet({ action: "compare" });
       expect(result.audit).toBeDefined();
-      expect(result.audit?.tool).toBe("utility_value_set");
+      expect(result.audit?.tool).toBe("hta.utility");
     });
   });
 });

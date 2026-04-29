@@ -144,7 +144,7 @@ export async function handleBudgetImpactModel(
   const { symbol } = CURRENCY[params.perspective];
 
   let audit = createAuditRecord(
-    "budget_impact_model",
+    "models.budget_impact",
     params as unknown as Record<string, unknown>,
     outputFormat,
   );
@@ -243,7 +243,7 @@ export async function handleBudgetImpactModel(
     );
     const sizeKb = Math.round(buf.length / 1024);
     return {
-      content: `## Excel Workbook Generated\n\n**File:** \`${savedPath}\`\n**Size:** ${sizeKb} KB\n\nTabs: Summary | Inputs | Year-by-Year | Audit\n\n> **Note:** This is a structured report of the analysis — editing input cells does NOT re-run the model. To recompute with different inputs, call the budget_impact_model tool again with the new values. The workbook shows all inputs transparently so local teams can review and re-submit with modified assumptions.\n\nOpen with: \`open "${savedPath}"\``,
+      content: `## Excel Workbook Generated\n\n**File:** \`${savedPath}\`\n**Size:** ${sizeKb} KB\n\nTabs: Summary | Inputs | Year-by-Year | Audit\n\n> **Note:** This is a structured report of the analysis — editing input cells does NOT re-run the model. To recompute with different inputs, call the models.budget_impact tool again with the new values. The workbook shows all inputs transparently so local teams can review and re-submit with modified assumptions.\n\nOpen with: \`open "${savedPath}"\``,
       audit,
     };
   }
@@ -252,7 +252,7 @@ export async function handleBudgetImpactModel(
 }
 
 export const budgetImpactModelToolSchema = {
-  name: "budget_impact_model",
+  name: "models.budget_impact",
   description:
     "Estimate the total budget impact of adopting a new intervention over 1-5 years. Follows ISPOR Budget Impact Analysis good practice guidelines (Mauskopf 2007, Sullivan 2014). Computes year-by-year net cost to payer, including market share uptake, treatment displacement, and population growth.",
   annotations: {

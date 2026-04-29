@@ -40,6 +40,7 @@ export async function fetchCortellis(
         Authorization: `Bearer ${apiKey}`,
         Accept: "application/json",
       },
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) return [];
     const data = (await res.json()) as CortellisResponse;

@@ -344,6 +344,6 @@ describe("handleRiskOfBias", () => {
   it("returns an audit record", async () => {
     const result = await handleRiskOfBias({ studies: [rctStudy] });
     expect(result.audit).toBeDefined();
-    expect(result.audit.tool).toBe("risk_of_bias");
+    expect(result.audit.tool).toBe("evidence.risk_of_bias");
   });
 });

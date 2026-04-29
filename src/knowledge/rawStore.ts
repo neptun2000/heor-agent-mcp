@@ -75,7 +75,7 @@ export async function saveModelRun(
   const filepath = join(dir, filename);
 
   const frontmatter: Frontmatter = {
-    tool: "cost_effectiveness_model",
+    tool: "models.cost_effectiveness",
     generated_at: new Date().toISOString(),
     project: projectId,
     ...Object.fromEntries(
@@ -106,7 +106,7 @@ export async function saveDossier(
   const filepath = join(dir, filename);
 
   const frontmatter: Frontmatter = {
-    tool: "hta_dossier_prep",
+    tool: "hta.dossier",
     hta_body: htaBody,
     submission_type: submissionType,
     generated_at: new Date().toISOString(),

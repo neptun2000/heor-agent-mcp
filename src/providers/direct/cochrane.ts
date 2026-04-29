@@ -38,6 +38,7 @@ export async function fetchCochrane(
         "Wiley-TDM-Client-Token": apiKey,
         Accept: "application/json",
       },
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) return [];
     const data = (await res.json()) as CochraneResponse;

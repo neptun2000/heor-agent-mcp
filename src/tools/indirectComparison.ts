@@ -68,7 +68,7 @@ export async function handleIndirectComparison(
   const methodPref = params.method ?? "auto";
 
   let audit = createAuditRecord(
-    "indirect_comparison",
+    "evidence.indirect",
     {
       n_comparisons: comparisons.length,
       method: methodPref,
@@ -220,7 +220,7 @@ export async function handleIndirectComparison(
 }
 
 export const indirectComparisonToolSchema = {
-  name: "indirect_comparison",
+  name: "evidence.indirect",
   description:
     "Compute indirect treatment comparisons using the Bucher method (single common comparator) or frequentist network meta-analysis (full network). Requires user-supplied effect sizes (point estimates + 95% CI) from published trials. Supports mean differences (MD) and ratio measures (OR, RR, HR). Auto-selects method based on network structure, or user can specify.",
   annotations: {

@@ -21,16 +21,20 @@ interface LabelResponse {
   results?: LabelResult[];
 }
 
-export async function fetchPurpleBook(query: string, maxResults: number): Promise<LiteratureResult[]> {
+export async function fetchPurpleBook(
+  query: string,
+  maxResults: number,
+): Promise<LiteratureResult[]> {
   try {
     // Filter for biologics (BLA applications)
     const searchQuery = `(openfda.application_number:BLA*+AND+(openfda.brand_name:"${query}"+openfda.generic_name:"${query}"))`;
     const url = `${BASE}?search=${encodeURIComponent(searchQuery)}&limit=${Math.min(maxResults, 100)}`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
     if (!res.ok) return getPurpleBookFallback(query, maxResults);
 
     const data = (await res.json()) as LabelResponse;
-    if (!data.results || data.results.length === 0) return getPurpleBookFallback(query, maxResults);
+    if (!data.results || data.results.length === 0)
+      return getPurpleBookFallback(query, maxResults);
 
     return data.results.slice(0, maxResults).map((r, i) => {
       const brand = r.openfda?.brand_name?.[0] ?? "Unknown";
@@ -48,8 +52,12 @@ export async function fetchPurpleBook(query: string, maxResults: number): Promis
           `BLA Application: ${appNum}`,
           `Manufacturer: ${manuf}`,
           `Brand: ${brand} | Generic: ${generic}`,
-          r.indications_and_usage?.[0] ? `Indications: ${r.indications_and_usage[0].slice(0, 300)}` : null,
-        ].filter(Boolean).join(" | "),
+          r.indications_and_usage?.[0]
+            ? `Indications: ${r.indications_and_usage[0].slice(0, 300)}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" | "),
         url: `https://purplebooksearch.fda.gov/search?query=${encodeURIComponent(brand)}`,
       };
     });
@@ -58,15 +66,20 @@ export async function fetchPurpleBook(query: string, maxResults: number): Promis
   }
 }
 
-function getPurpleBookFallback(query: string, maxResults: number): LiteratureResult[] {
-  return [{
-    id: "purple_book_search",
-    source: "purple_book" as const,
-    title: `FDA Purple Book Search: ${query}`,
-    authors: ["U.S. Food and Drug Administration"],
-    date: new Date().getFullYear().toString(),
-    study_type: "registry",
-    abstract: `Search the FDA Purple Book for licensed biological products including biosimilars and reference products for "${query}". Covers FDA-licensed allergenic, cellular, gene therapy, hematologic, and vaccine products.`,
-    url: `https://purplebooksearch.fda.gov/search?query=${encodeURIComponent(query)}`,
-  }].slice(0, maxResults);
+function getPurpleBookFallback(
+  query: string,
+  maxResults: number,
+): LiteratureResult[] {
+  return [
+    {
+      id: "purple_book_search",
+      source: "purple_book" as const,
+      title: `FDA Purple Book Search: ${query}`,
+      authors: ["U.S. Food and Drug Administration"],
+      date: new Date().getFullYear().toString(),
+      study_type: "registry",
+      abstract: `Search the FDA Purple Book for licensed biological products including biosimilars and reference products for "${query}". Covers FDA-licensed allergenic, cellular, gene therapy, hematologic, and vaccine products.`,
+      url: `https://purplebooksearch.fda.gov/search?query=${encodeURIComponent(query)}`,
+    },
+  ].slice(0, maxResults);
 }

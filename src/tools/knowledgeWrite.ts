@@ -22,7 +22,7 @@ export async function handleKnowledgeWrite(
 ): Promise<ToolResult> {
   const params = KnowledgeWriteSchema.parse(rawParams);
   const audit = createAuditRecord(
-    "knowledge_write",
+    "knowledge.write",
     { project: params.project, path: params.path },
     "text",
   );
@@ -47,7 +47,7 @@ export async function handleKnowledgeWrite(
 }
 
 export const knowledgeWriteToolSchema = {
-  name: "knowledge_write",
+  name: "knowledge.write",
   description:
     "Write a file to the project's wiki/ tree. Path MUST start with 'wiki/' and end with '.md'. Use this to compile/organize evidence from raw/ files into a structured knowledge base. Supports Obsidian-style [[wikilinks]].",
   annotations: {

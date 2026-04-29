@@ -33,7 +33,9 @@ export async function fetchPubMed(
 ): Promise<LiteratureResult[]> {
   try {
     const searchUrl = `${BASE}/esearch.fcgi?db=pubmed&term=${encodeURIComponent(query)}&retmax=${maxResults}&retmode=json`;
-    const searchRes = await fetch(searchUrl);
+    const searchRes = await fetch(searchUrl, {
+      signal: AbortSignal.timeout(15_000),
+    });
     if (!searchRes.ok) return [];
 
     const searchData = (await searchRes.json()) as {
@@ -43,7 +45,9 @@ export async function fetchPubMed(
     if (ids.length === 0) return [];
 
     const summaryUrl = `${BASE}/esummary.fcgi?db=pubmed&id=${ids.join(",")}&retmode=json`;
-    const summaryRes = await fetch(summaryUrl);
+    const summaryRes = await fetch(summaryUrl, {
+      signal: AbortSignal.timeout(15_000),
+    });
     if (!summaryRes.ok) return [];
 
     const summaryData = (await summaryRes.json()) as {
@@ -54,7 +58,9 @@ export async function fetchPubMed(
     let abstracts = new Map<string, string>();
     try {
       const efetchUrl = `${BASE}/efetch.fcgi?db=pubmed&id=${ids.join(",")}&rettype=abstract&retmode=xml`;
-      const efetchRes = await fetch(efetchUrl);
+      const efetchRes = await fetch(efetchUrl, {
+        signal: AbortSignal.timeout(15_000),
+      });
       if (efetchRes.ok) {
         const efetchXml = await efetchRes.text();
         abstracts = parseAbstractsFromXml(efetchXml);

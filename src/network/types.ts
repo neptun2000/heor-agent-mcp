@@ -81,6 +81,15 @@ export interface IndirectEstimate {
   p_value: number;
   pooled_ab: PooledEstimate;
   pooled_bc: PooledEstimate;
+  /** Optional: Bucher consistency check vs direct h2h evidence (when available). */
+  consistency_check?: {
+    has_conflict: boolean;
+    severity: "untestable" | "none" | "moderate" | "substantial";
+    direct_estimate?: number;
+    direct_n_studies?: number;
+    z_difference: number;
+    rationale: string;
+  };
 }
 
 export interface HeterogeneitySummary {

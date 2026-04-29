@@ -45,6 +45,7 @@ export async function fetchWhoGho(
     const url = `${BASE}/${indicator}?$filter=TimeDim ge '2018'&$top=${maxResults}&$orderby=TimeDim desc`;
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) return [];
 

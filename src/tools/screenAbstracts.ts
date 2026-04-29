@@ -336,7 +336,7 @@ export async function handleScreenAbstracts(
   const threshold = params.include_threshold;
 
   let audit = createAuditRecord(
-    "screen_abstracts",
+    "literature.screen",
     {
       n_input: params.results.length,
       criteria: params.criteria,
@@ -585,9 +585,9 @@ export async function handleScreenAbstracts(
 }
 
 export const screenAbstractsToolSchema = {
-  name: "screen_abstracts",
+  name: "literature.screen",
   description:
-    "Screen literature search results using PICO criteria. Scores each abstract by relevance to the research question, classifies study design, and returns a ranked shortlist with inclusion/exclusion decisions and reasons. Pass the results array from a prior literature_search call (use output_format='json'). Follows Cochrane Handbook Chapter 4 screening methodology.",
+    "Screen literature search results using PICO criteria. Scores each abstract by relevance to the research question, classifies study design, and returns a ranked shortlist with inclusion/exclusion decisions and reasons. Pass the results array from a prior literature.search call (use output_format='json'). Follows Cochrane Handbook Chapter 4 screening methodology.",
   annotations: {
     title: "PICO Abstract Screening",
     readOnlyHint: true,
@@ -601,7 +601,7 @@ export const screenAbstractsToolSchema = {
       results: {
         type: "array",
         description:
-          "Array of LiteratureResult objects from a prior literature_search call (use output_format='json')",
+          "Array of LiteratureResult objects from a prior literature.search call (use output_format='json')",
         items: {
           type: "object",
           properties: {

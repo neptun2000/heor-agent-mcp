@@ -65,19 +65,20 @@ export async function fetchOecd(
     const url = `${BASE}/${dataset}${filter}/all?startTime=2018&dimensionAtObservation=AllDimensions&detail=dataonly`;
     const res = await fetch(url, {
       headers: { Accept: "application/vnd.sdmx.data+json; version=1.0" },
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) return [];
 
     const data = (await res.json()) as Record<string, unknown>;
     const observations =
-      (
-        (data?.dataSets as Array<Record<string, unknown>>)?.[0]
-          ?.observations as Record<string, unknown>
-      ) ?? {};
+      ((data?.dataSets as Array<Record<string, unknown>>)?.[0]
+        ?.observations as Record<string, unknown>) ?? {};
     const dimensions =
       (
-        (data?.structure as Record<string, unknown>)
-          ?.dimensions as Record<string, unknown>
+        (data?.structure as Record<string, unknown>)?.dimensions as Record<
+          string,
+          unknown
+        >
       )?.observation ?? [];
 
     // Find country and time dimensions
@@ -98,9 +99,7 @@ export async function fetchOecd(
     for (const [key, obs] of Object.entries(observations)) {
       if (results.length >= maxResults) break;
       const indices = key.split(":").map(Number);
-      const countryValues = countryDim.values as Array<
-        Record<string, string>
-      >;
+      const countryValues = countryDim.values as Array<Record<string, string>>;
       const timeValues = timeDim.values as Array<Record<string, string>>;
       const country =
         countryValues?.[indices[countryIdx]]?.name ??

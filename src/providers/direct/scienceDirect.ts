@@ -11,7 +11,7 @@ interface ElsevierEntry {
   "prism:doi"?: string;
   pii?: string;
   "prism:publicationName"?: string;
-  "openaccess"?: boolean;
+  openaccess?: boolean;
 }
 
 interface ElsevierResponse {
@@ -35,6 +35,7 @@ export async function fetchScienceDirect(
         "X-ELS-APIKey": apiKey,
         Accept: "application/json",
       },
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) return [];
 
@@ -56,7 +57,9 @@ export async function fetchScienceDirect(
           study_type: "unknown",
           abstract:
             e["dc:description"] ??
-            (e["prism:publicationName"] ? `Published in ${e["prism:publicationName"]}` : ""),
+            (e["prism:publicationName"]
+              ? `Published in ${e["prism:publicationName"]}`
+              : ""),
           url: doi ? `https://doi.org/${doi}` : (e["prism:url"] ?? ""),
         };
       });

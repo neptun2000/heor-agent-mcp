@@ -17,14 +17,14 @@ const mockResults: LiteratureResult[] = [
 
 describe("resultsToMarkdown", () => {
   it("includes title and source in output", () => {
-    const audit = createAuditRecord("literature_search", {}, "text");
+    const audit = createAuditRecord("literature.search", {}, "text");
     const md = resultsToMarkdown(mockResults, audit);
     expect(md).toContain("Semaglutide cost-effectiveness study");
     expect(md).toContain("pubmed");
   });
 
   it("includes audit summary section", () => {
-    const audit = createAuditRecord("literature_search", { query: "semaglutide" }, "text");
+    const audit = createAuditRecord("literature.search", { query: "semaglutide" }, "text");
     const md = resultsToMarkdown(mockResults, audit);
     expect(md).toContain("Audit");
   });
@@ -32,7 +32,7 @@ describe("resultsToMarkdown", () => {
 
 describe("auditToMarkdown", () => {
   it("renders sources queried", () => {
-    let audit = createAuditRecord("literature_search", {}, "text");
+    let audit = createAuditRecord("literature.search", {}, "text");
     audit = addSource(audit, {
       source: "pubmed",
       query_sent: "semaglutide",

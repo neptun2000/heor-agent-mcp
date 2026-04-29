@@ -16,7 +16,7 @@ export async function handleKnowledgeSearch(
 ): Promise<ToolResult> {
   const params = KnowledgeSearchSchema.parse(rawParams);
   const audit = createAuditRecord(
-    "knowledge_search",
+    "knowledge.search",
     params as unknown as Record<string, unknown>,
     "text",
   );
@@ -33,7 +33,7 @@ export async function handleKnowledgeSearch(
 
   if (matches.length === 0) {
     lines.push(
-      "No matches found. Try broader search terms or check that the project has been populated (run literature_search with `project` param first).",
+      "No matches found. Try broader search terms or check that the project has been populated (run literature.search with `project` param first).",
     );
   } else {
     for (const m of matches) {
@@ -48,7 +48,7 @@ export async function handleKnowledgeSearch(
 }
 
 export const knowledgeSearchToolSchema = {
-  name: "knowledge_search",
+  name: "knowledge.search",
   description:
     "Search a project's knowledge base (raw/ and wiki/) for text matches. Returns file paths with line numbers and snippets. Use this to find previously-retrieved literature, model runs, and compiled wiki content without re-querying external APIs.",
   annotations: {

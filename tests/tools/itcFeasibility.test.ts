@@ -116,7 +116,7 @@ describe("handleItcFeasibility", () => {
 
   it("returns an audit record", async () => {
     const r = await handleItcFeasibility({ connected_network: true });
-    expect(r.audit?.tool).toBe("itc_feasibility");
+    expect(r.audit?.tool).toBe("evidence.itc");
   });
 
   it("validates required connected_network field", async () => {

@@ -118,7 +118,7 @@ export async function handleSurvivalFitting(
   const outputFormat = params.output_format ?? "text";
 
   let audit = createAuditRecord(
-    "survival_fitting",
+    "evidence.survival",
     params as unknown as Record<string, unknown>,
     outputFormat,
   );
@@ -181,7 +181,7 @@ export async function handleSurvivalFitting(
 }
 
 export const survivalFittingToolSchema = {
-  name: "survival_fitting",
+  name: "evidence.survival",
   description:
     "⚠️ EXPERIMENTAL. Fit parametric survival distributions (Exponential, Weibull, Log-logistic, Log-normal, Gompertz) to Kaplan-Meier SUMMARY data. Returns AIC/BIC model comparison for orientation. IMPORTANT: this fits to KM step data (time, survival proportion, n_at_risk), not individual patient-level events/censoring times. Results are approximate compared to true MLE on IPD. For NICE DSU TSD 14 compliant survival modeling, use IPD with flexsurv (R) or equivalent. Provide n_at_risk on each KM row for better fits — otherwise a default sample size is assumed.",
   annotations: {

@@ -24,7 +24,12 @@ interface FdaSubmission {
 interface FdaApplication {
   application_number?: string;
   sponsor_name?: string;
-  openfda?: { application_number?: string[]; brand_name?: string[]; generic_name?: string[]; manufacturer_name?: string[] };
+  openfda?: {
+    application_number?: string[];
+    brand_name?: string[];
+    generic_name?: string[];
+    manufacturer_name?: string[];
+  };
   products?: FdaProduct[];
   submissions?: FdaSubmission[];
 }
@@ -34,12 +39,16 @@ interface FdaResponse {
   error?: { message?: string };
 }
 
-export async function fetchOrangeBook(query: string, maxResults: number): Promise<LiteratureResult[]> {
+export async function fetchOrangeBook(
+  query: string,
+  maxResults: number,
+): Promise<LiteratureResult[]> {
   try {
-    // Search openFDA by brand name, generic name, or active ingredient
-    const searchQuery = `(openfda.brand_name:"${query}"+openfda.generic_name:"${query}"+products.active_ingredients.name:"${query}")`;
+    // Sanitize query before embedding in Lucene template — strip quotes to prevent syntax injection
+    const safeQuery = query.replace(/"/g, " ").trim();
+    const searchQuery = `(openfda.brand_name:"${safeQuery}"+openfda.generic_name:"${safeQuery}"+products.active_ingredients.name:"${safeQuery}")`;
     const url = `${BASE}?search=${encodeURIComponent(searchQuery)}&limit=${Math.min(maxResults, 100)}`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
     if (!res.ok) return [];
 
     const data = (await res.json()) as FdaResponse;
@@ -50,11 +59,17 @@ export async function fetchOrangeBook(query: string, maxResults: number): Promis
       if (results.length >= maxResults) break;
       const product = app.products?.[0];
       const latestSubmission = app.submissions?.sort((a, b) =>
-        (b.submission_status_date ?? "").localeCompare(a.submission_status_date ?? "")
+        (b.submission_status_date ?? "").localeCompare(
+          a.submission_status_date ?? "",
+        ),
       )[0];
 
-      const brandName = product?.brand_name ?? app.openfda?.brand_name?.[0] ?? "Unknown";
-      const ingredients = product?.active_ingredients?.map(i => `${i.name ?? ""} ${i.strength ?? ""}`.trim()).join(", ") ?? "";
+      const brandName =
+        product?.brand_name ?? app.openfda?.brand_name?.[0] ?? "Unknown";
+      const ingredients =
+        product?.active_ingredients
+          ?.map((i) => `${i.name ?? ""} ${i.strength ?? ""}`.trim())
+          .join(", ") ?? "";
       const teCode = product?.te_code ?? "N/A";
 
       results.push({
@@ -72,8 +87,12 @@ export async function fetchOrangeBook(query: string, maxResults: number): Promis
           `Therapeutic Equivalence (TE) Code: ${teCode}`,
           `Reference drug: ${product?.reference_drug ?? "N/A"}`,
           `Marketing status: ${product?.marketing_status ?? "N/A"}`,
-          latestSubmission ? `Latest submission: ${latestSubmission.submission_type ?? ""} ${latestSubmission.submission_number ?? ""} (${latestSubmission.submission_status ?? ""}, ${latestSubmission.submission_status_date ?? ""})` : null,
-        ].filter(Boolean).join(" | "),
+          latestSubmission
+            ? `Latest submission: ${latestSubmission.submission_type ?? ""} ${latestSubmission.submission_number ?? ""} (${latestSubmission.submission_status ?? ""}, ${latestSubmission.submission_status_date ?? ""})`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" | "),
         url: `https://www.accessdata.fda.gov/scripts/cder/ob/results_product.cfm?Appl_Type=N&Appl_No=${app.application_number ?? ""}`,
       });
     }

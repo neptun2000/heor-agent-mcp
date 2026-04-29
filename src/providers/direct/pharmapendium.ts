@@ -39,6 +39,7 @@ export async function fetchPharmapendium(
     const url = `${BASE}?query=${encodeURIComponent(query)}&count=${maxResults}`;
     const res = await fetch(url, {
       headers: { "X-ELS-APIKey": apiKey, Accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) return [];
     const data = (await res.json()) as PharmapendiumResponse;

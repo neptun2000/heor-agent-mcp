@@ -37,7 +37,7 @@ export async function fetchWorldBank(
     const indicator = findIndicator(query);
     // Get most recent data for all countries
     const url = `${BASE}/country/all/indicator/${indicator}?format=json&date=2018:2025&per_page=${maxResults}&mrnev=1`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
     if (!res.ok) return [];
 
     const json = await res.json();

@@ -25,6 +25,7 @@ export async function fetchAllOfUs(
     const url = `${BASE}/search?query=${encodeURIComponent(query)}&limit=${maxResults}`;
     const res = await fetch(url, {
       headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) return [];
 

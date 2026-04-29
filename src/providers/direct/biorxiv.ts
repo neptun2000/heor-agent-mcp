@@ -11,7 +11,10 @@ interface BiorxivPaper {
   category: string;
 }
 
-export async function fetchBiorxiv(query: string, maxResults: number): Promise<LiteratureResult[]> {
+export async function fetchBiorxiv(
+  query: string,
+  maxResults: number,
+): Promise<LiteratureResult[]> {
   try {
     const dateFrom = new Date();
     dateFrom.setFullYear(dateFrom.getFullYear() - 2);
@@ -19,16 +22,17 @@ export async function fetchBiorxiv(query: string, maxResults: number): Promise<L
     const to = new Date().toISOString().split("T")[0];
 
     const url = `${BASE}/${from}/${to}/0/json`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
     if (!res.ok) return [];
 
-    const data = await res.json() as { collection: BiorxivPaper[] };
+    const data = (await res.json()) as { collection: BiorxivPaper[] };
     const queryLower = query.toLowerCase();
 
     return (data.collection ?? [])
-      .filter((p) =>
-        p.title.toLowerCase().includes(queryLower) ||
-        p.abstract.toLowerCase().includes(queryLower)
+      .filter(
+        (p) =>
+          p.title.toLowerCase().includes(queryLower) ||
+          p.abstract.toLowerCase().includes(queryLower),
       )
       .slice(0, maxResults)
       .map((p) => ({

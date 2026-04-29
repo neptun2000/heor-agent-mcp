@@ -76,7 +76,7 @@ describe("rawStore", () => {
     expect(path).toContain("models");
     const content = await readFile(path, "utf-8");
     const { frontmatter, body } = parseFrontmatter(content);
-    expect(frontmatter.tool).toBe("cost_effectiveness_model");
+    expect(frontmatter.tool).toBe("models.cost_effectiveness");
     expect(frontmatter.intervention).toBe("nivolumab");
     expect(body).toContain("ICER");
   });

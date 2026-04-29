@@ -9,24 +9,28 @@ const NADAC_DATASET_ID = "dfa2ab14-06c2-4b99-9f0e-215a6713b5f2";
 
 interface NadacRow {
   "NDC Description"?: string;
-  "NDC"?: string;
+  NDC?: string;
   "NADAC Per Unit"?: string;
   "Effective Date"?: string;
   "Pricing Unit"?: string;
   "Pharmacy Type Indicator"?: string;
-  "OTC"?: string;
+  OTC?: string;
   "Classification for Rate Setting"?: string;
 }
 
-export async function fetchCmsNadac(query: string, maxResults: number): Promise<LiteratureResult[]> {
+export async function fetchCmsNadac(
+  query: string,
+  maxResults: number,
+): Promise<LiteratureResult[]> {
   try {
     // The CMS data-api supports filter syntax
     const url = `${BASE}/${NADAC_DATASET_ID}/data?filter[NDC Description][condition][path]=NDC Description&filter[NDC Description][condition][operator]=CONTAINS&filter[NDC Description][condition][value]=${encodeURIComponent(query.toUpperCase())}&size=${Math.min(maxResults, 100)}`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
     if (!res.ok) return getFallback(query, maxResults);
 
     const data = (await res.json()) as NadacRow[];
-    if (!Array.isArray(data) || data.length === 0) return getFallback(query, maxResults);
+    if (!Array.isArray(data) || data.length === 0)
+      return getFallback(query, maxResults);
 
     return data.slice(0, maxResults).map((row, i) => ({
       id: `cms_nadac_${row["NDC"] ?? i}`,
@@ -52,14 +56,16 @@ export async function fetchCmsNadac(query: string, maxResults: number): Promise<
 }
 
 function getFallback(query: string, maxResults: number): LiteratureResult[] {
-  return [{
-    id: "cms_nadac_search",
-    source: "cms_nadac" as const,
-    title: `CMS NADAC Search: ${query}`,
-    authors: ["Centers for Medicare & Medicaid Services"],
-    date: new Date().getFullYear().toString(),
-    study_type: "pricing",
-    abstract: `Search the CMS National Average Drug Acquisition Cost (NADAC) dataset for "${query}". NADAC provides weekly updated average acquisition costs for all covered outpatient drugs, based on a monthly survey of retail community pharmacies. Used as a reference benchmark for Medicaid pharmacy reimbursement.`,
-    url: `https://data.cms.gov/dataset/nadac?query=${encodeURIComponent(query)}`,
-  }].slice(0, maxResults);
+  return [
+    {
+      id: "cms_nadac_search",
+      source: "cms_nadac" as const,
+      title: `CMS NADAC Search: ${query}`,
+      authors: ["Centers for Medicare & Medicaid Services"],
+      date: new Date().getFullYear().toString(),
+      study_type: "pricing",
+      abstract: `Search the CMS National Average Drug Acquisition Cost (NADAC) dataset for "${query}". NADAC provides weekly updated average acquisition costs for all covered outpatient drugs, based on a monthly survey of retail community pharmacies. Used as a reference benchmark for Medicaid pharmacy reimbursement.`,
+      url: `https://data.cms.gov/dataset/nadac?query=${encodeURIComponent(query)}`,
+    },
+  ].slice(0, maxResults);
 }

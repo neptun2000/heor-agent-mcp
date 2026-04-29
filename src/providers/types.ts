@@ -157,6 +157,11 @@ export interface DossierParams {
   project?: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   rob_results?: any;
+  /** Optional I² and study count per outcome — wires heterogeneity into GRADE inconsistency. */
+  heterogeneity_per_outcome?: Record<
+    string,
+    { i_squared_pct: number; n_studies: number }
+  >;
 }
 
 export interface ToolResult {

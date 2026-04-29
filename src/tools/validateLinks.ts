@@ -38,6 +38,31 @@ interface LinkStatus {
   final_url?: string; // after redirects
 }
 
+// Block SSRF targets: private/loopback IPs, cloud metadata, non-http(s) schemes
+function isSafeUrl(rawUrl: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return false;
+  }
+  if (!["http:", "https:"].includes(parsed.protocol)) return false;
+  const host = parsed.hostname.toLowerCase();
+  if (host === "localhost") return false;
+  const privateRanges = [
+    /^127\./,
+    /^10\./,
+    /^172\.(1[6-9]|2\d|3[01])\./,
+    /^192\.168\./,
+    /^169\.254\./, // cloud metadata (AWS IMDS, GCP, Azure)
+    /^::1$/,
+    /^fc00:/,
+    /^fd/,
+  ];
+  if (privateRanges.some((r) => r.test(host))) return false;
+  return true;
+}
+
 // Domains known to block bots but work in browsers
 const BROWSER_ONLY_DOMAINS = [
   "cda-amc.ca",
@@ -63,6 +88,15 @@ function categorize(url: string, status: number): LinkStatus["category"] {
 }
 
 async function checkUrl(url: string, timeoutMs: number): Promise<LinkStatus> {
+  if (!isSafeUrl(url)) {
+    return {
+      url,
+      status_code: 0,
+      ok: false,
+      category: "error",
+      message: "Blocked: private/internal URL not allowed",
+    };
+  }
   try {
     const res = await fetch(url, {
       method: "HEAD",
@@ -123,7 +157,7 @@ export async function handleValidateLinks(
   const timeoutMs = params.timeout_ms ?? 10000;
 
   let audit = createAuditRecord(
-    "validate_links",
+    "utils.validate_links",
     { n_urls: params.urls.length } as unknown as Record<string, unknown>,
     "text",
   );
@@ -209,7 +243,7 @@ export async function handleValidateLinks(
 }
 
 export const validateLinksToolSchema = {
-  name: "validate_links",
+  name: "utils.validate_links",
   description:
     "Validate URLs by making HEAD requests and checking HTTP status codes. Returns categorization: working (200), browser_only (403 from bot-blocking sites that work in browsers), broken (404/410), or timeout/error. ALWAYS use this before presenting reference links to users — broken links destroy trust. Pass all URLs you plan to cite.",
   annotations: {

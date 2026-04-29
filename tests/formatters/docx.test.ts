@@ -3,7 +3,7 @@ import type { LiteratureResult } from "../../src/providers/types.js";
 import type { AuditRecord } from "../../src/audit/types.js";
 
 const mockAudit: AuditRecord = {
-  tool: "literature_search",
+  tool: "literature.search",
   timestamp: "2026-04-04T12:00:00Z",
   query: { query: "test" },
   sources_queried: [{ source: "pubmed", query_sent: "test", results_returned: 2, results_included: 2, latency_ms: 100, status: "ok" }],

@@ -13,7 +13,7 @@ export async function handleKnowledgeRead(
 ): Promise<ToolResult> {
   const params = KnowledgeReadSchema.parse(rawParams);
   const audit = createAuditRecord(
-    "knowledge_read",
+    "knowledge.read",
     params as unknown as Record<string, unknown>,
     "text",
   );
@@ -34,7 +34,7 @@ export async function handleKnowledgeRead(
 }
 
 export const knowledgeReadToolSchema = {
-  name: "knowledge_read",
+  name: "knowledge.read",
   description:
     "Read a file from a project's raw/ or wiki/ tree. Path is relative to project root. Only raw/ and wiki/ subtrees accessible.",
   annotations: {

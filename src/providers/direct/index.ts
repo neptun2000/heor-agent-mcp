@@ -137,7 +137,7 @@ export class DirectProvider implements IProvider {
     const outputFormat = params.output_format ?? "text";
 
     let audit = createAuditRecord(
-      "literature_search",
+      "literature.search",
       params as unknown as Record<string, unknown>,
       outputFormat,
     );

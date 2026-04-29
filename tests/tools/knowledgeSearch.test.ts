@@ -13,7 +13,7 @@ describe("handleKnowledgeSearch", () => {
   it("returns matches", async () => {
     await saveLiteratureResult("p1", { id: "pm_1", source: "pubmed", title: "Semaglutide efficacy", authors: [], date: "2023", study_type: "rct", abstract: "weight loss in diabetes", url: "" }, "q");
     const result = await handleKnowledgeSearch({ project: "p1", query: "semaglutide" });
-    expect(result.audit.tool).toBe("knowledge_search");
+    expect(result.audit.tool).toBe("knowledge.search");
     expect(result.content as string).toContain("semaglutide");
   });
 

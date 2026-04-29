@@ -276,7 +276,7 @@ export async function handleUtilityValueSet(
 ): Promise<ToolResult> {
   const params = UtilityValueSetSchema.parse(rawParams);
   let audit = createAuditRecord(
-    "utility_value_set",
+    "hta.utility",
     params as unknown as Record<string, unknown>,
     "text",
   );
@@ -339,7 +339,7 @@ export async function handleUtilityValueSet(
 }
 
 export const utilityValueSetToolSchema = {
-  name: "utility_value_set",
+  name: "hta.utility",
   description:
     "Look up EQ-5D value set characteristics (UK 3L, England 5L, new UK 5L 2026, NICE DSU mapping) or estimate the ICER/QALY impact of the new UK EQ-5D-5L value set for a given indication type. Cites Biz, Hernández Alava, Wailoo (2026) Value in Health. Use when user asks about NICE 5L transition, UK utility value sets, or impact on NICE STA submissions.",
   annotations: {

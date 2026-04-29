@@ -537,7 +537,7 @@ export async function handleRiskOfBias(
   const outputFormat = params.output_format ?? "text";
 
   let audit = createAuditRecord(
-    "risk_of_bias",
+    "evidence.risk_of_bias",
     {
       n_studies: params.studies.length,
       instrument: params.instrument,
@@ -758,7 +758,7 @@ export async function handleRiskOfBias(
 }
 
 export const riskOfBiasToolSchema = {
-  name: "risk_of_bias",
+  name: "evidence.risk_of_bias",
   description:
     "Assess risk of bias for a set of studies using the appropriate Cochrane instrument: RoB 2 (RCTs), ROBINS-I (observational studies), or AMSTAR-2 (systematic reviews/meta-analyses). Instrument is auto-detected from study_type or can be specified. Judgments are inferred from abstract text — domains without sufficient reporting are marked Unclear. Returns a per-study table and a rob_results object to pass to hta_dossier_prep for evidence-based GRADE assessment.",
   annotations: {

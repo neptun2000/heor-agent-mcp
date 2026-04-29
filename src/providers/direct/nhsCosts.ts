@@ -1,6 +1,9 @@
 import type { LiteratureResult } from "../types.js";
 
-export async function fetchNhsCosts(query: string, maxResults: number): Promise<LiteratureResult[]> {
+export async function fetchNhsCosts(
+  query: string,
+  maxResults: number,
+): Promise<LiteratureResult[]> {
   const currentYear = new Date().getFullYear();
   const latestYear = currentYear - 2; // typically 2 years lag
 
@@ -16,7 +19,7 @@ export async function fetchNhsCosts(query: string, maxResults: number): Promise<
       url: "https://www.datadictionary.nhs.uk/supporting_information/healthcare_resource_group_hrg.html",
     },
     {
-      title: `NHS Payment Scheme (2025/26)`,
+      title: `NHS Payment Scheme (${currentYear}/${(currentYear + 1).toString().slice(2)})`,
       abstract: `The NHS Payment Scheme (formerly National Tariff) sets the prices paid by commissioners for most NHS services. Complementary to reference costs — provides planned rather than actual costs. Used by payers and for budget impact models.`,
       url: "https://www.england.nhs.uk/pay-syst/nhs-payment-scheme/",
     },

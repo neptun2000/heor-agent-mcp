@@ -273,7 +273,7 @@ export async function handleCostEffectivenessModel(
   const params = CEModelSchema.parse(rawParams) as CEModelParams;
   const outputFormat = params.output_format ?? "text";
   let audit = createAuditRecord(
-    "cost_effectiveness_model",
+    "models.cost_effectiveness",
     params as unknown as Record<string, unknown>,
     outputFormat,
   );
@@ -645,7 +645,7 @@ export async function handleCostEffectivenessModel(
 }
 
 export const costEffectivenessModelToolSchema = {
-  name: "cost_effectiveness_model",
+  name: "models.cost_effectiveness",
   description:
     "Build a cost-utility analysis (ICER, QALY, PSA, sensitivity analysis) for a drug vs comparator. Follows ISPOR good practice guidelines and NICE reference case. Includes probabilistic sensitivity analysis (PSA), one-way sensitivity, and cost-effectiveness acceptability curve (CEAC). NOTE: utility inputs are value-set-dependent — UK submissions in 2026+ will transition from DSU 3L→5L mapping to the new UK EQ-5D-5L value set (NICE consultation 2026-04-15 to 2026-05-13). Use utility_value_set tool to check expected impact on ICER before finalising inputs.",
   annotations: {

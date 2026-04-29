@@ -53,7 +53,7 @@ const FeasibilitySchema = z.object({
     .max(100)
     .optional()
     .describe(
-      "I² statistic (%) across trials of the same comparison, if available (e.g., from indirect_comparison tool).",
+      "I² statistic (%) across trials of the same comparison, if available (e.g., from evidence.indirect tool).",
     ),
   n_studies_per_comparison: z
     .number()
@@ -141,7 +141,7 @@ function decide(p: FeasibilityParams): FeasibilityOutput {
           "Sensitivity analysis with different covariate sets is essential.",
         ],
         next_step:
-          "Run population_adjusted_comparison with method='maic' or 'stc'. Label results EXPERIMENTAL. Plan extensive sensitivity analysis.",
+          "Run evidence.population_adjusted with method='maic' or 'stc'. Label results EXPERIMENTAL. Plan extensive sensitivity analysis.",
         citations,
       };
     }
@@ -178,7 +178,7 @@ function decide(p: FeasibilityParams): FeasibilityOutput {
         "If H2H and indirect estimates diverge materially, favour H2H and investigate the cause.",
       ],
       next_step:
-        "Use direct meta-analysis as primary. Optionally run indirect_comparison with method='frequentist_nma' to check consistency via node-splitting.",
+        "Use direct meta-analysis as primary. Optionally run evidence.indirect with method='frequentist_nma' to check consistency via node-splitting.",
       citations,
     };
   }
@@ -201,7 +201,7 @@ function decide(p: FeasibilityParams): FeasibilityOutput {
           "Both require that ALL effect modifiers be identified and measured.",
         ],
         next_step:
-          "Run population_adjusted_comparison with method='maic' (or 'stc'). Report ESS, balance diagnostics, and compare to unadjusted indirect_comparison as sensitivity.",
+          "Run evidence.population_adjusted with method='maic' (or 'stc'). Report ESS, balance diagnostics, and compare to unadjusted evidence.indirect as sensitivity.",
         citations,
       };
     }
@@ -219,7 +219,7 @@ function decide(p: FeasibilityParams): FeasibilityOutput {
         "If neither is possible, report results with explicit caveats and consider the comparison EXPERIMENTAL.",
       ],
       next_step:
-        "Commission external ML-NMR analysis, OR run indirect_comparison with documented caveats, OR pursue subgroup analysis if data permit.",
+        "Commission external ML-NMR analysis, OR run evidence.indirect with documented caveats, OR pursue subgroup analysis if data permit.",
       citations,
     };
   }
@@ -259,15 +259,15 @@ function decide(p: FeasibilityParams): FeasibilityOutput {
       homogeneity:
         i2 > 0
           ? `I² = ${i2.toFixed(1)}% → acceptable for random-effects NMA.`
-          : "Not yet computed — run indirect_comparison first to quantify.",
+          : "Not yet computed — run evidence.indirect first to quantify.",
       consistency:
         "Test via node-splitting or inconsistency model (frequentist_nma output).",
       caveats: [
         "Report both fixed-effect and random-effects estimates when heterogeneity is moderate.",
-        "Document the network diagram (see evidence_network tool).",
+        "Document the network diagram (see evidence.network tool).",
       ],
       next_step:
-        "Run indirect_comparison with method='frequentist_nma'. Report I², Cochran Q, and consistency diagnostics.",
+        "Run evidence.indirect with method='frequentist_nma'. Report I², Cochran Q, and consistency diagnostics.",
       citations,
     };
   }
@@ -288,7 +288,7 @@ function decide(p: FeasibilityParams): FeasibilityOutput {
       "No formal heterogeneity test is possible with k=1 per edge.",
     ],
     next_step:
-      "Run indirect_comparison with method='bucher'. Document the transitivity assumption explicitly in the submission.",
+      "Run evidence.indirect with method='bucher'. Document the transitivity assumption explicitly in the submission.",
     citations,
   };
 }
@@ -356,7 +356,7 @@ export async function handleItcFeasibility(
 ): Promise<ToolResult> {
   const params = FeasibilitySchema.parse(rawParams);
   let audit = createAuditRecord(
-    "itc_feasibility",
+    "evidence.itc",
     params as unknown as Record<string, unknown>,
     "text",
   );
@@ -388,9 +388,9 @@ export async function handleItcFeasibility(
 }
 
 export const itcFeasibilityToolSchema = {
-  name: "itc_feasibility",
+  name: "evidence.itc",
   description:
-    "Assess the feasibility of an indirect treatment comparison (ITC) by walking through the three core assumptions (exchangeability, homogeneity, consistency) and recommending an appropriate method: direct comparison, Bucher, full NMA, anchored MAIC/STC, unanchored MAIC/STC, ML-NMR, NMR/subgroup meta-regression, or infeasible. Cites Cope 2014 (BMC Med), NICE DSU TSD 18 (Phillippo), Signorovitch 2023 (J Dermatol Treatment), and Cochrane Handbook Ch 10-11. Use this BEFORE running indirect_comparison or population_adjusted_comparison to select the right method.",
+    "Assess the feasibility of an indirect treatment comparison (ITC) by walking through the three core assumptions (exchangeability, homogeneity, consistency) and recommending an appropriate method: direct comparison, Bucher, full NMA, anchored MAIC/STC, unanchored MAIC/STC, ML-NMR, NMR/subgroup meta-regression, or infeasible. Cites Cope 2014 (BMC Med), NICE DSU TSD 18 (Phillippo), Signorovitch 2023 (J Dermatol Treatment), and Cochrane Handbook Ch 10-11. Use this BEFORE running evidence.indirect or evidence.population_adjusted to select the right method.",
   annotations: {
     title: "ITC Feasibility Checker",
     readOnlyHint: true,

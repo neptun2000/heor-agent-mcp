@@ -4,12 +4,14 @@ import * as ct from "../../../src/providers/direct/clinicalTrials.js";
 import * as biorxiv from "../../../src/providers/direct/biorxiv.js";
 import * as chembl from "../../../src/providers/direct/chembl.js";
 import * as embase from "../../../src/providers/direct/embase.js";
+import * as wiley from "../../../src/providers/direct/wiley.js";
 
 jest.mock("../../../src/providers/direct/pubmed.js");
 jest.mock("../../../src/providers/direct/clinicalTrials.js");
 jest.mock("../../../src/providers/direct/biorxiv.js");
 jest.mock("../../../src/providers/direct/chembl.js");
 jest.mock("../../../src/providers/direct/embase.js");
+jest.mock("../../../src/providers/direct/wiley.js");
 
 const mockResult = {
   id: "pubmed_123",
@@ -29,6 +31,7 @@ describe("DirectProvider.searchLiterature", () => {
     jest.mocked(biorxiv.fetchBiorxiv).mockResolvedValue([]);
     jest.mocked(chembl.fetchChembl).mockResolvedValue([]);
     jest.mocked(embase.fetchEmbase).mockResolvedValue([]);
+    jest.mocked(wiley.fetchWiley).mockResolvedValue([]);
   });
 
   afterEach(() => jest.clearAllMocks());
@@ -37,7 +40,7 @@ describe("DirectProvider.searchLiterature", () => {
     const provider = new DirectProvider();
     const result = await provider.searchLiterature({ query: "semaglutide" });
     expect(result.content).toBeDefined();
-    expect(result.audit.tool).toBe("literature_search");
+    expect(result.audit.tool).toBe("literature.search");
     expect(result.audit.sources_queried.length).toBeGreaterThan(0);
     expect(result.audit.inclusions).toBe(1);
   });

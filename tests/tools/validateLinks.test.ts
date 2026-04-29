@@ -43,6 +43,6 @@ describe("handleValidateLinks", () => {
       timeout_ms: 3000,
     });
     expect(result.audit).toBeDefined();
-    expect(result.audit.tool).toBe("validate_links");
+    expect(result.audit.tool).toBe("utils.validate_links");
   });
 });

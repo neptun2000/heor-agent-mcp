@@ -15,6 +15,7 @@ import {
   type ValueSetId,
   type IndicationType,
 } from "../data/eq5dValueSets.js";
+import { estimateBaselineAdjustedImpact } from "../grade/eq5dImpact.js";
 
 /**
  * Utility Value Set Tool
@@ -65,6 +66,14 @@ const UtilityValueSetSchema = z
       .optional()
       .describe(
         "Optional: current incremental QALY gain to project forward under new UK 5L.",
+      ),
+    baseline_utility: z
+      .number()
+      .min(0)
+      .max(1)
+      .optional()
+      .describe(
+        "Optional: cohort mean baseline utility (0–1). When provided, the impact estimate is modulated — Biz 2026 found 5L compresses utilities in the 0.6–0.9 range, so MILD QoL conditions (baseline ~0.85) see bigger ICER increases than SEVERE versions of the same condition (baseline ~0.45). For cancer, the inverse holds.",
       ),
   })
   .strict();
@@ -230,13 +239,37 @@ function formatImpact(params: UtilityValueSetParams): string {
   lines.push(`**Caveat:** ${est.caveat}`);
   lines.push(``);
 
+  // Baseline-utility-aware modulation when provided
+  const adjusted = estimateBaselineAdjustedImpact(
+    indication,
+    params.baseline_utility,
+  );
+  const icerChangePctForProjection = adjusted.is_baseline_adjusted
+    ? adjusted.icer_change_pct.point
+    : est.median_icer_change_pct;
+
+  if (adjusted.is_baseline_adjusted) {
+    lines.push(`### Baseline-utility-adjusted estimate`);
+    lines.push(
+      `For cohort baseline utility = **${params.baseline_utility?.toFixed(2)}**:`,
+    );
+    lines.push(
+      `- Adjusted ICER change: **${adjusted.icer_change_pct.point > 0 ? "+" : ""}${adjusted.icer_change_pct.point.toFixed(1)}%** (range: ${adjusted.icer_change_pct.lower.toFixed(1)}% to ${adjusted.icer_change_pct.upper.toFixed(1)}%)`,
+    );
+    lines.push(`- ${adjusted.rationale}`);
+    lines.push(``);
+  }
+
   // Projections if base values provided
   if (params.base_icer || params.base_incremental_qaly) {
     lines.push(`### Projected values under new UK 5L`);
+    const projectionLabel = adjusted.is_baseline_adjusted
+      ? "baseline-adjusted"
+      : "median";
     if (params.base_icer) {
-      const newIcer = params.base_icer * (1 + est.median_icer_change_pct / 100);
+      const newIcer = params.base_icer * (1 + icerChangePctForProjection / 100);
       lines.push(
-        `- Current ICER: **${params.base_icer.toLocaleString()} /QALY** → projected: **~${Math.round(newIcer).toLocaleString()} /QALY** (median shift).`,
+        `- Current ICER: **${params.base_icer.toLocaleString()} /QALY** → projected: **~${Math.round(newIcer).toLocaleString()} /QALY** (${projectionLabel} shift).`,
       );
     }
     if (params.base_incremental_qaly) {
@@ -248,7 +281,7 @@ function formatImpact(params: UtilityValueSetParams): string {
     }
     lines.push(``);
     lines.push(
-      `> ⚠️ These are **median** projections from a cross-TA analysis — your specific submission may differ substantially. Individual TA results ranged widely within each category.`,
+      `> ⚠️ These are projections from a cross-TA analysis${adjusted.is_baseline_adjusted ? " adjusted by baseline utility (extrapolation — not a direct Biz 2026 finding)" : ""}. Your specific submission may differ. Individual TA results ranged widely within each category.`,
     );
     lines.push(``);
   }

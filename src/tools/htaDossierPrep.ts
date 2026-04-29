@@ -45,6 +45,19 @@ const DossierSchema = z.object({
     .describe(
       "Optional: I² and study count per outcome (from evidence_indirect tool). When provided, GRADE inconsistency is computed from I² instead of heuristic. Example: { 'overall survival': { i_squared_pct: 45, n_studies: 6 } }",
     ),
+  upgrading_per_outcome: z
+    .record(
+      z.string(),
+      z.object({
+        large_effect: z.enum(["none", "large", "very_large"]).optional(),
+        dose_response: z.boolean().optional(),
+        plausible_confounding_toward_null: z.boolean().optional(),
+      }),
+    )
+    .optional()
+    .describe(
+      "Optional: GRADE upgrading flags per outcome for observational evidence (Guyatt 2011). 'large_effect' rates effect magnitude (large=RR<0.5 or >2.0; very_large=RR<0.2 or >5.0). 'dose_response' = documented gradient. 'plausible_confounding_toward_null' = bias would reduce effect. Capped at +2 steps. Ignored for RCT evidence (already High).",
+    ),
 });
 import {
   createAuditRecord,
@@ -53,6 +66,7 @@ import {
   setMethodology,
 } from "../audit/builder.js";
 import { assessInconsistency } from "../grade/inconsistency.js";
+import { assessUpgrading } from "../grade/upgrading.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
 import { contentToDocx } from "../formatters/docx.js";
 import { saveReport } from "../knowledge/index.js";
@@ -158,11 +172,21 @@ type HeterogeneityPerOutcome = Record<
   { i_squared_pct: number; n_studies: number }
 >;
 
+type UpgradingPerOutcome = Record<
+  string,
+  {
+    large_effect?: "none" | "large" | "very_large";
+    dose_response?: boolean;
+    plausible_confounding_toward_null?: boolean;
+  }
+>;
+
 function generateGradeTable(
   evidence: LiteratureResult[],
   outcomes: string[],
   robResults?: RobResults,
   heterogeneityPerOutcome?: HeterogeneityPerOutcome,
+  upgradingPerOutcome?: UpgradingPerOutcome,
 ): string {
   if (evidence.length === 0) return "";
 
@@ -244,14 +268,24 @@ function generateGradeTable(
     if (imprecision === "Serious") downgrades++;
     if (pub_bias === "Suspected") downgrades++;
 
-    const baseLevel = robResults
-      ? robResults.overall_certainty_start === "High"
-        ? 4
-        : 2
+    // GRADE upgrading (Guyatt 2011) — only applies to observational evidence
+    // (start_certainty = Low). Capped at +2.
+    const startCertainty: "High" | "Low" = robResults
+      ? robResults.overall_certainty_start
       : hasRCTs
-        ? 4
-        : 2; // High=4, Low=2
-    const finalLevel = Math.max(1, baseLevel - downgrades);
+        ? "High"
+        : "Low";
+    const upgradeFlags = upgradingPerOutcome?.[outcome];
+    const upgradingAssessment = upgradeFlags
+      ? assessUpgrading({ start_certainty: startCertainty, ...upgradeFlags })
+      : { upgrade_steps: 0 as 0 | 1 | 2, rationale: "" };
+
+    const baseLevel = startCertainty === "High" ? 4 : 2; // High=4, Low=2
+    // Apply downgrades, then upgrades (GRADE order). Cap at [1, 4].
+    const finalLevel = Math.min(
+      4,
+      Math.max(1, baseLevel - downgrades + upgradingAssessment.upgrade_steps),
+    );
     const certainty =
       finalLevel >= 4
         ? "High"
@@ -268,6 +302,9 @@ function generateGradeTable(
         : "",
       indirectness !== "Low" ? `Indirectness: ${indirectness}` : "",
       imprecision !== "Low" ? `Imprecision: ${imprecision}` : "",
+      upgradingAssessment.upgrade_steps > 0
+        ? `Upgraded +${upgradingAssessment.upgrade_steps}: ${upgradingAssessment.rationale}`
+        : "",
       pub_bias !== "Low" ? `Pub. bias: ${pub_bias}` : "",
     ]
       .filter(Boolean)
@@ -695,6 +732,7 @@ export async function handleHtaDossierPrep(
       [],
       params.rob_results as RobResults | undefined,
       params.heterogeneity_per_outcome,
+      params.upgrading_per_outcome,
     );
     if (gradeTable) {
       lines.push(gradeTable);

@@ -1,5 +1,38 @@
 import { PostHog } from "posthog-node";
 
+/**
+ * Map MCP `clientInfo.name` (set by the calling client during initialize)
+ * to a canonical surface label so PostHog can distinguish events from
+ * Claude Desktop, the Vercel web UI, the ChatGPT Custom GPT adapter, etc.
+ *
+ * Returns "direct_mcp" for unknown / npx / third-party clients.
+ */
+export type ClientSurface =
+  | "claude_anthropic_web"
+  | "chatgpt_adapter"
+  | "claude_desktop"
+  | "smithery"
+  | "glama"
+  | "pulsemcp"
+  | "direct_mcp";
+
+export function inferSurface(clientName: string | undefined): ClientSurface {
+  if (!clientName) return "direct_mcp";
+  const n = clientName.toLowerCase();
+  if (n.startsWith("heor-web-ui")) return "claude_anthropic_web";
+  if (n.startsWith("chatgpt-adapter")) return "chatgpt_adapter";
+  if (
+    n === "claude" ||
+    n.startsWith("claude-ai") ||
+    n.startsWith("claude-desktop")
+  )
+    return "claude_desktop";
+  if (n.startsWith("smithery")) return "smithery";
+  if (n.startsWith("glama")) return "glama";
+  if (n.startsWith("pulsemcp")) return "pulsemcp";
+  return "direct_mcp";
+}
+
 let client: PostHog | null = null;
 
 function getClient(): PostHog | null {
@@ -39,12 +72,16 @@ export function trackToolCall(
   sessionId?: string,
   properties: Record<string, unknown> = {},
 ) {
-  trackEvent("tool_call", {
-    tool_name: toolName,
-    duration_ms: durationMs,
-    status,
-    ...properties,
-  }, sessionId);
+  trackEvent(
+    "tool_call",
+    {
+      tool_name: toolName,
+      duration_ms: durationMs,
+      status,
+      ...properties,
+    },
+    sessionId,
+  );
 }
 
 export function trackSession(

@@ -84,7 +84,12 @@ import {
   itcFeasibilityToolSchema,
 } from "./tools/itcFeasibility.js";
 import { randomUUID } from "node:crypto";
-import { trackToolCall, trackSession, shutdownAnalytics } from "./analytics.js";
+import {
+  trackToolCall,
+  trackSession,
+  shutdownAnalytics,
+  inferSurface,
+} from "./analytics.js";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 
@@ -161,7 +166,9 @@ const HEOR_PROMPTS = [
   },
 ];
 
-function createMcpServer(): Server {
+function createMcpServer(
+  surfaceRef: { value: string } = { value: "direct_mcp" },
+): Server {
   const server = new Server(
     { name: "heor-agent-mcp", version: PKG_VERSION },
     {
@@ -289,14 +296,19 @@ function createMcpServer(): Server {
           result = await handleItcFeasibility(args);
           break;
         default:
-          trackToolCall(name, Date.now() - callStart, "error");
+          trackToolCall(name, Date.now() - callStart, "error", undefined, {
+            surface: surfaceRef.value,
+            error_class: "unknown_tool",
+          });
           return {
             content: [{ type: "text", text: `Unknown tool: ${name}` }],
             isError: true,
           };
       }
 
-      trackToolCall(name, Date.now() - callStart, "ok");
+      trackToolCall(name, Date.now() - callStart, "ok", undefined, {
+        surface: surfaceRef.value,
+      });
 
       const content =
         typeof result.content === "string"
@@ -309,6 +321,7 @@ function createMcpServer(): Server {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       trackToolCall(name, Date.now() - callStart, "error", undefined, {
+        surface: surfaceRef.value,
         error: message,
       });
       return {
@@ -513,13 +526,23 @@ async function runHttp(port: number) {
             return;
           }
 
-          // New session
-          const server = createMcpServer();
+          // New session — capture clientInfo.name from initialize body so
+          // every subsequent tool_call event can be tagged with surface
+          // (claude_anthropic_web / chatgpt_adapter / claude_desktop / etc.)
+          const clientName = body?.params?.clientInfo?.name as
+            | string
+            | undefined;
+          const surface = inferSurface(clientName);
+          const surfaceRef = { value: surface };
+          const server = createMcpServer(surfaceRef);
           transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
             onsessioninitialized: (id) => {
               sessions.set(id, { transport, lastActivity: Date.now() });
-              trackSession("session_start", id);
+              trackSession("session_start", id, {
+                surface,
+                client_name: clientName ?? "unknown",
+              });
             },
           });
           transport.onclose = () => {

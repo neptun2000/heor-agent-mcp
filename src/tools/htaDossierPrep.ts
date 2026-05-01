@@ -5,6 +5,11 @@ import type {
   LiteratureResult,
   PicoDefinition,
 } from "../providers/types.js";
+import {
+  LiteratureResultSchema,
+  RobResultsSchema,
+  CEModelResultSchema,
+} from "../schemas/dossierInputSchemas.js";
 
 const DossierSchema = z.object({
   hta_body: z.enum(["nice", "ema", "fda", "iqwig", "has", "jca", "gvd"]),
@@ -18,8 +23,10 @@ const DossierSchema = z.object({
   ]),
   drug_name: z.string().min(1),
   indication: z.string().min(1),
-  evidence_summary: z.union([z.string(), z.array(z.any())]).optional(),
-  model_results: z.any().optional(),
+  evidence_summary: z
+    .union([z.string(), z.array(LiteratureResultSchema)])
+    .optional(),
+  model_results: CEModelResultSchema.optional(),
   picos: z
     .array(
       z.object({
@@ -32,7 +39,7 @@ const DossierSchema = z.object({
     .optional(),
   output_format: z.enum(["text", "json", "docx"]).optional(),
   project: z.string().optional(),
-  rob_results: z.any().optional(),
+  rob_results: RobResultsSchema.optional(),
   heterogeneity_per_outcome: z
     .record(
       z.string(),

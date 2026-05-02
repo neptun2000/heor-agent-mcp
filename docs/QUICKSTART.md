@@ -34,7 +34,7 @@ If you have Claude Code installed:
 claude mcp add heor-agent -- npx heor-agent-mcp
 ```
 
-Then restart Claude Code. The 14 HEOR tools become available in any conversation.
+Then restart Claude Code. The 17 HEOR tools become available in any conversation.
 
 ### For Claude Desktop users (manual config)
 
@@ -57,6 +57,22 @@ Add this:
 ```
 
 Restart Claude Desktop. The HEOR tools appear in your tools list.
+
+### For ChatGPT Plus / Team users (Custom GPT, no Anthropic key needed)
+
+If you prefer ChatGPT (or have ChatGPT Plus but no Anthropic API access):
+
+1. Go to **[chatgpt.com/gpts/editor](https://chatgpt.com/gpts/editor)** → click **Create**
+2. **Configure** tab — give it a name (e.g., "HEORAgent") and a short description
+3. **Actions** → **Create new action** → **Import from URL** → paste:
+   ```
+   https://web-michael-ns-projects.vercel.app/api/openapi
+   ```
+   ChatGPT auto-imports all 17 HEOR tools.
+4. **Authentication** → **None** (public test) or **API Key** if a token is configured
+5. Test in the playground, then **Publish**
+
+Note: ChatGPT mode caps `psa_iterations` at 1,000 and `literature_search.runs` at 1 to fit the 45s ChatGPT Action timeout. Use the web UI or Claude clients for full PSA / multi-run searches.
 
 ## Step 3 — Try a few prompts
 

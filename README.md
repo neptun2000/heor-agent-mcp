@@ -12,6 +12,21 @@ Built for pharmaceutical, biotech, CRO, and medical affairs teams who need rigor
 
 ---
 
+## What's new in v1.0.4
+
+Senior HEOR methodology + ChatGPT support:
+
+- **GRADE inconsistency now uses I²** instead of study count. Single-study comparisons return `not_assessable` (per Cochrane 10.10) instead of being silently auto-downgraded as "Serious". Pass `heterogeneity_per_outcome` to `hta_dossier` and the Cochrane bands (50–74% Moderate, 75–89% Serious, ≥90% Very Serious) are applied directly.
+- **GRADE upgrading (Guyatt 2011)** — observational evidence with strong effects can now be upgraded from Low. Three criteria via `upgrading_per_outcome`: large effect (RR <0.5/>2.0 → +1; <0.2/>5.0 → +2), dose-response (+1), plausible confounding biasing toward null (+1). Capped at +2.
+- **Bucher consistency check** — when direct head-to-head A-vs-C evidence exists alongside the indirect A-vs-C estimate, `evidence_indirect` automatically tests Bucher's consistency assumption and flags violations (NICE DSU TSD 18). |z|≥1.96 = "substantial — consistency assumption appears violated."
+- **EQ-5D 5L impact is baseline-utility-aware.** Biz 2026 reports category-level medians, but the new 5L value set compresses utilities in the 0.6–0.9 range — a drug for mild plaque psoriasis (baseline ~0.85) sees a much bigger ICER increase than one for severe HS (baseline ~0.45), even though both are `non_cancer_qol_only`. Pass `baseline_utility` to `utility_value_set` for a calibrated estimate.
+- **ChatGPT Custom GPT support** — new OpenAPI 3.1 adapter at `/api/openapi` lets you build a Custom GPT in 5 minutes. See [ChatGPT Custom GPT](#chatgpt-custom-gpt) below.
+- **Surface-tagged analytics** — every `tool_call` PostHog event now carries a `surface` property (`claude_anthropic_web` / `chatgpt_adapter` / `claude_desktop` / `direct_mcp`) so you can break down usage by client.
+
+See [CHANGELOG.md](./CHANGELOG.md) for the full diff.
+
+---
+
 ## Quick Start
 
 ### Claude Code
@@ -45,15 +60,23 @@ Add to your MCP configuration:
 
 ---
 
-## Tools
+## Tools (17)
 
 | Tool | Purpose |
 |------|---------|
-| `literature_search` | Search 42 data sources with a full PRISMA-style audit trail |
+| `literature_search` | Search 44 data sources with a full PRISMA-style audit trail |
 | `screen_abstracts` | PICO-based relevance scoring and study design classification |
 | `risk_of_bias` | Cochrane RoB 2 / ROBINS-I / AMSTAR-2 with GRADE RoB domain summary |
-| `cost_effectiveness_model` | Markov / PartSA / decision-tree CEA with PSA, OWSA, CEAC, EVPI |
-| `hta_dossier_prep` | Draft submissions for NICE, EMA, FDA, IQWiG, HAS, and EU JCA — GRADE table uses structured RoB when `rob_results` passed |
+| `evidence_network` | Build treatment comparison network and assess NMA feasibility |
+| `evidence_indirect` | Bucher and frequentist NMA with **automatic consistency check** vs direct h2h evidence (NICE DSU TSD 18) |
+| `population_adjusted_comparison` | MAIC and STC for population-adjusted indirect comparisons |
+| `survival_fitting` | Fit 5 parametric distributions to KM data (NICE DSU TSD 14) |
+| `itc_feasibility` | Assess the 3-assumption ITC framework and recommend Bucher / NMA / MAIC / STC / ML-NMR |
+| `cost_effectiveness_model` | Markov / PartSA / decision-tree CEA with PSA, OWSA, CEAC, EVPI, EVPPI; QALY + evLYG support |
+| `budget_impact_model` | ISPOR-compliant BIA with year-by-year output and treatment-displacement modelling |
+| `hta_dossier` | Draft submissions for NICE, EMA, FDA, IQWiG, HAS, and EU JCA — GRADE table uses structured RoB when `rob_results` passed; **inconsistency uses I² when `heterogeneity_per_outcome` passed**; **GRADE upgrading (Guyatt 2011) supported via `upgrading_per_outcome`** |
+| `utility_value_set` | EQ-5D-3L / 5L value-set reference + **baseline-utility-aware** Biz 2026 ICER impact estimator (UK 5L transition) |
+| `validate_links` | HTTP validation of citation URLs before presentation |
 | `project_create` | Initialize a persistent project workspace |
 | `knowledge_search` | Full-text search across a project's raw/ and wiki/ trees |
 | `knowledge_read` | Read any file from a project's knowledge base |
@@ -61,7 +84,7 @@ Add to your MCP configuration:
 
 ### `literature_search`
 
-Searches across 42 sources in parallel. Every call returns a **source selection table** showing which of the 42 sources were used and why — essential for HTA audit trails.
+Searches across 44 sources in parallel. Every call returns a **source selection table** showing which of the 44 sources were used and why — essential for HTA audit trails.
 
 **Example call:**
 ```json
@@ -197,7 +220,7 @@ This single prompt exercises: `project_create` → `literature_search` → `scre
 
 ## Data Sources
 
-**42 sources across 9 categories.** Every `literature_search` call includes a source selection table showing used/not-used status and reason for each.
+**44 sources across 10 categories.** Every `literature_search` call includes a source selection table showing used/not-used status and reason for each.
 
 <details>
 <summary><b>Biomedical & Clinical Trials (5)</b></summary>
@@ -270,9 +293,11 @@ This single prompt exercises: `project_create` → `literature_search` → `scre
 </details>
 
 <details>
-<summary><b>Other (1)</b></summary>
+<summary><b>HEOR Methodology & Utility Reference (3)</b></summary>
 
 - **ISPOR** — HEOR methodology and conference abstracts
+- **OHE (Office of Health Economics)** — EQ-5D value set research and HEOR methodology
+- **EuroQol Group** — EQ-5D instruments, value sets, and registry
 </details>
 
 ---
@@ -293,7 +318,7 @@ DOCX files are saved to `~/.heor-agent/projects/{project}/reports/` (when a proj
 
 Every tool call returns a full audit record:
 
-- **Source selection table** — all 42 sources with used/not-used and reason
+- **Source selection table** — all 44 sources with used/not-used and reason
 - **Sources queried** — queries sent, response counts, status, latency
 - **Inclusions / exclusions** — counts with reasons
 - **Methodology** — PRISMA-style for literature, ISPOR/NICE for economics
@@ -333,10 +358,11 @@ A companion chat interface is available at:
 
 **https://web-michael-ns-projects.vercel.app**
 
-- Chat with Claude Opus 4.6 + all 7 HEOR tools
+- Chat with Claude Sonnet 4.6 + all 17 HEOR tools
 - **BYOK (Bring Your Own Key)** — paste your Anthropic API key in the settings; it stays in your browser's localStorage and is never stored on our servers
-- Markdown rendering with styled tables, tool call cards with live progress timers
-- Example prompts for common HEOR workflows
+- Markdown rendering with styled tables, tool call cards with live progress timers, and theme-aware mermaid network diagrams
+- 12 example prompts covering literature search, CEA, BIA, NMA, ITC feasibility, RoB, EQ-5D 5L, EU JCA dossiers
+- Per-request MCP sessions (no cross-user session bleed)
 
 The web UI calls the hosted MCP server on Railway for tool execution. No setup required — just add your API key and start querying.
 
@@ -350,6 +376,70 @@ npm run dev -- -p 3456
 ```
 
 Set `MCP_SERVER_URL` to point to your own MCP server instance (default: the public Railway deployment).
+
+---
+
+## ChatGPT Custom GPT
+
+HEORAgent can also be used as a ChatGPT Custom GPT Action — useful when you (or your team) prefer the ChatGPT interface or have a ChatGPT Plus/Team account but no Anthropic API access.
+
+The web tier exposes an OpenAPI 3.1 adapter at `/api/openapi`, with one POST endpoint per tool at `/api/v1/{tool_name}`. ChatGPT speaks this contract natively.
+
+### What's different from the Anthropic surface
+
+| | Web UI / MCP / Claude Desktop | ChatGPT Custom GPT |
+|---|---|---|
+| Streaming | yes (SSE) | no (45s single response) |
+| `psa_iterations` | up to 10,000 | capped to 1,000 (CEA) / 500 (BIA) |
+| `literature_search.runs` | 1–5 | capped to 1 |
+| `literature_search.max_results` | up to 100 | capped to 30 |
+| Auth model | BYOK Anthropic | optional `X-API-Key` header (server-side `CHATGPT_ADAPTER_TOKEN`) |
+| Surface label in PostHog | `claude_anthropic_web` / `claude_desktop` | `chatgpt_adapter` |
+
+The caps exist because ChatGPT Actions hard-fail at the 45-second response timeout. PSA, multi-run literature search, and full max_results would routinely exceed it. The web UI and MCP clients are unaffected.
+
+### Build a Custom GPT (ChatGPT Plus / Team required)
+
+1. Visit [chatgpt.com/gpts/editor](https://chatgpt.com/gpts/editor) and click **Create**.
+2. **Configure** tab — fill in name (e.g., "HEORAgent"), description, and conversation starters. Paste the system prompt from `web/lib/claude.ts` (or write your own — the tool descriptions are self-documenting).
+3. **Actions** → **Create new action** → **Import from URL** → paste:
+   ```
+   https://web-michael-ns-projects.vercel.app/api/openapi
+   ```
+   ChatGPT auto-imports all 17 endpoints with their schemas.
+4. **Authentication** — choose **None** for the open public endpoint, or **API Key** with the `CHATGPT_ADAPTER_TOKEN` value if you've configured one (recommended for prod).
+5. **Privacy policy URL** — required by GPT Store. Use the web UI's privacy URL or your own.
+6. **Test** in the playground (right pane), then **Publish** → "Anyone with the link" or "GPT Store".
+
+### Securing the adapter for production
+
+By default the `/api/v1/*` endpoint is open. Two layers of protection are recommended for any public-facing GPT:
+
+```bash
+# 1. Token-gate the endpoint
+cd web
+vercel env add CHATGPT_ADAPTER_TOKEN production   # generate a long random token
+# Configure the same token in your Custom GPT under Authentication → API Key
+
+# 2. Built-in rate limit
+# 60 req/min per IP is enforced automatically (lib/rateLimit.ts).
+# For multi-region/high-traffic prod, swap in @upstash/ratelimit + Vercel KV.
+```
+
+### Sample call (manual, no GPT needed)
+
+```bash
+curl -X POST https://web-michael-ns-projects.vercel.app/api/v1/utility_value_set \
+  -H "Content-Type: application/json" \
+  -d '{
+        "action": "estimate_impact",
+        "indication_type": "non_cancer_qol_only",
+        "baseline_utility": 0.85,
+        "base_icer": 30000
+      }'
+```
+
+Returns the Biz 2026 baseline-utility-adjusted ICER projection (the new EQ-5D 5L impact estimator).
 
 ---
 
@@ -379,7 +469,7 @@ HTTP endpoints:
 git clone https://github.com/neptun2000/heor-agent-mcp
 cd heor-agent-mcp
 npm install
-npm test          # 244 tests across 66 suites
+npm test          # 401 tests across 84 suites
 npm run build     # Compile TypeScript to dist/
 npm run dev       # Run with tsx (no build step)
 ```
@@ -398,10 +488,10 @@ npm run dev       # Run with tsx (no build step)
 ┌────────────────▼──────────────────────────┐
 │  heor-agent-mcp server                    │
 │  ┌──────────────────────────────────────┐ │
-│  │ 7 MCP tools (Zod-validated)          │ │
+│  │ 17 MCP tools (Zod-validated)         │ │
 │  ├──────────────────────────────────────┤ │
 │  │ DirectProvider (default)             │ │
-│  │   ├─ 42 source fetchers              │ │
+│  │   ├─ 44 source fetchers              │ │
 │  │   ├─ Audit builder + PRISMA trail    │ │
 │  │   ├─ Markov / PartSA economic models │ │
 │  │   ├─ Markdown + DOCX formatters      │ │

@@ -6,7 +6,7 @@
 
 | Tool | What it does | Why it matters |
 |------|-------------|----------------|
-| `literature_search` | Search 42 sources with PRISMA audit trail | Weeks of manual literature review compressed to minutes |
+| `literature_search` | Search 44 sources with PRISMA audit trail | Weeks of manual literature review compressed to minutes |
 | `screen_abstracts` | PICO-based relevance scoring + study design classification | Filters noise from search results per Cochrane Handbook Ch. 4 |
 | `risk_of_bias` | Cochrane RoB 2 (RCTs), ROBINS-I (observational), AMSTAR-2 (SRs) with GRADE summary | Replaces heuristic RoB estimates in dossier GRADE tables with structured domain judgments |
 | `evidence_network` | Build treatment comparison network, assess NMA feasibility | Essential prerequisite for indirect comparisons |
@@ -35,15 +35,20 @@
 | Partitioned Survival | Woods 2017 |
 | PSA | Monte Carlo, 1K–10K iterations |
 | EVPPI | Strong et al. 2014 (non-parametric binning) |
-| Bucher indirect comparison | Bucher 1997 |
+| Bucher indirect comparison + **consistency check** | Bucher 1997; NICE DSU TSD 18; Cochrane Ch. 11.4.3 |
 | Frequentist NMA | Rücker 2012 (weighted least squares) |
+| Heterogeneity (I², Cochran Q, τ²) | Higgins & Thompson 2002, Cochrane 10.10 |
 | MAIC/STC | Phillippo 2016, NICE DSU TSD 18 |
 | Survival fitting | Latimer 2013, NICE DSU TSD 14 |
 | Budget impact | Mauskopf 2007, Sullivan 2014, ISPOR |
+| **GRADE inconsistency from I²** | Cochrane bands: <50% Low, 50–74% Moderate, 75–89% Serious, ≥90% Very Serious |
+| **GRADE upgrading** (large effect / dose-response / confounding-toward-null) | Guyatt 2011 (J Clin Epidemiol) |
 | GRADE | Guyatt et al. 2008, GRADE Handbook |
 | RoB 2 | Sterne et al. 2019 (BMJ) |
 | ROBINS-I | Sterne et al. 2016 (BMJ) |
 | AMSTAR-2 | Shea et al. 2017 (BMJ) |
+| **EQ-5D 5L baseline-utility-adjusted ICER impact** | Biz, Hernández Alava, Wailoo 2026 (Value in Health forthcoming) |
+| ITC feasibility (3-assumption framework) | Cope 2014, NICE DSU TSD 18, Signorovitch 2023 |
 
 ## Data Sources (44)
 
@@ -57,6 +62,7 @@
 | HTA Appraisals | NICE TAs, CADTH/CDA-AMC, ICER, PBAC, G-BA AMNOG, HAS, IQWiG, AIFA, TLV, INESSS, ISPOR |
 | LATAM | DATASUS, CONITEC, ANVISA, PAHO, IETS, FONASA |
 | APAC | HITAP |
+| HEOR Methodology & Utilities | ISPOR, OHE (Office of Health Economics), EuroQol Group |
 
 ## Output Formats
 
@@ -70,7 +76,7 @@
 ## Status: What's Production-Ready vs Experimental
 
 **Production-ready:**
-- Literature search (42 sources)
+- Literature search (44 sources)
 - Project knowledge base
 - HTA dossier prep (templates + auto-GRADE from literature)
 - Budget impact model

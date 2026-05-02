@@ -2,6 +2,31 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.0.4 (2026-05-02) — Bucher consistency, GRADE upgrading, EQ-5D baseline-utility, ChatGPT support
+
+### Added
+- **Bucher consistency check** — `evidence_indirect` now empirically tests Bucher's consistency assumption when direct head-to-head evidence is also in the network. Severity bands per Cochrane Ch. 11.4.3 / NICE DSU TSD 18: |z|<1.5 no conflict, 1.5–1.96 moderate (⚠️), ≥1.96 substantial (🚨), opposite-direction with both significant → substantial. Conflicts are surfaced in the markdown report and the `consistency_check` field on each `IndirectEstimate`.
+- **GRADE upgrading (Guyatt 2011)** — observational evidence with strong indicators can be upgraded from Low. Three criteria via the new `upgrading_per_outcome` param on `hta_dossier`: large effect (RR <0.5/>2.0 → +1; <0.2/>5.0 → +2), dose-response gradient (+1), plausible confounding biasing toward null (+1). Capped at +2 steps. Skipped when starting certainty is High (RCTs).
+- **EQ-5D 5L baseline-utility-aware impact estimator.** `utility_value_set` now accepts `baseline_utility` (0–1). Biz 2026 reports category-level medians but the magnitude depends strongly on cohort baseline utility — 5L compresses utilities most in the 0.6–0.9 range, so a drug for mild plaque psoriasis (~0.85) sees a much bigger ICER increase than one for severe HS (~0.45). Output explicitly labels the result as an extrapolation beyond Biz 2026.
+- **ChatGPT Custom GPT support.** New OpenAPI 3.1 adapter at `/api/openapi` (web tier) lets you build a Custom GPT in ~5 minutes. One POST endpoint per tool at `/api/v1/{tool_name}` — same code path as the Anthropic surface, with ChatGPT-friendly caps (`psa_iterations≤1000`, `runs≤1`, `max_results≤30`) so calls fit the 45s Action timeout. Optional `CHATGPT_ADAPTER_TOKEN` for auth; built-in 60 req/min/IP rate limiter.
+- **Surface-tagged analytics.** Every `tool_call` PostHog event now carries a `surface` property derived from `clientInfo.name`: `claude_anthropic_web`, `chatgpt_adapter`, `claude_desktop`, `smithery`, `glama`, `pulsemcp`, or `direct_mcp`. `session_start` events also include `surface` + `client_name` for acquisition reports.
+
+### Fixed (code review)
+- `assessInconsistency`: when I² is unknown, return `not_assessable` (was `Moderate` with `downgrade_steps=0`, which silently inflated GRADE certainty).
+- `bucher.ts toWorkingScale`: stripped dead `se` parameter that was a correctness trap for log-scale measures.
+- `eq5dImpact.ts`: zero-median early return — future indication categories without published medians no longer produce degenerate `{0,0,0}` ranges.
+- `mcpSession.ts` drift guard: changed module-load `throw` to a warn + lazy `UnmappedToolError` at call time. A single drift bug no longer crashes the entire web UI cold-start; only the affected tool fails.
+- `htaDossierPrep` schema: replaced `z.any()` for `rob_results` / `model_results` / `evidence_summary` with proper Zod schemas.
+- Adapter route: rate limit added (60 req/min/IP); `available_tools` 404 list now uses canonical 17-tool list (was 6); `MCP_API_VERSION` constant replaces hardcoded `"1.0.3"`.
+
+### Tests
+- 401 MCP tests / 96 web tests = 497 total passing (was 357 at v1.0.2).
+
+### References
+Bucher HC et al. J Clin Epidemiol. 1997;50(6):683-691; Cochrane Handbook Ch. 11.4.3; NICE DSU TSD 18; Guyatt GH et al. J Clin Epidemiol. 2011;64(12):1311-1316; Biz, Hernández Alava, Wailoo (2026) Value in Health forthcoming.
+
+---
+
 ## v1.0.3 (2026-04-29) — Senior HEOR methodology fixes
 
 ### Fixed

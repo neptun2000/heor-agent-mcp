@@ -8,15 +8,20 @@ import {
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
 
+// Only title + abstract + study_type are needed for RoB inference. The rest
+// are display/citation fields — make them optional with sensible fallbacks
+// so real-world inputs (Claude/GPT pasting partial study data) don't fail
+// at the schema boundary. PostHog showed 71% of real risk_of_bias calls
+// were failing on missing source/authors/date/url; this fixes that.
 const StudyInputSchema = z.object({
-  id: z.string(),
-  source: z.string(),
-  title: z.string(),
-  authors: z.array(z.string()),
-  date: z.string(),
-  study_type: z.string(),
-  abstract: z.string(),
-  url: z.string(),
+  title: z.string().min(1),
+  abstract: z.string(), // may be empty; tool returns Unclear for missing detail
+  study_type: z.string().default("unknown"),
+  id: z.string().optional(),
+  source: z.string().optional(),
+  authors: z.array(z.string()).optional(),
+  date: z.string().optional(),
+  url: z.string().optional(),
 });
 
 const RiskOfBiasSchema = z.object({
@@ -582,10 +587,10 @@ export async function handleRiskOfBias(
     else result = assessAmstar2(study);
 
     studyAssessments.push({
-      id: study.id,
+      id: study.id ?? `study-${studyAssessments.length + 1}`,
       title: study.title,
-      url: study.url,
-      date: study.date,
+      url: study.url ?? "",
+      date: study.date ?? "",
       instrument: chosen,
       instrument_assumed: assumed,
       domains: result.domains,

@@ -70,6 +70,64 @@ describe("handleRiskOfBias", () => {
     await expect(handleRiskOfBias({})).rejects.toThrow();
   });
 
+  // PostHog showed 71% real-world failure rate — users were getting Zod
+  // errors for missing source/authors/date/url even when title+abstract
+  // were sufficient for RoB inference. These fields are now optional.
+  it("accepts minimal study input — only title + abstract + study_type required", async () => {
+    const result = await handleRiskOfBias({
+      studies: [
+        {
+          title: "SUSTAIN-6 cardiovascular outcomes trial",
+          abstract: "Double-blind RCT, 3297 patients, MACE primary outcome.",
+          study_type: "RCT",
+        },
+      ],
+    });
+    expect(result.audit.tool).toBe("evidence.risk_of_bias");
+    const content =
+      typeof result.content === "string"
+        ? result.content
+        : JSON.stringify(result.content);
+    expect(content).toMatch(/RoB 2|randomization/i);
+  });
+
+  it("accepts study without url — falls back gracefully", async () => {
+    const result = await handleRiskOfBias({
+      studies: [
+        {
+          id: "test-1",
+          title: "Cohort study of X",
+          abstract: "Observational cohort, 1000 patients.",
+          study_type: "observational",
+        },
+      ],
+    });
+    expect(result.audit.tool).toBe("evidence.risk_of_bias");
+  });
+
+  it("still requires title (needed for RoB inference)", async () => {
+    await expect(
+      handleRiskOfBias({
+        studies: [{ abstract: "x", study_type: "RCT" }],
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("accepts empty abstract (tool returns Unclear domains gracefully)", async () => {
+    const result = await handleRiskOfBias({
+      studies: [{ title: "Trial X", abstract: "", study_type: "RCT" }],
+    });
+    expect(result.audit.tool).toBe("evidence.risk_of_bias");
+  });
+
+  it("still requires abstract field to be PRESENT (even if empty string)", async () => {
+    await expect(
+      handleRiskOfBias({
+        studies: [{ title: "x", study_type: "RCT" }],
+      }),
+    ).rejects.toThrow();
+  });
+
   // ── Instrument auto-detection ───────────────────────────────────────────────
 
   it("assigns rob2 to RCT study", async () => {

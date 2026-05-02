@@ -3,8 +3,14 @@
 [![npm version](https://img.shields.io/npm/v/heor-agent-mcp.svg)](https://www.npmjs.com/package/heor-agent-mcp)
 [![license](https://img.shields.io/npm/l/heor-agent-mcp.svg)](./LICENSE)
 [![node](https://img.shields.io/node/v/heor-agent-mcp.svg)](https://nodejs.org)
+[![Try in ChatGPT](https://img.shields.io/badge/Try_in-ChatGPT-10A37F?logo=openai&logoColor=white)](https://chatgpt.com/g/g-69f651f588f48191b1d69d54409857ec-heoragent)
+[![Web UI](https://img.shields.io/badge/Web_UI-Vercel-000000?logo=vercel&logoColor=white)](https://web-michael-ns-projects.vercel.app)
 
 **AI-powered Health Economics and Outcomes Research (HEOR) agent as a Model Context Protocol server.**
+
+> **Try it now →** [HEORAgent on ChatGPT](https://chatgpt.com/g/g-69f651f588f48191b1d69d54409857ec-heoragent) (ChatGPT Plus / Team)
+> · [Web UI (Claude, BYOK)](https://web-michael-ns-projects.vercel.app)
+> · `npx heor-agent-mcp` for Claude Desktop / Claude Code
 
 Automates literature review across 44 data sources, risk of bias assessment (RoB 2 / ROBINS-I / AMSTAR-2), EQ-5D value set impact estimation, state-of-the-art cost-effectiveness modelling, HTA dossier preparation for NICE / EMA / FDA / IQWiG / HAS / EU JCA, and a persistent project knowledge base — all callable as MCP tools from Claude.ai, Claude Code, and any MCP-compatible host.
 
@@ -381,9 +387,13 @@ Set `MCP_SERVER_URL` to point to your own MCP server instance (default: the publ
 
 ## ChatGPT Custom GPT
 
-HEORAgent can also be used as a ChatGPT Custom GPT Action — useful when you (or your team) prefer the ChatGPT interface or have a ChatGPT Plus/Team account but no Anthropic API access.
+> **🟢 Live:** [HEORAgent on ChatGPT →](https://chatgpt.com/g/g-69f651f588f48191b1d69d54409857ec-heoragent)
+>
+> Open in ChatGPT (Plus / Team / Enterprise account required), pick a conversation starter, and you're querying 44 HEOR data sources.
 
-The web tier exposes an OpenAPI 3.1 adapter at `/api/openapi`, with one POST endpoint per tool at `/api/v1/{tool_name}`. ChatGPT speaks this contract natively.
+HEORAgent is also available as a ChatGPT Custom GPT — useful when you (or your team) prefer the ChatGPT interface or have a ChatGPT Plus/Team account but no Anthropic API access.
+
+Behind the scenes, the web tier exposes an OpenAPI 3.1 adapter at `/api/openapi`, with one POST endpoint per tool at `/api/v1/{tool_name}`. ChatGPT speaks this contract natively.
 
 ### What's different from the Anthropic surface
 

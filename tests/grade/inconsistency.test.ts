@@ -25,11 +25,18 @@ describe("assessInconsistency — GRADE inconsistency domain", () => {
   });
 
   describe("multiple studies, no I² provided", () => {
-    it("returns Moderate with no automatic downgrade and recommends manual review", () => {
+    it("returns not_assessable with 0 downgrade and explicit manual-review prompt (avoids silently inflating certainty)", () => {
+      // Code review caught a bug: previously returned level=Moderate with
+      // downgrade_steps=0, which is internally inconsistent — every other
+      // Moderate path uses 1 step. To avoid silently inflating certainty
+      // OR silently downgrading, mark as not_assessable and force a human
+      // decision via rationale.
       const r = assessInconsistency(3, null);
-      expect(r.level).toBe("Moderate");
+      expect(r.level).toBe("not_assessable");
       expect(r.downgrade_steps).toBe(0);
-      expect(r.rationale).toMatch(/manual heterogeneity review/i);
+      expect(r.rationale).toMatch(
+        /manual heterogeneity review|I² not computed/i,
+      );
     });
   });
 

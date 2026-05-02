@@ -36,8 +36,15 @@ export type ConsistencySeverity =
 export interface ConsistencyAssessment {
   has_conflict: boolean;
   severity: ConsistencySeverity;
+  /** direct − indirect (positive when direct exceeds indirect). Same scale as input. */
   difference: number;
+  /** Pooled SE: sqrt(SE_direct² + SE_indirect²). */
   se_difference: number;
+  /**
+   * Signed z = (direct − indirect) / SE_diff. Sign indicates which side
+   * the disagreement falls on. Severity bands use |z|, but consumers
+   * presenting the value should preserve the sign for direction.
+   */
   z_difference: number;
   rationale: string;
 }
@@ -59,15 +66,15 @@ export function assessConsistencyConflict(
 
   const difference = input.direct.value - input.indirect.value;
   const se_difference = Math.sqrt(
-    input.direct.se * input.direct.se +
-      input.indirect.se * input.indirect.se,
+    input.direct.se * input.direct.se + input.indirect.se * input.indirect.se,
   );
   const z = se_difference > 0 ? difference / se_difference : 0;
   const absZ = Math.abs(z);
 
   // Opposite-direction check: both estimates significant in opposite directions
   const directSig = Math.abs(input.direct.value) / input.direct.se >= 1.96;
-  const indirectSig = Math.abs(input.indirect.value) / input.indirect.se >= 1.96;
+  const indirectSig =
+    Math.abs(input.indirect.value) / input.indirect.se >= 1.96;
   const oppositeSign =
     Math.sign(input.direct.value) !== Math.sign(input.indirect.value) &&
     input.direct.value !== 0 &&

@@ -58,17 +58,22 @@ Add this:
 
 Restart Claude Desktop. The HEOR tools appear in your tools list.
 
-### For ChatGPT Plus / Team users (Custom GPT, no Anthropic key needed)
+### For ChatGPT Plus / Team users (no install, no Anthropic key)
 
-If you prefer ChatGPT (or have ChatGPT Plus but no Anthropic API access):
+**👉 [Open HEORAgent on ChatGPT](https://chatgpt.com/g/g-69f651f588f48191b1d69d54409857ec-heoragent)**
+
+That's it — click the link, pick a conversation starter, start querying. ChatGPT Plus / Team / Enterprise account required.
+
+#### Want to build your own GPT against the same backend?
+
+The web tier exposes the 17 tools as an OpenAPI 3.1 adapter at `/api/openapi`. To wire up your own ChatGPT Custom GPT:
 
 1. Go to **[chatgpt.com/gpts/editor](https://chatgpt.com/gpts/editor)** → click **Create**
-2. **Configure** tab — give it a name (e.g., "HEORAgent") and a short description
+2. **Configure** tab — give it a name and short description
 3. **Actions** → **Create new action** → **Import from URL** → paste:
    ```
    https://web-michael-ns-projects.vercel.app/api/openapi
    ```
-   ChatGPT auto-imports all 17 HEOR tools.
 4. **Authentication** → **None** (public test) or **API Key** if a token is configured
 5. Test in the playground, then **Publish**
 

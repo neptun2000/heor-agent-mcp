@@ -82,7 +82,22 @@ export function estimateBaselineAdjustedImpact(
   }
 
   const published = getImpactEstimate(indication);
-  const median = published?.median_icer_change_pct ?? 0;
+
+  // Guard: indication categories without a published median (future entries
+  // added before data is populated) must not silently return a degenerate
+  // {0, 0, 0} range. Return is_baseline_adjusted=false with an explicit
+  // "no estimate available" rationale so callers can branch.
+  if (!published) {
+    return {
+      indication_type: indication,
+      icer_change_pct: { point: 0, lower: 0, upper: 0 },
+      is_baseline_adjusted: false,
+      baseline_utility,
+      rationale: `No published impact estimate for ${indication} — this category has no Biz 2026 entry yet. Re-run your model under both value sets for a direct estimate.`,
+    };
+  }
+
+  const median = published.median_icer_change_pct;
 
   // Range for unmodulated estimate (±25% of median to reflect inter-study spread)
   const baseRange = {
@@ -96,7 +111,7 @@ export function estimateBaselineAdjustedImpact(
       indication_type: indication,
       icer_change_pct: baseRange,
       is_baseline_adjusted: false,
-      rationale: `Published median for ${indication} (Biz et al. 2026, n=${published?.examples?.length ?? 0} indication examples).`,
+      rationale: `Published median for ${indication} (Biz et al. 2026, n=${published.examples?.length ?? 0} indication examples).`,
     };
   }
 
@@ -136,8 +151,8 @@ export function estimateBaselineAdjustedImpact(
     indication_type: indication,
     icer_change_pct: {
       point: adjustedPoint,
-      lower: adjustedPoint - Math.abs(adjustedPoint) * 0.30,
-      upper: adjustedPoint + Math.abs(adjustedPoint) * 0.30,
+      lower: adjustedPoint - Math.abs(adjustedPoint) * 0.3,
+      upper: adjustedPoint + Math.abs(adjustedPoint) * 0.3,
     },
     is_baseline_adjusted: true,
     baseline_utility,

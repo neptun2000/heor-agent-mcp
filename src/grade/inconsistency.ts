@@ -53,8 +53,12 @@ export function assessInconsistency(
     };
   }
   if (i_squared_pct == null) {
+    // Was: level="Moderate", downgrade_steps=0 — internally inconsistent
+    // (every other Moderate path uses 1 step). Returning not_assessable
+    // with 0 downgrade forces an explicit manual decision instead of
+    // silently inflating GRADE certainty.
     return {
-      level: "Moderate",
+      level: "not_assessable",
       downgrade_steps: 0,
       rationale:
         "Multiple studies but I² not computed — manual heterogeneity review recommended",

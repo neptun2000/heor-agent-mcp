@@ -39,15 +39,12 @@ function isLogScale(measure: EffectMeasure): boolean {
 }
 
 /** Convert to working scale (log for ratio measures) */
-function toWorkingScale(
-  estimate: number,
-  se: number,
-  measure: EffectMeasure,
-): { value: number; se: number } {
-  if (isLogScale(measure)) {
-    return { value: Math.log(estimate), se };
-  }
-  return { value: estimate, se };
+// Returns the working-scale point estimate. The SE parameter was
+// previously included but acted as dead weight (passed through unchanged)
+// — that was a correctness trap because for OR/HR/RR the original-scale
+// SE is NOT the log-scale SE. Use seOnWorkingScale() for that.
+function toWorkingScale(estimate: number, measure: EffectMeasure): number {
+  return isLogScale(measure) ? Math.log(estimate) : estimate;
 }
 
 /** Convert SE from CI on the original scale to working scale */
@@ -136,22 +133,16 @@ export function computeIndirectComparison(
   measure: EffectMeasure,
   directAC?: DirectComparison[],
 ): IndirectEstimate {
-  // Convert to working scale and pool
+  // Convert to working scale and pool. The SE on the working scale (log
+  // for ratio measures) comes from seOnWorkingScale, NOT from
+  // toWorkingScale (which only transforms the point estimate).
   const abStudies = directAB.map((d) => ({
-    value: toWorkingScale(
-      d.estimate,
-      seOnWorkingScale(d.estimate, d.ci_lower, d.ci_upper, measure),
-      measure,
-    ).value,
+    value: toWorkingScale(d.estimate, measure),
     se: seOnWorkingScale(d.estimate, d.ci_lower, d.ci_upper, measure),
   }));
 
   const cbStudies = directCB.map((d) => ({
-    value: toWorkingScale(
-      d.estimate,
-      seOnWorkingScale(d.estimate, d.ci_lower, d.ci_upper, measure),
-      measure,
-    ).value,
+    value: toWorkingScale(d.estimate, measure),
     se: seOnWorkingScale(d.estimate, d.ci_lower, d.ci_upper, measure),
   }));
 
@@ -175,11 +166,7 @@ export function computeIndirectComparison(
   let consistency_check: IndirectEstimate["consistency_check"] | undefined;
   if (directAC && directAC.length > 0) {
     const acStudies = directAC.map((d) => ({
-      value: toWorkingScale(
-        d.estimate,
-        seOnWorkingScale(d.estimate, d.ci_lower, d.ci_upper, measure),
-        measure,
-      ).value,
+      value: toWorkingScale(d.estimate, measure),
       se: seOnWorkingScale(d.estimate, d.ci_lower, d.ci_upper, measure),
     }));
     const pooledAC = poolFixedEffect(acStudies);

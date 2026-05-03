@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { createProvider } from "../providers/factory.js";
 import type { ToolResult } from "../providers/types.js";
+import { suggestForEnum } from "../util/didYouMean.js";
 
+// Single-source aliases — common typos and informal names.
 const SOURCE_ALIASES: Record<string, string> = {
   nice: "nice_ta",
   cadth: "cadth_reviews",
@@ -29,6 +31,33 @@ const SOURCE_ALIASES: Record<string, string> = {
   euroqol_group: "euroqol",
   "eq-5d": "euroqol",
   eq5d: "euroqol",
+};
+
+// Macro aliases — one shorthand expands to a family of related sources.
+// Lets agents (Claude / ChatGPT) use coarse categories like "hta" without
+// hallucinating one-off names like "heta".
+const SOURCE_MACROS: Record<string, string[]> = {
+  hta: [
+    "nice_ta",
+    "cadth_reviews",
+    "icer_reports",
+    "pbac_psd",
+    "gba_decisions",
+    "has_tc",
+    "iqwig",
+    "aifa",
+    "tlv",
+    "inesss",
+  ],
+  hta_eu: ["nice_ta", "iqwig", "has_tc", "gba_decisions", "aifa", "tlv"],
+  hta_uk: ["nice_ta"],
+  hta_us: ["icer_reports", "orange_book", "purple_book"],
+  hta_apac: ["pbac_psd", "hitap"],
+  hta_latam: ["conitec", "iets", "fonasa"],
+  costs: ["cms_nadac", "pssru", "nhs_costs", "bnf", "pbs_schedule"],
+  preprints: ["biorxiv"],
+  registries: ["clinicaltrials"],
+  epidemiology: ["who_gho", "world_bank", "oecd", "ihme_gbd"],
 };
 
 const LiteratureSearchSchema = z.object({
@@ -109,9 +138,28 @@ function resolveSourceAliases(params: unknown): unknown {
     Array.isArray((params as Record<string, unknown>).sources)
   ) {
     const p = params as Record<string, unknown>;
-    p.sources = (p.sources as string[]).map(
-      (s) => SOURCE_ALIASES[s.toLowerCase()] ?? s,
-    );
+    const expanded: string[] = [];
+    const seen = new Set<string>();
+    for (const raw of p.sources as string[]) {
+      const lower = raw.toLowerCase();
+      // Macro alias: one input → multiple sources (e.g., "hta" → all HTA bodies)
+      if (lower in SOURCE_MACROS) {
+        for (const s of SOURCE_MACROS[lower]) {
+          if (!seen.has(s)) {
+            seen.add(s);
+            expanded.push(s);
+          }
+        }
+        continue;
+      }
+      // Single alias or pass-through
+      const resolved = SOURCE_ALIASES[lower] ?? raw;
+      if (!seen.has(resolved)) {
+        seen.add(resolved);
+        expanded.push(resolved);
+      }
+    }
+    p.sources = expanded;
   }
   return params;
 }
@@ -119,9 +167,36 @@ function resolveSourceAliases(params: unknown): unknown {
 export async function handleLiteratureSearch(
   rawParams: unknown,
 ): Promise<ToolResult> {
-  const params = LiteratureSearchSchema.parse(resolveSourceAliases(rawParams));
+  const aliased = resolveSourceAliases(rawParams);
+  const result = LiteratureSearchSchema.safeParse(aliased);
+  if (!result.success) {
+    // Enrich invalid_enum_value errors with did-you-mean suggestions —
+    // helps Claude/ChatGPT self-correct on the next turn instead of
+    // returning the raw Zod issue list.
+    const messages: string[] = [];
+    for (const issue of result.error.issues) {
+      if (
+        issue.code === "invalid_enum_value" &&
+        typeof issue.received === "string"
+      ) {
+        const suggestions = suggestForEnum(
+          issue.received,
+          issue.options as readonly string[],
+        );
+        const macros = Object.keys(SOURCE_MACROS).join(", ");
+        const hint =
+          suggestions.length > 0
+            ? `Did you mean: ${suggestions.map((s) => `"${s}"`).join(", ")}?`
+            : `Or use a macro: ${macros} (each expands to a family of sources).`;
+        messages.push(`Unknown source "${issue.received}". ${hint}`);
+      } else {
+        messages.push(`${issue.path.join(".")}: ${issue.message}`);
+      }
+    }
+    throw new Error(messages.join("\n"));
+  }
   const provider = createProvider();
-  return provider.searchLiterature(params);
+  return provider.searchLiterature(result.data);
 }
 
 export const literatureSearchToolSchema = {

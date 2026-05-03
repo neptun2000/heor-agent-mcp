@@ -2,33 +2,68 @@ import { z } from "zod";
 import { createProject, listProjects } from "../knowledge/projectStore.js";
 import type { ToolResult } from "../providers/types.js";
 import { createAuditRecord } from "../audit/builder.js";
+import { suggestForEnum } from "../util/didYouMean.js";
+
+// Expanded list of HTA bodies users actually target. Added: smc (Scotland),
+// awmsg (Wales), tlv (Sweden), aifa (Italy), inesss (Quebec), ispor.
+// PostHog showed real-world calls with hta_targets=["smc"] failing because
+// SMC was missing.
+const HTA_TARGETS = [
+  "nice",
+  "smc",
+  "awmsg",
+  "ema",
+  "fda",
+  "iqwig",
+  "gba",
+  "has",
+  "jca",
+  "cadth",
+  "pbac",
+  "icer",
+  "tlv",
+  "aifa",
+  "inesss",
+  "ispor",
+] as const;
 
 const ProjectCreateSchema = z.object({
   project_id: z.string().min(1).max(64),
   drug: z.string().min(1),
   indication: z.string().min(1),
-  hta_targets: z
-    .array(
-      z.enum([
-        "nice",
-        "ema",
-        "fda",
-        "iqwig",
-        "has",
-        "jca",
-        "cadth",
-        "pbac",
-        "icer",
-      ]),
-    )
-    .optional(),
+  hta_targets: z.array(z.enum(HTA_TARGETS)).optional(),
   notes: z.string().optional(),
 });
 
 export async function handleProjectCreate(
   rawParams: unknown,
 ): Promise<ToolResult> {
-  const params = ProjectCreateSchema.parse(rawParams);
+  const result = ProjectCreateSchema.safeParse(rawParams);
+  if (!result.success) {
+    const messages: string[] = [];
+    for (const issue of result.error.issues) {
+      if (
+        issue.code === "invalid_enum_value" &&
+        typeof issue.received === "string"
+      ) {
+        const suggestions = suggestForEnum(
+          issue.received,
+          issue.options as readonly string[],
+        );
+        const hint =
+          suggestions.length > 0
+            ? `Did you mean: ${suggestions.map((s) => `"${s}"`).join(", ")}?`
+            : `Valid options: ${(issue.options as string[]).join(", ")}.`;
+        messages.push(
+          `Unknown ${issue.path.join(".")} value "${issue.received}". ${hint}`,
+        );
+      } else {
+        messages.push(`${issue.path.join(".")}: ${issue.message}`);
+      }
+    }
+    throw new Error(messages.join("\n"));
+  }
+  const params = result.data;
   const audit = createAuditRecord(
     "project.create",
     params as unknown as Record<string, unknown>,

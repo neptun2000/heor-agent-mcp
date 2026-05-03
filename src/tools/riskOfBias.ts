@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ToolResult, LiteratureResult } from "../providers/types.js";
+import type { ToolResult } from "../providers/types.js";
 import {
   createAuditRecord,
   addAssumption,
@@ -570,7 +570,16 @@ export async function handleRiskOfBias(
     overall: string;
   }> = [];
 
-  for (const study of params.studies as LiteratureResult[]) {
+  // Render a study title — wrap in markdown link when url is non-empty,
+  // otherwise return plain text. Prevents broken `[title]()` links when
+  // the optional url field is missing (the StudyInputSchema relax allows
+  // this).
+  function formatStudyTitle(title: string, url: string): string {
+    const truncated = title.slice(0, 55) + (title.length > 55 ? "..." : "");
+    return url ? `[${truncated}](${url})` : truncated;
+  }
+
+  for (const study of params.studies) {
     const chosen =
       params.instrument === "auto"
         ? detectInstrument(study.study_type, study.title, study.abstract)
@@ -668,7 +677,7 @@ export async function handleRiskOfBias(
     lines.push(`| Study | ${domainKeys.join(" | ")} | Overall |`);
     lines.push(`|---|${domainKeys.map(() => "---").join("|")}|---|`);
     for (const s of rob2Studies) {
-      const titleLink = `[${s.title.slice(0, 55)}${s.title.length > 55 ? "..." : ""}](${s.url})`;
+      const titleLink = formatStudyTitle(s.title, s.url);
       const domainCells = domainKeys
         .map((k) => s.domains[k].judgment)
         .join(" | ");
@@ -703,7 +712,7 @@ export async function handleRiskOfBias(
     lines.push(`| Study | ${domainKeys.join(" | ")} | Overall |`);
     lines.push(`|---|${domainKeys.map(() => "---").join("|")}|---|`);
     for (const s of robinsStudies) {
-      const titleLink = `[${s.title.slice(0, 55)}${s.title.length > 55 ? "..." : ""}](${s.url})`;
+      const titleLink = formatStudyTitle(s.title, s.url);
       const domainCells = domainKeys
         .map((k) => s.domains[k].judgment)
         .join(" | ");
@@ -721,7 +730,7 @@ export async function handleRiskOfBias(
     lines.push(`| Review | ${domainKeys.join(" | ")} | Confidence |`);
     lines.push(`|---|${domainKeys.map(() => "---").join("|")}|---|`);
     for (const s of amstarStudies) {
-      const titleLink = `[${s.title.slice(0, 55)}${s.title.length > 55 ? "..." : ""}](${s.url})`;
+      const titleLink = formatStudyTitle(s.title, s.url);
       const domainCells = domainKeys
         .map((k) => s.domains[k].judgment)
         .join(" | ");
@@ -792,16 +801,12 @@ export const riskOfBiasToolSchema = {
             abstract: { type: "string" },
             url: { type: "string" },
           },
-          required: [
-            "id",
-            "source",
-            "title",
-            "authors",
-            "date",
-            "study_type",
-            "abstract",
-            "url",
-          ],
+          // Only title + abstract are needed for RoB inference. The rest
+          // are display-only — see Zod StudyInputSchema at the top of this
+          // file. Keep the JSON Schema and Zod in lock-step so clients
+          // reading the advertised schema (Claude / ChatGPT / agents) see
+          // the same constraints Zod actually enforces.
+          required: ["title", "abstract"],
         },
       },
       instrument: {

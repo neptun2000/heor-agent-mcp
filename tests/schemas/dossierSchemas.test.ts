@@ -34,9 +34,9 @@ describe("LiteratureResultSchema", () => {
   });
 
   it("rejects when title is missing", () => {
-    expect(() =>
-      LiteratureResultSchema.parse({ abstract: "..." }),
-    ).toThrow(/title/);
+    expect(() => LiteratureResultSchema.parse({ abstract: "..." })).toThrow(
+      /title/,
+    );
   });
 
   it("rejects when title is wrong type (number)", () => {
@@ -76,22 +76,44 @@ describe("RobResultsSchema", () => {
     ).toThrow();
   });
 
-  it("requires summary.rob_judgment", () => {
+  it("requires summary.rob_judgment (the load-bearing field)", () => {
     expect(() =>
       RobResultsSchema.parse({
-        summary: { downgrade: false, rationale: "x" },
+        summary: { rationale: "x" },
         overall_certainty_start: "High",
       }),
     ).toThrow(/rob_judgment/);
   });
 
-  it("requires summary.downgrade to be a boolean", () => {
-    expect(() =>
-      RobResultsSchema.parse({
-        summary: { rob_judgment: "Low", downgrade: "no", rationale: "x" },
-        overall_certainty_start: "High",
-      }),
-    ).toThrow(/downgrade/);
+  // PostHog 2026-05-03 showed real claude_anthropic_web errors where
+  // summary.downgrade was missing — Claude was constructing rob_results
+  // inline rather than passing through risk_of_bias output. Make these
+  // optional with sensible defaults so real-world inputs are accepted.
+  it("accepts summary without downgrade (defaults to false)", () => {
+    const r = RobResultsSchema.parse({
+      summary: {
+        rob_judgment: "Low",
+        rationale: "All studies low risk",
+      },
+      overall_certainty_start: "High",
+    });
+    expect(r.summary.downgrade).toBe(false);
+  });
+
+  it("accepts summary without rationale (defaults to empty string)", () => {
+    const r = RobResultsSchema.parse({
+      summary: { rob_judgment: "Low", downgrade: false },
+      overall_certainty_start: "High",
+    });
+    expect(r.summary.rationale).toBe("");
+  });
+
+  it("accepts a string-y boolean for downgrade (Claude sometimes passes 'true'/'false' strings)", () => {
+    const r = RobResultsSchema.parse({
+      summary: { rob_judgment: "Low", downgrade: "false", rationale: "x" },
+      overall_certainty_start: "High",
+    });
+    expect(r.summary.downgrade).toBe(false);
   });
 
   it("rejects when summary itself is missing", () => {

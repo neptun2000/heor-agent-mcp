@@ -240,7 +240,7 @@ export async function handleIndirectComparison(
 export const indirectComparisonToolSchema = {
   name: "evidence.indirect",
   description:
-    "Compute indirect treatment comparisons using the Bucher method (single common comparator) or frequentist network meta-analysis (full network). Requires user-supplied effect sizes (point estimates + 95% CI) from published trials. Supports mean differences (MD) and ratio measures (OR, RR, HR). Auto-selects method based on network structure, or user can specify.",
+    "Compute indirect treatment comparisons using the Bucher method (single common comparator) or frequentist network meta-analysis (full network). Requires user-supplied effect sizes (point estimates + 95% CI) from published trials. Supports MD, OR, RR, HR. Auto-selects method by network structure. When direct head-to-head A-vs-C evidence is also in the network, automatically tests Bucher's consistency assumption (z = (direct − indirect) / SE_diff) per NICE DSU TSD 18 / Cochrane 11.4.3 — flags |z|≥1.96 as 'substantial inconsistency' so the agent can warn the user before relying on the indirect estimate.",
   annotations: {
     title: "Indirect Treatment Comparison",
     readOnlyHint: true,

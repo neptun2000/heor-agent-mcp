@@ -83,6 +83,7 @@ import {
   handleItcFeasibility,
   itcFeasibilityToolSchema,
 } from "./tools/itcFeasibility.js";
+import { handleExamples, examplesToolSchema } from "./tools/examples.js";
 import { randomUUID } from "node:crypto";
 import {
   trackToolCall,
@@ -234,6 +235,7 @@ function createMcpServer(
       validateLinksToolSchema,
       utilityValueSetToolSchema,
       itcFeasibilityToolSchema,
+      examplesToolSchema,
     ],
   }));
 
@@ -294,6 +296,9 @@ function createMcpServer(
           break;
         case "evidence.itc":
           result = await handleItcFeasibility(args);
+          break;
+        case "examples":
+          result = await handleExamples(args);
           break;
         default:
           trackToolCall(name, Date.now() - callStart, "error", undefined, {

@@ -169,6 +169,7 @@ const HEOR_PROMPTS = [
 
 function createMcpServer(
   surfaceRef: { value: string } = { value: "direct_mcp" },
+  sessionIdRef: { value: string } = { value: "" },
 ): Server {
   const server = new Server(
     { name: "heor-agent-mcp", version: PKG_VERSION },
@@ -301,19 +302,29 @@ function createMcpServer(
           result = await handleExamples(args);
           break;
         default:
-          trackToolCall(name, Date.now() - callStart, "error", undefined, {
-            surface: surfaceRef.value,
-            error_class: "unknown_tool",
-          });
+          trackToolCall(
+            name,
+            Date.now() - callStart,
+            "error",
+            sessionIdRef.value || undefined,
+            {
+              surface: surfaceRef.value,
+              error_class: "unknown_tool",
+            },
+          );
           return {
             content: [{ type: "text", text: `Unknown tool: ${name}` }],
             isError: true,
           };
       }
 
-      trackToolCall(name, Date.now() - callStart, "ok", undefined, {
-        surface: surfaceRef.value,
-      });
+      trackToolCall(
+        name,
+        Date.now() - callStart,
+        "ok",
+        sessionIdRef.value || undefined,
+        { surface: surfaceRef.value },
+      );
 
       const content =
         typeof result.content === "string"
@@ -325,10 +336,16 @@ function createMcpServer(
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      trackToolCall(name, Date.now() - callStart, "error", undefined, {
-        surface: surfaceRef.value,
-        error: message,
-      });
+      trackToolCall(
+        name,
+        Date.now() - callStart,
+        "error",
+        sessionIdRef.value || undefined,
+        {
+          surface: surfaceRef.value,
+          error: message,
+        },
+      );
       return {
         content: [{ type: "text", text: `Error: ${message}` }],
         isError: true,
@@ -367,6 +384,7 @@ const SESSION_ID_RE =
 
 interface ManagedSession {
   transport: StreamableHTTPServerTransport;
+  surface?: string;
   lastActivity: number;
 }
 
@@ -378,7 +396,10 @@ function evictStaleSessions(): void {
     if (now - session.lastActivity > SESSION_TTL_MS) {
       session.transport.close?.();
       sessions.delete(id);
-      trackSession("session_end", id, { reason: "ttl_eviction" });
+      trackSession("session_end", id, {
+        reason: "ttl_eviction",
+        surface: session.surface ?? "unknown",
+      });
     }
   }
 }
@@ -539,11 +560,21 @@ async function runHttp(port: number) {
             | undefined;
           const surface = inferSurface(clientName);
           const surfaceRef = { value: surface };
-          const server = createMcpServer(surfaceRef);
+          // Session ID ref — populated by onsessioninitialized below, read by
+          // tool_call telemetry so each event is attributed to the right user.
+          // Without this, all tool_call events distinct_id="anonymous" and
+          // per-user analytics are blind.
+          const sessionIdRef = { value: "" };
+          const server = createMcpServer(surfaceRef, sessionIdRef);
           transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
             onsessioninitialized: (id) => {
-              sessions.set(id, { transport, lastActivity: Date.now() });
+              sessions.set(id, {
+                transport,
+                lastActivity: Date.now(),
+                surface,
+              });
+              sessionIdRef.value = id;
               trackSession("session_start", id, {
                 surface,
                 client_name: clientName ?? "unknown",
@@ -553,7 +584,7 @@ async function runHttp(port: number) {
           transport.onclose = () => {
             for (const [id, s] of sessions) {
               if (s.transport === transport) {
-                trackSession("session_end", id);
+                trackSession("session_end", id, { surface });
                 sessions.delete(id);
                 break;
               }

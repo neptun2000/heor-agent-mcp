@@ -328,7 +328,15 @@ function generateGradeTable(
     };
   }
 
-  const assessedOutcomes =
+  // Auto-merge: if the user passed upgrading_per_outcome or
+  // heterogeneity_per_outcome with a custom outcome key (e.g., "mortality",
+  // "MACE composite"), include that outcome in the GRADE table iteration
+  // so the flag actually fires. Without this, the flag was silently dropped.
+  const customOutcomeKeys = new Set<string>([
+    ...Object.keys(upgradingPerOutcome ?? {}),
+    ...Object.keys(heterogeneityPerOutcome ?? {}),
+  ]);
+  const baseOutcomes =
     outcomes.length > 0
       ? outcomes
       : [
@@ -337,6 +345,16 @@ function generateGradeTable(
           "quality of life",
           "adverse events",
         ];
+  // Merge while preserving order and de-duplicating (case-insensitive).
+  const seenLower = new Set<string>();
+  const assessedOutcomes: string[] = [];
+  for (const o of [...baseOutcomes, ...customOutcomeKeys]) {
+    const k = o.toLowerCase();
+    if (!seenLower.has(k)) {
+      seenLower.add(k);
+      assessedOutcomes.push(o);
+    }
+  }
 
   const lines: string[] = [
     `### GRADE Evidence Quality Assessment`,

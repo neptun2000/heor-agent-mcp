@@ -96,4 +96,84 @@ describe("handleHtaDossierPrep — rob_results integration", () => {
     expect(result.audit).toBeDefined();
     expect(result.audit.tool).toBe("hta.dossier");
   });
+
+  // Validation surfaced silent no-op: GRADE table iterates over default
+  // outcomes; if upgrading_per_outcome / heterogeneity_per_outcome use a
+  // key not in the default list (e.g., "mortality"), the flag was silently
+  // dropped. Auto-merge those keys into the iterated set.
+  describe("auto-merge upgrading/heterogeneity keys into iterated outcomes", () => {
+    const cohortStudy = {
+      title: "Cohort 1 of mortality",
+      abstract: "observational",
+      study_type: "observational cohort",
+      url: "u1",
+      source: "pubmed" as const,
+    };
+
+    it("includes a custom outcome 'mortality' in the GRADE table when upgrading_per_outcome.mortality is set", async () => {
+      const result = await handleHtaDossierPrep({
+        ...baseParams,
+        evidence_summary: [cohortStudy, cohortStudy, cohortStudy],
+        upgrading_per_outcome: {
+          mortality: { large_effect: "very_large", dose_response: true },
+        },
+      });
+      const txt =
+        typeof result.content === "string"
+          ? result.content
+          : JSON.stringify(result.content);
+      expect(txt).toMatch(/\| mortality \|/);
+      expect(txt).toMatch(/Upgraded \+2|very large effect/);
+    });
+
+    it("includes a custom outcome from heterogeneity_per_outcome", async () => {
+      const result = await handleHtaDossierPrep({
+        ...baseParams,
+        evidence_summary: [
+          { ...cohortStudy, study_type: "RCT" },
+          { ...cohortStudy, study_type: "RCT" },
+          { ...cohortStudy, study_type: "RCT" },
+        ],
+        heterogeneity_per_outcome: {
+          "MACE composite": { i_squared_pct: 80, n_studies: 3 },
+        },
+      });
+      const txt = String(result.content);
+      expect(txt).toMatch(/\| MACE composite \|/);
+      expect(txt).toMatch(/I²=80%/);
+    });
+
+    it("does NOT duplicate when an outcome is in BOTH upgrading_per_outcome and explicit outcomes (via picos)", async () => {
+      const result = await handleHtaDossierPrep({
+        ...baseParams,
+        evidence_summary: [cohortStudy, cohortStudy, cohortStudy],
+        upgrading_per_outcome: {
+          "overall survival": { large_effect: "very_large" },
+        },
+      });
+      const txt = String(result.content);
+      const matches = txt.match(/\| overall survival \|/g) ?? [];
+      // Should appear exactly once in the GRADE table, not twice
+      expect(matches.length).toBe(1);
+    });
+
+    it("merges keys from BOTH upgrading and heterogeneity into a single iteration", async () => {
+      const result = await handleHtaDossierPrep({
+        ...baseParams,
+        evidence_summary: [
+          { ...cohortStudy, study_type: "RCT" },
+          { ...cohortStudy, study_type: "RCT" },
+        ],
+        heterogeneity_per_outcome: {
+          "biomarker A": { i_squared_pct: 30, n_studies: 2 },
+        },
+        upgrading_per_outcome: {
+          "biomarker B": { large_effect: "large" },
+        },
+      });
+      const txt = String(result.content);
+      expect(txt).toMatch(/\| biomarker A \|/);
+      expect(txt).toMatch(/\| biomarker B \|/);
+    });
+  });
 });

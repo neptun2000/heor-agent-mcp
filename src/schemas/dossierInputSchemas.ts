@@ -36,14 +36,28 @@ export type LiteratureResultInput = z.infer<typeof LiteratureResultSchema>;
  * Output of the risk_of_bias tool, intended to be passed back into
  * hta_dossier so the GRADE table uses structured RoB judgments instead of
  * the heuristic fallback.
+ *
+ * PostHog 2026-05-03 showed real-world failures where Claude/ChatGPT
+ * constructed rob_results inline (rather than passing through actual
+ * risk_of_bias output) and omitted summary.downgrade or rationale. Only
+ * rob_judgment is load-bearing for the GRADE table — the others get
+ * sensible defaults so real input shapes are accepted.
  */
+const lenientBool = z.preprocess((v) => {
+  if (typeof v === "string") {
+    if (v.toLowerCase() === "true") return true;
+    if (v.toLowerCase() === "false") return false;
+  }
+  return v;
+}, z.boolean().default(false));
+
 export const RobResultsSchema = z
   .object({
     summary: z
       .object({
         rob_judgment: z.string().min(1),
-        downgrade: z.boolean(),
-        rationale: z.string(),
+        downgrade: lenientBool,
+        rationale: z.string().default(""),
       })
       .passthrough(),
     overall_certainty_start: z.enum(["High", "Low"]),

@@ -65,6 +65,49 @@ const DossierSchema = z.object({
     .describe(
       "Optional: GRADE upgrading flags per outcome for observational evidence (Guyatt 2011). 'large_effect' rates effect magnitude (large=RR<0.5 or >2.0; very_large=RR<0.2 or >5.0). 'dose_response' = documented gradient. 'plausible_confounding_toward_null' = bias would reduce effect. Capped at +2 steps. Ignored for RCT evidence (already High).",
     ),
+  pv_classification: z
+    .object({
+      primary_category: z.enum([
+        "PASS_imposed",
+        "PASS_voluntary",
+        "PAES",
+        "RMP_Annex_4_study",
+        "DUS",
+        "active_surveillance_registry",
+        "pregnancy_registry",
+        "spontaneous_reporting_only",
+        "ICH_E2E_pharmacovigilance_plan",
+        "not_pv_study",
+      ]),
+      alternatives: z
+        .array(
+          z.enum([
+            "PASS_imposed",
+            "PASS_voluntary",
+            "PAES",
+            "RMP_Annex_4_study",
+            "DUS",
+            "active_surveillance_registry",
+            "pregnancy_registry",
+            "spontaneous_reporting_only",
+            "ICH_E2E_pharmacovigilance_plan",
+            "not_pv_study",
+          ]),
+        )
+        .optional()
+        .default([]),
+      gvp_module: z.enum(["V", "VI", "VIII", "VIII_Addendum_I"]),
+      gvp_revision: z.literal("rev_4"),
+      encepp_protocol_template: z.string().optional(),
+      rmp_implications: z.array(z.string()).default([]),
+      fda_analogue: z.string().optional(),
+      submission_obligations: z.array(z.string()).default([]),
+      rationale: z.string().optional().default(""),
+    })
+    .optional()
+    .describe(
+      "Optional: structured PV classification from the pv_classify tool. When provided, the dossier output includes a Pharmacovigilance Plan section with the GVP module, ENCePP template, submission obligations, and RMP implications. When omitted, the section is replaced with a one-line note flagging the gap.",
+    ),
 });
 import {
   createAuditRecord,
@@ -187,6 +230,50 @@ type UpgradingPerOutcome = Record<
     plausible_confounding_toward_null?: boolean;
   }
 >;
+
+type PvClassificationInput = z.infer<typeof DossierSchema>["pv_classification"];
+
+function appendPvPlanSection(lines: string[], pv: PvClassificationInput): void {
+  if (!pv) {
+    lines.push("## Pharmacovigilance Plan");
+    lines.push(
+      "*PV plan not provided — call `pv_classify` first and pass the structured `pv_classification` to populate this section.*",
+    );
+    lines.push("");
+    return;
+  }
+  lines.push("## Pharmacovigilance Plan");
+  lines.push(`**Primary category:** \`${pv.primary_category}\``);
+  if (pv.alternatives && pv.alternatives.length > 0) {
+    lines.push(
+      `**Alternatives:** ${pv.alternatives.map((c) => `\`${c}\``).join(", ")}`,
+    );
+  }
+  lines.push(
+    `**GVP Module:** Module ${pv.gvp_module} (EMA GVP ${pv.gvp_revision.replace("_", " ")})`,
+  );
+  if (pv.encepp_protocol_template) {
+    lines.push(`**ENCePP template:** \`${pv.encepp_protocol_template}\``);
+  }
+  if (pv.fda_analogue) {
+    lines.push(`**FDA analogue:** ${pv.fda_analogue}`);
+  }
+  lines.push("");
+  if (pv.rationale) {
+    lines.push(`*${pv.rationale}*`);
+    lines.push("");
+  }
+  if (pv.submission_obligations && pv.submission_obligations.length > 0) {
+    lines.push("### Submission Obligations");
+    for (const o of pv.submission_obligations) lines.push(`- ${o}`);
+    lines.push("");
+  }
+  if (pv.rmp_implications && pv.rmp_implications.length > 0) {
+    lines.push("### RMP Implications");
+    for (const r of pv.rmp_implications) lines.push(`- ${r}`);
+    lines.push("");
+  }
+}
 
 function generateGradeTable(
   evidence: LiteratureResult[],
@@ -808,6 +895,8 @@ export async function handleHtaDossierPrep(
       "UK EQ-5D-5L value set transition flagged (NICE consultation 2026-04-15 to 2026-05-13)",
     );
   }
+
+  appendPvPlanSection(lines, params.pv_classification);
 
   lines.push(auditToMarkdown(audit));
 

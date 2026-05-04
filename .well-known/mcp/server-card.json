@@ -1,8 +1,8 @@
 {
   "serverInfo": {
     "name": "heor-agent-mcp",
-    "version": "1.0.6",
-    "description": "AI-powered Health Economics and Outcomes Research (HEOR) MCP server. 17 tools for literature search (44 data sources incl. OHE and EuroQol), risk of bias assessment (RoB 2/ROBINS-I/AMSTAR-2 with GRADE integration), cost-effectiveness modeling (Markov/PartSA with PSA/EVPPI/scenarios, QALY + evLYG summary metrics), budget impact analysis, abstract screening, survival curve fitting, indirect comparisons (Bucher/NMA/MAIC/STC) with I²/Cochran Q heterogeneity, ITC feasibility assessment (3-assumption framework), HTA dossier prep (NICE/EMA/FDA/IQWiG/HAS/EU JCA) with auto-GRADE, UK EQ-5D-5L value set impact estimator."
+    "version": "1.1.0",
+    "description": "AI-powered Health Economics and Outcomes Research (HEOR) MCP server. 20 tools for literature search (44 data sources incl. OHE and EuroQol), risk of bias assessment (RoB 2/ROBINS-I/AMSTAR-2 with GRADE integration), cost-effectiveness modeling (Markov/PartSA with PSA/EVPPI/scenarios, QALY + evLYG summary metrics), budget impact analysis, abstract screening, survival curve fitting, indirect comparisons (Bucher/NMA/MAIC/STC) with I²/Cochran Q heterogeneity, ITC feasibility assessment (3-assumption framework), pharmacovigilance study classification (PASS/PAES/RMP/DUS/registry per EMA GVP rev 4), MAIC pipeline orchestration, HTA dossier prep (NICE/EMA/FDA/IQWiG/HAS/EU JCA) with auto-GRADE + PV plan section, UK EQ-5D-5L value set impact estimator, examples + recipe templates."
   },
   "authentication": {
     "required": false,
@@ -35,7 +35,10 @@
     { "name": "knowledge.read", "description": "Read files from a project knowledge base." },
     { "name": "knowledge.write", "description": "Write to project wiki/ (Obsidian-compatible, YAML frontmatter + wikilinks)." },
     { "name": "hta.utility", "description": "EQ-5D value set reference (UK 3L/England 5L/new UK 5L 2026/DSU mapping) and NICE 5L transition impact estimator. Cites Biz, Hernández Alava, Wailoo (2026) Value in Health." },
-    { "name": "evidence.itc", "description": "Assess ITC feasibility via the 3-assumption framework (exchangeability, homogeneity, consistency). Recommends Bucher/NMA/MAIC/STC/ML-NMR or infeasible. Cites Cope 2014, NICE DSU TSD 18, Signorovitch 2023, Cochrane Ch 10-11." }
+    { "name": "evidence.itc", "description": "Assess ITC feasibility via the 3-assumption framework (exchangeability, homogeneity, consistency). Recommends Bucher/NMA/MAIC/STC/ML-NMR or infeasible. Cites Cope 2014, NICE DSU TSD 18, Signorovitch 2023, Cochrane Ch 10-11." },
+    { "name": "examples", "description": "Pre-filled JSON inputs for heavy-schema tools + maic_workflow_recipe (multi-step prompt template for ChatGPT users)." },
+    { "name": "workflow.maic", "description": "One-shot MAIC pipeline orchestrator: ITC feasibility + parallel literature_search (broad + per-trial) + screen_abstracts + risk_of_bias + evidence_network. Returns a 9-section structured report. Stops short of MAIC/Bucher itself (those need IPD)." },
+    { "name": "pv.classify", "description": "Classify a planned study into its EMA pharmacovigilance regulatory category (PASS imposed/voluntary, PAES, RMP Annex 4, DUS, registry, pregnancy registry, spontaneous reporting, ICH E2E plan). Maps to GVP module + ENCePP template + RMP/FDA implications. Pass result to hta_dossier for the PV Plan section." }
   ],
   "keywords": [
     "healthcare",
@@ -60,6 +63,11 @@
     "utility-value-set",
     "itc-feasibility",
     "heterogeneity",
-    "cms-ira"
+    "cms-ira",
+    "pharmacovigilance",
+    "pass",
+    "encepp",
+    "gvp",
+    "rmp"
   ]
 }

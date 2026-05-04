@@ -88,6 +88,7 @@ import {
   handleMaicWorkflow,
   maicWorkflowToolSchema,
 } from "./tools/maicWorkflow.js";
+import { handlePvClassify, pvClassifyToolSchema } from "./tools/pvClassify.js";
 import { randomUUID } from "node:crypto";
 import {
   trackToolCall,
@@ -242,6 +243,7 @@ function createMcpServer(
       itcFeasibilityToolSchema,
       examplesToolSchema,
       maicWorkflowToolSchema,
+      pvClassifyToolSchema,
     ],
   }));
 
@@ -308,6 +310,9 @@ function createMcpServer(
           break;
         case "workflow.maic":
           result = await handleMaicWorkflow(args);
+          break;
+        case "pv.classify":
+          result = await handlePvClassify(args);
           break;
         default:
           trackToolCall(

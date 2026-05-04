@@ -2,6 +2,28 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.1.0 (2026-05-04) — Pharmacovigilance study classification + HTA dossier PV section
+
+### Added
+- **`pv_classify` tool** — classifies a planned study into its EMA regulatory category (PASS imposed/voluntary, PAES, RMP Annex 4, DUS, active surveillance registry, pregnancy registry, spontaneous reporting, ICH E2E plan). Returns the matching GVP module (V/VI/VIII/VIII Addendum I), ENCePP protocol template ID, RMP implications, FDA analogue, and submission obligations. Pure decision-tree logic per EMA GVP rev 4, EU Regulation 1235/2010 Article 107a, and ICH E2E. Pregnancy populations override the primary verdict; pre-authorisation contexts never yield PASS. Returns in <200ms.
+- **`hta_dossier` PV Plan section** — when `pv_classification` (the structured output of `pv_classify`) is passed to `hta_dossier`, the dossier output includes a Pharmacovigilance Plan section between RoB and CEA listing the GVP module, ENCePP template, submission obligations, and RMP implications. When omitted, a one-line "PV plan not provided" note flags the gap so reviewers see it.
+- **CMS IRA flag** — when `pv_classify` is called with `jurisdictions: ["us"]`, the output explicitly notes that CMS IRA price-negotiation calculations exclude PV cost data — track PV obligations in the regulatory budget, not the HEOR cost-effectiveness model.
+- **FDA mapping (v1 stub)** — `pv_classify` includes an indicative FDA analogue per category (PMR, PMC, REMS, FAERS, Sentinel) with explicit "v1 stub, full FDA in v2" labelling. EMA remains the primary jurisdictional coverage.
+
+### Tests
+- 483 MCP tests passing (was 453) — +26 pv_classify tests covering all 12 PvCategory leaves, hard rules (pre-auth never PASS, pregnancy override), GVP module mapping (every category resolves to exactly one module), output content (CMS IRA flag, FDA stub note), performance (<200ms) — and 4 hta_dossier tests covering the PV section integration.
+
+### References
+- EMA Good Pharmacovigilance Practices (GVP) Module VIII — Post-Authorisation Safety Studies (rev 4)
+- EMA GVP Module V — Risk Management Systems
+- EMA GVP Module VIII Addendum I — Drug Utilisation Studies
+- EU Regulation 1235/2010, Article 107a (imposed PASS)
+- ICH E2E — Pharmacovigilance Planning
+- ENCePP Code of Conduct + study protocol templates
+- FDA REMS Guidance for Industry (2019); FDA Sentinel Initiative; 21 CFR 314.81
+
+---
+
 ## v1.0.6 (2026-05-04) — MAIC workflow orchestration tool
 
 ### Added

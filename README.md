@@ -18,16 +18,18 @@ Built for pharmaceutical, biotech, CRO, and medical affairs teams who need rigor
 
 ---
 
-## What's new in v1.0.4
+## What's new in v1.1.0
 
-Senior HEOR methodology + ChatGPT support:
+Pharmacovigilance + workflow orchestration:
 
-- **GRADE inconsistency now uses I²** instead of study count. Single-study comparisons return `not_assessable` (per Cochrane 10.10) instead of being silently auto-downgraded as "Serious". Pass `heterogeneity_per_outcome` to `hta_dossier` and the Cochrane bands (50–74% Moderate, 75–89% Serious, ≥90% Very Serious) are applied directly.
-- **GRADE upgrading (Guyatt 2011)** — observational evidence with strong effects can now be upgraded from Low. Three criteria via `upgrading_per_outcome`: large effect (RR <0.5/>2.0 → +1; <0.2/>5.0 → +2), dose-response (+1), plausible confounding biasing toward null (+1). Capped at +2.
-- **Bucher consistency check** — when direct head-to-head A-vs-C evidence exists alongside the indirect A-vs-C estimate, `evidence_indirect` automatically tests Bucher's consistency assumption and flags violations (NICE DSU TSD 18). |z|≥1.96 = "substantial — consistency assumption appears violated."
-- **EQ-5D 5L impact is baseline-utility-aware.** Biz 2026 reports category-level medians, but the new 5L value set compresses utilities in the 0.6–0.9 range — a drug for mild plaque psoriasis (baseline ~0.85) sees a much bigger ICER increase than one for severe HS (baseline ~0.45), even though both are `non_cancer_qol_only`. Pass `baseline_utility` to `utility_value_set` for a calibrated estimate.
-- **ChatGPT Custom GPT support** — new OpenAPI 3.1 adapter at `/api/openapi` lets you build a Custom GPT in 5 minutes. See [ChatGPT Custom GPT](#chatgpt-custom-gpt) below.
-- **Surface-tagged analytics** — every `tool_call` PostHog event now carries a `surface` property (`claude_anthropic_web` / `chatgpt_adapter` / `claude_desktop` / `direct_mcp`) so you can break down usage by client.
+- **`pv_classify` tool** — classifies a planned study into its EMA pharmacovigilance regulatory category (PASS imposed/voluntary, PAES, RMP Annex 4, DUS, active surveillance registry, pregnancy registry, spontaneous reporting, ICH E2E plan). Returns the matching GVP module (V/VI/VIII/VIII Addendum I), ENCePP protocol template ID, RMP implications, FDA analogue, and submission obligations. Pure decision-tree per EMA GVP rev 4 + EU Regulation 1235/2010 Article 107a. <200ms response.
+- **`hta_dossier` Pharmacovigilance Plan section** — pass `pv_classification` from `pv_classify` to `hta_dossier` and the dossier output now includes a PV Plan section between RoB and CEA. Without it, a one-line "PV plan not provided" note flags the gap so reviewers see what's missing.
+- **`maic_workflow` orchestrator** *(v1.0.6)* — runs the full MAIC discovery+screening pipeline (ITC feasibility + parallel literature_search + screening + RoB + network) in one MCP call. Built for ChatGPT-5.3 surfaces where chaining 5+ tool calls in parallel is unreliable; works equally well from Claude.
+- **`examples` tool** *(v1.0.5)* — pre-filled JSON inputs for heavy-schema tools (CEA, BIA, survival, MAIC, Bucher) plus a `maic_workflow_recipe` multi-step prompt template for ChatGPT users.
+- **CMS IRA awareness** — when `pv_classify` is called with US jurisdiction, output explicitly notes that CMS IRA Medicare price-negotiation calculations exclude PV cost data — track those obligations in the regulatory budget, not the HEOR cost-effectiveness model.
+- **GRADE I²-based inconsistency, GRADE upgrading (Guyatt 2011), Bucher consistency check, EQ-5D 5L baseline-utility-aware impact** *(v1.0.4)* — see [CHANGELOG.md](./CHANGELOG.md).
+- **ChatGPT Custom GPT support** *(v1.0.4)* — OpenAPI 3.1 adapter at `/api/openapi` lets you build a Custom GPT in 5 minutes. See [ChatGPT Custom GPT](#chatgpt-custom-gpt) below.
+- **Surface-tagged analytics** *(v1.0.4)* — every `tool_call` PostHog event carries a `surface` property (`claude_anthropic_web` / `chatgpt_adapter` / `claude_desktop` / `direct_mcp`).
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full diff.
 
@@ -66,7 +68,7 @@ Add to your MCP configuration:
 
 ---
 
-## Tools (17)
+## Tools (20)
 
 | Tool | Purpose |
 |------|---------|
@@ -364,7 +366,7 @@ A companion chat interface is available at:
 
 **https://web-michael-ns-projects.vercel.app**
 
-- Chat with Claude Sonnet 4.6 + all 17 HEOR tools
+- Chat with Claude Sonnet 4.6 + all 20 HEOR tools
 - **BYOK (Bring Your Own Key)** — paste your Anthropic API key in the settings; it stays in your browser's localStorage and is never stored on our servers
 - Markdown rendering with styled tables, tool call cards with live progress timers, and theme-aware mermaid network diagrams
 - 12 example prompts covering literature search, CEA, BIA, NMA, ITC feasibility, RoB, EQ-5D 5L, EU JCA dossiers

@@ -177,3 +177,74 @@ describe("handleHtaDossierPrep — rob_results integration", () => {
     });
   });
 });
+
+// ---- pv_classification integration (design log #11 Phase 2) ------------
+
+describe("handleHtaDossierPrep — pv_classification integration", () => {
+  const passImposedClassification = {
+    primary_category: "PASS_imposed",
+    alternatives: ["RMP_Annex_4_study"],
+    gvp_module: "VIII",
+    gvp_revision: "rev_4",
+    encepp_protocol_template: "ENCePP-PASS-001",
+    rmp_implications: [
+      "Update RMP Part III (PV Plan) to list this study as an imposed PASS.",
+      "Annex 4 of the RMP must reference the protocol and timelines.",
+    ],
+    fda_analogue: "FDA Postmarketing Required Studies (PMR)",
+    submission_obligations: [
+      "Protocol submission to PRAC for review prior to study start.",
+      "Annual safety update reports during conduct.",
+    ],
+    rationale:
+      "Authority-imposed obligation in a post-authorisation context (Article 107n).",
+  };
+
+  it("emits a Pharmacovigilance Plan section when pv_classification is provided", async () => {
+    const r = await handleHtaDossierPrep({
+      ...baseParams,
+      evidence_summary: [rctStudy],
+      pv_classification: passImposedClassification,
+    });
+    const txt = r.content as string;
+    expect(txt).toMatch(/##\s+Pharmacovigilance Plan/i);
+    expect(txt).toContain("PASS_imposed");
+    expect(txt).toContain("Module VIII");
+    expect(txt).toContain("ENCePP-PASS-001");
+  });
+
+  it("includes submission_obligations and rmp_implications in the PV section", async () => {
+    const r = await handleHtaDossierPrep({
+      ...baseParams,
+      evidence_summary: [rctStudy],
+      pv_classification: passImposedClassification,
+    });
+    const txt = r.content as string;
+    expect(txt).toContain("PRAC");
+    expect(txt).toContain("Annex 4");
+  });
+
+  it("emits a one-line fallback when pv_classification is omitted", async () => {
+    const r = await handleHtaDossierPrep({
+      ...baseParams,
+      evidence_summary: [rctStudy],
+    });
+    const txt = r.content as string;
+    // The dossier should not contain a fully-populated PV section, but it
+    // should reference the missing PV plan so reviewers see the gap.
+    expect(txt).toMatch(/PV plan not provided|Pharmacovigilance Plan: not/i);
+  });
+
+  it("rejects a malformed pv_classification with did-you-mean", async () => {
+    await expect(
+      handleHtaDossierPrep({
+        ...baseParams,
+        evidence_summary: [rctStudy],
+        pv_classification: {
+          primary_category: "PASS_imposed_typo",
+          gvp_module: "VIII",
+        },
+      } as never),
+    ).rejects.toThrow();
+  });
+});

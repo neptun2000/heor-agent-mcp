@@ -174,6 +174,18 @@ export interface DossierParams {
   /** Optional structured PV classification from pv_classify — when provided, populates the Pharmacovigilance Plan section. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   pv_classification?: any;
+  /** NICE PMG36 severity modifier inputs (replaces end-of-life modifier as of April 2022). */
+  severity_modifier?: {
+    absolute_qaly_shortfall?: number;
+    proportional_qaly_shortfall?: number;
+  };
+  /** Health inequalities evidence per NICE PMG36 May 2025 modular update. */
+  health_inequalities?: {
+    affected_groups: string[];
+    baseline_disparity_evidence?: string;
+    intervention_impact: "narrows" | "neutral" | "widens" | "unknown";
+    mitigation_plan?: string;
+  };
 }
 
 export interface ToolResult {

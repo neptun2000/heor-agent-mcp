@@ -2,6 +2,24 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.1.1 (2026-05-04) — NICE PMG36 update: severity modifier + health inequalities
+
+### Added
+- **NICE severity modifier (PMG36 §4.4)** — `hta_dossier` now accepts `severity_modifier: { absolute_qaly_shortfall, proportional_qaly_shortfall }` and computes the QALY weight (1.0× / 1.2× / 1.7×) per NICE bands. Replaced the end-of-life modifier in April 2022 in opportunity-cost-neutral form. Output names the severity band (No modifier / Moderate / Severe) and renders an effective £/QALY threshold table (£20-30K → £24-36K → £34-51K).
+- **NICE health inequalities section (PMG36 May 2025 modular update)** — `hta_dossier` now accepts `health_inequalities: { affected_groups, baseline_disparity_evidence, intervention_impact, mitigation_plan }`. Output explicitly flags interventions that *widen* disparity (⚠️) vs *narrow* (✅) vs *neutral* (⚪). When omitted on a NICE dossier, a one-line gap-flag note tells the reviewer what's missing.
+
+### Why now
+NICE published a refreshed PMG36 manual on 31 March 2026 (covering devices/diagnostics/digital alongside medicines per the NHS 10-Year Plan). The May 2025 modular inequalities update is now part of every NICE submission. Both changes were under-reflected in our NICE STA template.
+
+### Tests
+- 491 MCP tests passing (was 483) — +4 severity modifier tests + 4 health inequalities tests.
+
+### References
+- NICE Health Technology Evaluations: the manual (PMG36, updated 2026-03-31)
+- NICE methods modular update — Health Inequalities (May 2025)
+
+---
+
 ## v1.1.0 (2026-05-04) — Pharmacovigilance study classification + HTA dossier PV section
 
 ### Added

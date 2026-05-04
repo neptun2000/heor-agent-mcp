@@ -65,6 +65,28 @@ const DossierSchema = z.object({
     .describe(
       "Optional: GRADE upgrading flags per outcome for observational evidence (Guyatt 2011). 'large_effect' rates effect magnitude (large=RR<0.5 or >2.0; very_large=RR<0.2 or >5.0). 'dose_response' = documented gradient. 'plausible_confounding_toward_null' = bias would reduce effect. Capped at +2 steps. Ignored for RCT evidence (already High).",
     ),
+  severity_modifier: z
+    .object({
+      absolute_qaly_shortfall: z.number().min(0).optional(),
+      proportional_qaly_shortfall: z.number().min(0).max(1).optional(),
+    })
+    .optional()
+    .describe(
+      "NICE PMG36 severity modifier inputs (replaced the end-of-life modifier in April 2022 in opportunity-cost-neutral form). Provide either absolute QALY shortfall (years), proportional shortfall (0-1), or both. Modifier weight is the higher of the two: <12 absolute and <0.85 proportional → 1.0×; 12-18 or 0.85-0.95 → 1.2×; ≥18 or ≥0.95 → 1.7×.",
+    ),
+  health_inequalities: z
+    .object({
+      affected_groups: z.array(z.string()).default([]),
+      baseline_disparity_evidence: z.string().optional(),
+      intervention_impact: z
+        .enum(["narrows", "neutral", "widens", "unknown"])
+        .default("unknown"),
+      mitigation_plan: z.string().optional(),
+    })
+    .optional()
+    .describe(
+      "Health inequalities evidence per the NICE PMG36 May 2025 modular update. List affected populations, baseline disparity evidence, and the intervention's expected impact on inequality (narrows/neutral/widens). Required by NICE for any intervention that affects disadvantaged groups.",
+    ),
   pv_classification: z
     .object({
       primary_category: z.enum([
@@ -232,6 +254,113 @@ type UpgradingPerOutcome = Record<
 >;
 
 type PvClassificationInput = z.infer<typeof DossierSchema>["pv_classification"];
+type SeverityModifierInput = z.infer<typeof DossierSchema>["severity_modifier"];
+type HealthInequalitiesInput = z.infer<
+  typeof DossierSchema
+>["health_inequalities"];
+
+/**
+ * NICE PMG36 severity modifier weight per absolute and proportional QALY
+ * shortfall. The higher of the two thresholds wins. Replaced the
+ * end-of-life modifier in April 2022 in opportunity-cost-neutral form.
+ */
+function severityModifierWeight(
+  absolute?: number,
+  proportional?: number,
+): { weight: 1.0 | 1.2 | 1.7; band: string } {
+  const weights: Array<1.0 | 1.2 | 1.7> = [1.0];
+  if ((absolute ?? 0) >= 12 || (proportional ?? 0) >= 0.85) weights.push(1.2);
+  if ((absolute ?? 0) >= 18 || (proportional ?? 0) >= 0.95) weights.push(1.7);
+  const weight = weights[weights.length - 1];
+  if (weight === 1.7) return { weight, band: "Severe" };
+  if (weight === 1.2) return { weight, band: "Moderate" };
+  return { weight: 1.0, band: "No modifier" };
+}
+
+function appendSeverityModifierSection(
+  lines: string[],
+  sm: SeverityModifierInput,
+): void {
+  if (!sm) return;
+  const { weight, band } = severityModifierWeight(
+    sm.absolute_qaly_shortfall,
+    sm.proportional_qaly_shortfall,
+  );
+  lines.push("## Severity Modifier (NICE PMG36)");
+  lines.push(
+    `**Replaced the end-of-life modifier in April 2022** in an opportunity-cost-neutral form (PMG36 §4.4).`,
+  );
+  if (sm.absolute_qaly_shortfall !== undefined) {
+    lines.push(
+      `- Absolute QALY shortfall: **${sm.absolute_qaly_shortfall.toFixed(1)} QALYs**`,
+    );
+  }
+  if (sm.proportional_qaly_shortfall !== undefined) {
+    lines.push(
+      `- Proportional QALY shortfall: **${(sm.proportional_qaly_shortfall * 100).toFixed(0)}%**`,
+    );
+  }
+  lines.push("");
+  lines.push(`**Severity band:** ${band}`);
+  lines.push(`**QALY weight applied:** ×${weight.toFixed(1)}`);
+  lines.push("");
+  lines.push(
+    "Effective WTP threshold = nominal WTP × QALY weight. With the standard NICE £20-30K/QALY threshold this yields:",
+  );
+  lines.push("");
+  lines.push("| Band | Weight | Effective £/QALY threshold |");
+  lines.push("|------|--------|----------------------------|");
+  lines.push("| No modifier | ×1.0 | £20,000-30,000 |");
+  lines.push("| Moderate | ×1.2 | £24,000-36,000 |");
+  lines.push("| Severe | ×1.7 | £34,000-51,000 |");
+  lines.push("");
+}
+
+function appendHealthInequalitiesSection(
+  lines: string[],
+  hi: HealthInequalitiesInput,
+): void {
+  lines.push("## Health Inequalities (NICE PMG36 May 2025 update)");
+  if (!hi) {
+    lines.push(
+      "*Health Inequalities not provided. NICE's May 2025 inequalities methods update requires evidence on whether the technology narrows, leaves unchanged, or widens disparities for affected populations. Add `health_inequalities` to the dossier inputs to populate this section.*",
+    );
+    lines.push("");
+    return;
+  }
+  lines.push(
+    `*Per NICE PMG36 May 2025 modular update on the approach to providing evidence on the impact of health inequalities.*`,
+  );
+  lines.push("");
+  if (hi.affected_groups.length > 0) {
+    lines.push("**Affected groups:**");
+    for (const g of hi.affected_groups) lines.push(`- ${g}`);
+    lines.push("");
+  }
+  if (hi.baseline_disparity_evidence) {
+    lines.push("**Baseline disparity evidence:**");
+    lines.push(`> ${hi.baseline_disparity_evidence}`);
+    lines.push("");
+  }
+  const impactLabels: Record<
+    NonNullable<HealthInequalitiesInput>["intervention_impact"],
+    string
+  > = {
+    narrows: "✅ **Narrows** — intervention reduces disparity",
+    neutral: "⚪ **Neutral** — intervention does not change disparity",
+    widens: "⚠️ **Widens** — intervention increases disparity (warning)",
+    unknown: "❓ **Unknown** — disparity impact not assessed",
+  };
+  lines.push(
+    `**Intervention impact:** ${impactLabels[hi.intervention_impact]}`,
+  );
+  lines.push("");
+  if (hi.mitigation_plan) {
+    lines.push("**Mitigation plan:**");
+    lines.push(hi.mitigation_plan);
+    lines.push("");
+  }
+}
 
 function appendPvPlanSection(lines: string[], pv: PvClassificationInput): void {
   if (!pv) {
@@ -894,6 +1023,11 @@ export async function handleHtaDossierPrep(
       audit,
       "UK EQ-5D-5L value set transition flagged (NICE consultation 2026-04-15 to 2026-05-13)",
     );
+  }
+
+  if (params.hta_body === "nice") {
+    appendSeverityModifierSection(lines, params.severity_modifier);
+    appendHealthInequalitiesSection(lines, params.health_inequalities);
   }
 
   appendPvPlanSection(lines, params.pv_classification);

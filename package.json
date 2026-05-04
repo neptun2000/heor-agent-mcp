@@ -1,13 +1,13 @@
 {
   "name": "heor-agent-mcp",
-  "version": "1.0.6",
+  "version": "1.1.0",
   "mcpName": "io.github.neptun2000/heor-agent",
   "license": "MIT",
   "author": "mnaumov",
   "engines": {
     "node": ">=20.0.0"
   },
-  "description": "AI-powered Health Economics and Outcomes Research (HEOR) MCP server — 15 tools across literature search (42 data sources incl. PubMed/ClinicalTrials.gov/Cochrane/NICE/CADTH/ICER), risk of bias (RoB 2/ROBINS-I/AMSTAR-2), cost-effectiveness modeling (Markov/PartSA/PSA/EVPPI), budget impact analysis, abstract screening, survival curve fitting (NICE DSU TSD 14), indirect comparisons (Bucher/NMA/MAIC/STC), and HTA dossier prep (NICE/EMA/FDA/IQWiG/HAS/EU JCA) with auto-GRADE",
+  "description": "AI-powered Health Economics and Outcomes Research (HEOR) MCP server — 20 tools across literature search (44 data sources incl. PubMed/ClinicalTrials.gov/Cochrane/NICE/CADTH/ICER), risk of bias (RoB 2/ROBINS-I/AMSTAR-2), cost-effectiveness modeling (Markov/PartSA/PSA/EVPPI), budget impact analysis, abstract screening, survival curve fitting (NICE DSU TSD 14), indirect comparisons (Bucher/NMA/MAIC/STC), pharmacovigilance study classification (EMA GVP rev 4), MAIC pipeline orchestration, and HTA dossier prep (NICE/EMA/FDA/IQWiG/HAS/EU JCA) with auto-GRADE + PV plan section",
   "type": "module",
   "main": "dist/server.js",
   "bin": {

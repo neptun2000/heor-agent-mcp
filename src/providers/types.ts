@@ -171,6 +171,9 @@ export interface DossierParams {
       plausible_confounding_toward_null?: boolean;
     }
   >;
+  /** Optional structured PV classification from pv_classify — when provided, populates the Pharmacovigilance Plan section. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  pv_classification?: any;
 }
 
 export interface ToolResult {

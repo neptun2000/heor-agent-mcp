@@ -248,3 +248,122 @@ describe("handleHtaDossierPrep — pv_classification integration", () => {
     ).rejects.toThrow();
   });
 });
+
+// ---- NICE PMG36 March 2026 update: severity modifier + health inequalities
+
+describe("handleHtaDossierPrep — NICE severity modifier (PMG36 2022/2026)", () => {
+  it("computes severity modifier weight from QALY shortfall (1.0×, 1.2×, 1.7×)", async () => {
+    // NICE severity modifier (replaces the end-of-life modifier):
+    //   absolute QALY shortfall ≥12 OR proportional ≥0.85 → 1.7×
+    //   absolute 12-18 OR proportional 0.85-0.95 etc per PMG36 Table 4.4
+    const r = await handleHtaDossierPrep({
+      ...baseParams,
+      evidence_summary: [rctStudy],
+      severity_modifier: {
+        absolute_qaly_shortfall: 18,
+        proportional_qaly_shortfall: 0.92,
+      },
+    });
+    const txt = r.content as string;
+    expect(txt).toMatch(/##\s+Severity Modifier/i);
+    expect(txt).toMatch(/1\.7|×1\.7|x1\.7/);
+  });
+
+  it("low-shortfall case returns 1.0× (no modifier applied)", async () => {
+    const r = await handleHtaDossierPrep({
+      ...baseParams,
+      evidence_summary: [rctStudy],
+      severity_modifier: {
+        absolute_qaly_shortfall: 6,
+        proportional_qaly_shortfall: 0.4,
+      },
+    });
+    const txt = r.content as string;
+    expect(txt).toMatch(/1\.0|No modifier/i);
+  });
+
+  it("explicitly notes the end-of-life modifier was replaced (April 2022)", async () => {
+    const r = await handleHtaDossierPrep({
+      ...baseParams,
+      evidence_summary: [rctStudy],
+      severity_modifier: {
+        absolute_qaly_shortfall: 18,
+        proportional_qaly_shortfall: 0.92,
+      },
+    });
+    const txt = r.content as string;
+    expect(txt).toMatch(/end[- ]of[- ]life|opportunity[- ]cost[- ]neutral/i);
+  });
+
+  it("severity section absent for non-NICE bodies", async () => {
+    const r = await handleHtaDossierPrep({
+      hta_body: "ema" as const,
+      submission_type: "initial" as const,
+      drug_name: "x",
+      indication: "y",
+      evidence_summary: [rctStudy],
+      severity_modifier: {
+        absolute_qaly_shortfall: 18,
+        proportional_qaly_shortfall: 0.92,
+      },
+    });
+    const txt = r.content as string;
+    expect(txt).not.toMatch(/##\s+Severity Modifier/i);
+  });
+});
+
+describe("handleHtaDossierPrep — NICE health inequalities (May 2025 module)", () => {
+  it("emits a Health Inequalities section when health_inequalities is provided", async () => {
+    const r = await handleHtaDossierPrep({
+      ...baseParams,
+      evidence_summary: [rctStudy],
+      health_inequalities: {
+        affected_groups: ["lower socioeconomic status", "ethnic minorities"],
+        baseline_disparity_evidence:
+          "Mortality 1.4× higher in IMD quintile 1 vs 5",
+        intervention_impact: "narrows",
+      },
+    });
+    const txt = r.content as string;
+    expect(txt).toMatch(/##\s+Health Inequalities/i);
+    expect(txt).toContain("lower socioeconomic status");
+    expect(txt).toMatch(/narrow/i);
+  });
+
+  it("intervention that widens inequality is flagged", async () => {
+    const r = await handleHtaDossierPrep({
+      ...baseParams,
+      evidence_summary: [rctStudy],
+      health_inequalities: {
+        affected_groups: ["rural population"],
+        intervention_impact: "widens",
+      },
+    });
+    const txt = r.content as string;
+    expect(txt).toMatch(/widen|⚠️|warning/i);
+  });
+
+  it("emits a fallback note when health_inequalities is omitted (NICE only)", async () => {
+    const r = await handleHtaDossierPrep({
+      ...baseParams,
+      evidence_summary: [rctStudy],
+    });
+    const txt = r.content as string;
+    expect(txt).toMatch(
+      /Health Inequalities not provided|inequalities evidence required|May 2025/i,
+    );
+  });
+
+  it("references the May 2025 NICE methods modular update", async () => {
+    const r = await handleHtaDossierPrep({
+      ...baseParams,
+      evidence_summary: [rctStudy],
+      health_inequalities: {
+        affected_groups: ["x"],
+        intervention_impact: "neutral",
+      },
+    });
+    const txt = r.content as string;
+    expect(txt).toMatch(/May 2025|PMG36|inequalities methods update/i);
+  });
+});

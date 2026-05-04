@@ -1,7 +1,7 @@
 {
   "serverInfo": {
     "name": "heor-agent-mcp",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "description": "AI-powered Health Economics and Outcomes Research (HEOR) MCP server. 20 tools for literature search (44 data sources incl. OHE and EuroQol), risk of bias assessment (RoB 2/ROBINS-I/AMSTAR-2 with GRADE integration), cost-effectiveness modeling (Markov/PartSA with PSA/EVPPI/scenarios, QALY + evLYG summary metrics), budget impact analysis, abstract screening, survival curve fitting, indirect comparisons (Bucher/NMA/MAIC/STC) with I²/Cochran Q heterogeneity, ITC feasibility assessment (3-assumption framework), pharmacovigilance study classification (PASS/PAES/RMP/DUS/registry per EMA GVP rev 4), MAIC pipeline orchestration, HTA dossier prep (NICE/EMA/FDA/IQWiG/HAS/EU JCA) with auto-GRADE + PV plan section, UK EQ-5D-5L value set impact estimator, examples + recipe templates."
   },
   "authentication": {

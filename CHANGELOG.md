@@ -2,6 +2,25 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.2.1 (2026-05-04) — jca_pico_scope code-review fixes
+
+### Fixed
+- **HIGH — Indication classifier overmatch.** `classifyIndication()` matched any indication string containing the substring `"uc"` — silently routing mucositis, Duchenne muscular dystrophy, and glaucoma indications to IBD-UC biologic comparators (vedolizumab/infliximab/ustekinumab). Now uses a word-boundary regex `(^|\s)uc(\s|$)`. Patient-safety-adjacent in a production JCA tool. 4 new behavioural tests covering the false-positive cases.
+- **HIGH — Dead `CountryProfile.outcome_priority` and `.outcome_instrument_preferences` fields.** Set on every profile, never read by `buildScope` (which calls `outcomePriorityForCategory` directly). Future contributors adding country-specific overrides would see no effect. Both fields removed from the type and from every profile literal.
+- **MEDIUM — `isOncology` proxy check.** Was checking `outcome_priorities[0] === "OS"` (correct only by coincidence). Now `PicoMatrix` carries `indication_category` explicitly and the surrogate-endpoint warning checks the category directly. Future non-oncology categories with OS-first priorities won't trigger the PFS/ORR warning incorrectly.
+- **MEDIUM — NSCLC line-of-therapy gap.** Detailed EGFR-mutant comparators only fire for `line_of_therapy="second_line"`; other lines silently fell through to a generic chemotherapy placeholder. Now emits an audit warning AND a markdown ⚠️ block telling the user to re-run with `second_line` for the well-modeled case.
+- **MEDIUM — Heterogeneity threshold transparency.** The ≥3-distinct-comparators rule is a tool-level assumption, not a published EUnetHTA threshold. Now stated explicitly in the tool description so LLMs and reviewers know it's a decision rule, not a diagnosis.
+- **MEDIUM — Round-trip integration test strengthened.** Now asserts at least one comparator molecule from `pico_matrix.picos` appears in the `hta_dossier` output, not just the PICO IDs (which the dossier could mention for unrelated reasons).
+- **LOW — `flattenComparators` dead export removed.**
+
+### Tests
+- 521 MCP tests passing (was 514) — +7 behavioural tests covering all the review fixes.
+
+### Why this is a patch release
+All v1.2.0 functionality is unchanged for correct inputs. Fixes only affect (a) edge-case indication strings that were silently misclassified, (b) dead-field traps for future contributors, (c) error/warning surfaces for previously silent failure modes. No API changes; no breaking changes.
+
+---
+
 ## v1.2.0 (2026-05-04) — EU JCA PICO matrix analyzer
 
 ### Added

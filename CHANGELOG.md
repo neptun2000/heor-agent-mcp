@@ -2,6 +2,28 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.2.0 (2026-05-04) — EU JCA PICO matrix analyzer
+
+### Added
+- **`jca_pico_scope` tool** — produces the canonical EU Joint Clinical Assessment (JCA) PICO matrix for a drug-indication pair across selected EU jurisdictions. v1 covers DE (G-BA / IQWiG), FR (HAS), IT (AIFA), ES (AEMPS / RedETS), NL (Zorginstituut), and UK (NICE, post-Brexit context). Other 22 EU member states return a "consult national HTA" placeholder. Returns a consolidated PICO list (per Reg. 2021/2282) plus per-country comparator universes, outcome instrument preferences, population subgroup focus, and a heterogeneity warning when ≥3 distinct comparators emerge across jurisdictions. Pipe `pico_matrix.picos` directly into `hta_dossier({hta_body:"jca", picos: ...})`. Pure decision logic, hardcoded country profiles, <300ms response.
+- **JCA_REVISION stamp** — output includes `jca_revision: "2026-05"` for auditability. Bumped when EUnetHTA publishes new methodological guidance.
+- **Surrogate-endpoint flag** — for oncology indications, output explicitly notes that PFS / ORR / biomarker response are accepted as secondary outcomes only and may face JCA scrutiny per Annex II of Implementing Reg. 2024/1381.
+- **Pre-authorisation anticipatory scope** — when called with `regulatory_context: "pre_authorisation"`, output is produced with explicit "anticipatory only, not for actual JCA submission" warning. Useful for protocol-design and pre-MA market access strategy.
+
+### Why now
+EU JCA has been in force since 12 January 2025 for oncology / ATMPs. 2026 brings high-risk medical devices into scope; orphan drugs join in 2028; all medicines by 2030. Manufacturers have **100 days** from the consolidated PICO list to dossier submission — and no tool to scope it. This tool absorbs the 3-week consultancy step into a 200ms call.
+
+### Tests
+- 514 MCP tests passing (was 491) — +23 jca_pico_scope tests, including a round-trip integration test verifying `pico_matrix.picos` validates against `hta_dossier({hta_body:"jca"})` without errors.
+
+### References
+- Regulation (EU) 2021/2282 — HTA Regulation
+- EU Implementing Regulation 2024/1381 — JCA procedural rules
+- EUnetHTA Coordination Group — Methodological Guidance Series
+- National HTA bodies: G-BA / IQWiG, HAS, AIFA, AEMPS / RedETS, Zorginstituut Nederland, NICE
+
+---
+
 ## v1.1.1 (2026-05-04) — NICE PMG36 update: severity modifier + health inequalities
 
 ### Added

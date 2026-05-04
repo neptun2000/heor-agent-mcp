@@ -9,7 +9,6 @@ import {
   profileFor,
 } from "./countryRegistry.js";
 import type {
-  ComparatorEntry,
   DrugClass,
   Jurisdiction,
   LineOfTherapy,
@@ -35,7 +34,11 @@ export function buildScope(input: ScopeBuilderInput): PicoMatrix {
 
   const country_specific = input.jurisdictions.map((j) => {
     const p = profileFor(j);
-    const comparators = p.comparators(category, input.drug_class, input.line_of_therapy);
+    const comparators = p.comparators(
+      category,
+      input.drug_class,
+      input.line_of_therapy,
+    );
     return {
       jurisdiction: j,
       hta_body: p.hta_body,
@@ -60,6 +63,7 @@ export function buildScope(input: ScopeBuilderInput): PicoMatrix {
   return {
     drug: input.drug,
     indication: input.indication,
+    indication_category: category,
     jca_revision: JCA_REVISION,
     picos,
     country_specific,
@@ -124,13 +128,4 @@ function buildRationale(
     );
   }
   return parts.join(" ");
-}
-
-/** Lists every comparator molecule a country profile produced — used for the markdown report. */
-export function flattenComparators(
-  country_specific: PicoMatrix["country_specific"],
-): ComparatorEntry[] {
-  const out: ComparatorEntry[] = [];
-  for (const c of country_specific) out.push(...c.comparators);
-  return out;
 }

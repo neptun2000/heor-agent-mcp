@@ -187,15 +187,10 @@ function subgroupsFor(category: IndicationCategory): string[] {
   return ["age strata", "comorbidity status"];
 }
 
-function profile(
-  jurisdiction: Jurisdiction,
-  hta_body: string,
-): CountryProfile {
+function profile(jurisdiction: Jurisdiction, hta_body: string): CountryProfile {
   return {
     jurisdiction,
     hta_body,
-    outcome_instrument_preferences: ["EQ-5D-5L"],
-    outcome_priority: ["OS", "PFS", "HRQoL", "AE"],
     comparators: (cat, dc, line) => comparatorsFor(jurisdiction, cat, dc, line),
     population_subgroups: (cat) => subgroupsFor(cat),
   };
@@ -211,8 +206,6 @@ export const COUNTRY_PROFILES: Record<Jurisdiction, CountryProfile> = {
   eu_other: {
     jurisdiction: "eu_other",
     hta_body: "Other EU member states — consult national HTA",
-    outcome_instrument_preferences: ["EQ-5D-5L"],
-    outcome_priority: ["OS", "PFS", "HRQoL", "AE"],
     comparators: () => [
       {
         molecule: "consult national HTA body",
@@ -251,9 +244,21 @@ export function classifyIndication(indication: string): IndicationCategory {
   ) {
     return "oncology_other";
   }
-  if (x.includes("ulcerative colitis") || x.includes("uc")) return "ibd_uc";
+  // "UC" as a bare token is fine; "uc" as a substring is too broad — it
+  // matches mucositis, Duchenne, glaucoma, etc. Use word boundaries.
+  if (
+    x.includes("ulcerative colitis") ||
+    /(^|\s)uc(\s|$)/.test(x) ||
+    /(^|\s)u\.c\.(\s|$)/.test(x)
+  ) {
+    return "ibd_uc";
+  }
   if (x.includes("crohn")) return "ibd_cd";
-  if (x.includes("type 2 diabetes") || x.includes("t2d") || x.includes("diabetes mellitus type 2")) {
+  if (
+    x.includes("type 2 diabetes") ||
+    x.includes("t2d") ||
+    x.includes("diabetes mellitus type 2")
+  ) {
     return "diabetes_t2";
   }
   if (x.includes("obesity") || x.includes("overweight")) return "obesity";

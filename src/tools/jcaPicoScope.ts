@@ -34,15 +34,7 @@ const DRUG_CLASSES = [
 
 const LINES = ["first_line", "second_line", "third_line_plus", "any"] as const;
 
-const JURISDICTIONS = [
-  "de",
-  "fr",
-  "it",
-  "es",
-  "nl",
-  "uk",
-  "eu_other",
-] as const;
+const JURISDICTIONS = ["de", "fr", "it", "es", "nl", "uk", "eu_other"] as const;
 
 const REG_CONTEXTS = [
   "pre_authorisation",
@@ -133,6 +125,15 @@ export async function handleJcaPicoScope(
       "Pre-authorisation context — output is anticipatory only, not a JCA-finalised PICO list.",
     );
   }
+  if (
+    matrix.indication_category === "oncology_nsclc" &&
+    input.line_of_therapy !== "second_line"
+  ) {
+    audit = addWarning(
+      audit,
+      `NSCLC comparator detail (chemo doublet + IO + alternative TKI) is currently modeled only for line_of_therapy="second_line"; you passed "${input.line_of_therapy}", so the per-country EGFR-mutant detail was skipped and a generic chemotherapy anchor was used instead. Re-run with line_of_therapy="second_line" for the well-modeled case.`,
+    );
+  }
 
   const lines: string[] = [];
   lines.push(`# JCA PICO Scope — ${input.drug} (${input.indication})`);
@@ -156,6 +157,16 @@ export async function handleJcaPicoScope(
     lines.push("");
   }
 
+  if (
+    matrix.indication_category === "oncology_nsclc" &&
+    input.line_of_therapy !== "second_line"
+  ) {
+    lines.push(
+      `> ⚠️ **NSCLC line-of-therapy gap.** Detailed EGFR-mutant comparator detail is modeled only for \`line_of_therapy: "second_line"\`. You passed \`"${input.line_of_therapy}"\`, so a generic chemotherapy anchor was used per country. Re-run with \`line_of_therapy: "second_line"\` for the well-modeled case (chemo doublet + IO + alternative TKI by country).`,
+    );
+    lines.push("");
+  }
+
   lines.push("## Rationale");
   lines.push(matrix.rationale);
   lines.push("");
@@ -170,15 +181,21 @@ export async function handleJcaPicoScope(
   }
   lines.push("");
   lines.push(
-    "*Pipe `pico_matrix.picos` directly into `hta_dossier({hta_body:\"jca\", picos: ...})` to expand into a multi-PICO dossier.*",
+    '*Pipe `pico_matrix.picos` directly into `hta_dossier({hta_body:"jca", picos: ...})` to expand into a multi-PICO dossier.*',
   );
   lines.push("");
 
   for (const c of matrix.country_specific) {
     const flag =
-      { de: "🇩🇪 Germany", fr: "🇫🇷 France", it: "🇮🇹 Italy", es: "🇪🇸 Spain", nl: "🇳🇱 Netherlands", uk: "🇬🇧 United Kingdom", eu_other: "🇪🇺 Other EU member states" }[
-        c.jurisdiction
-      ] ?? c.jurisdiction;
+      {
+        de: "🇩🇪 Germany",
+        fr: "🇫🇷 France",
+        it: "🇮🇹 Italy",
+        es: "🇪🇸 Spain",
+        nl: "🇳🇱 Netherlands",
+        uk: "🇬🇧 United Kingdom",
+        eu_other: "🇪🇺 Other EU member states",
+      }[c.jurisdiction] ?? c.jurisdiction;
     lines.push(`## ${flag} — ${c.hta_body}`);
     if (c.jurisdiction === "uk") {
       lines.push(
@@ -210,10 +227,13 @@ export async function handleJcaPicoScope(
     lines.push("");
   }
 
-  // Surrogate-endpoint note for oncology indications
-  const isOncology = matrix.country_specific.some(
-    (c) => c.outcome_priorities[0] === "OS",
-  );
+  // Surrogate-endpoint note for oncology indications. Use the category
+  // directly rather than guessing from outcome_priorities[0]==="OS" — the
+  // proxy was correct only by coincidence and would misfire if any future
+  // non-oncology category gets OS-first priorities.
+  const isOncology =
+    matrix.indication_category === "oncology_nsclc" ||
+    matrix.indication_category === "oncology_other";
   if (isOncology) {
     lines.push("## Surrogate Endpoints");
     lines.push(
@@ -242,13 +262,13 @@ export async function handleJcaPicoScope(
   lines.push("## References");
   lines.push("- EU Regulation 2021/2282 — HTA Regulation");
   lines.push("- EU Implementing Regulation 2024/1381 — JCA procedural rules");
-  lines.push(
-    "- EUnetHTA Coordination Group — Methodological Guidance Series",
-  );
+  lines.push("- EUnetHTA Coordination Group — Methodological Guidance Series");
   lines.push(
     "- Annex II — patient-relevant outcomes hierarchy (mortality, morbidity, HRQoL, AEs)",
   );
-  lines.push("- National HTA bodies: G-BA / IQWiG, HAS, AIFA, AEMPS / RedETS, Zorginstituut Nederland, NICE");
+  lines.push(
+    "- National HTA bodies: G-BA / IQWiG, HAS, AIFA, AEMPS / RedETS, Zorginstituut Nederland, NICE",
+  );
   lines.push("");
 
   lines.push(auditToMarkdown(audit));
@@ -263,7 +283,7 @@ export async function handleJcaPicoScope(
 export const jcaPicoScopeToolSchema = {
   name: "jca.pico_scope",
   description:
-    "Produce the canonical EU Joint Clinical Assessment (JCA) PICO matrix for a drug-indication pair. Returns a consolidated PICO list (per JCA process under Reg. 2021/2282) plus country-specific comparator universes, outcome instrument preferences, population subgroup focus, and a heterogeneity warning when ≥3 distinct comparators emerge across jurisdictions. Pipe `pico_matrix.picos` directly into `hta_dossier({hta_body:\"jca\", picos: ...})`. v1 covers DE/FR/IT/ES/NL + UK (post-Brexit context).",
+    'Produce the canonical EU Joint Clinical Assessment (JCA) PICO matrix for a drug-indication pair. Returns a consolidated PICO list (per JCA process under Reg. 2021/2282) plus country-specific comparator universes, outcome instrument preferences, population subgroup focus, and a heterogeneity warning. Pipe `pico_matrix.picos` directly into `hta_dossier({hta_body:"jca", picos: ...})`. v1 covers DE/FR/IT/ES/NL + UK (post-Brexit context). Heterogeneity warning fires at ≥3 distinct comparator molecules across ≥2 jurisdictions — a tool-level assumption, not a published EUnetHTA threshold; treat the warning as a prompt to run evidence_network + itc_feasibility, not as a definitive diagnosis. NSCLC EGFR-mutant comparator detail is currently modeled only for line_of_therapy="second_line"; other lines use a generic chemotherapy anchor with a warning.',
   annotations: {
     title: "JCA PICO Scope Analyzer",
     readOnlyHint: true,

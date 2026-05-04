@@ -343,6 +343,128 @@ describe("jca_pico_scope — output content", () => {
   });
 });
 
+// ---- Indication classifier — guards against substring overmatch --------
+
+describe("jca_pico_scope — indication classifier robustness", () => {
+  // HIGH issue from code review 2026-05-04: the UC branch matched any
+  // indication containing the substring "uc", which fired for mucositis,
+  // Duchenne, glaucoma, etc. — silently routing those drugs to IBD-UC
+  // biologic comparators. Patient-safety-adjacent in a production tool.
+  it("'mucositis' must NOT classify as IBD-UC", async () => {
+    const r = await scope({
+      drug: "x",
+      indication: "oral mucositis prophylaxis",
+      drug_class: "small_molecule",
+      jurisdictions: ["de"],
+    });
+    const de = r.pico_matrix.country_specific.find(
+      (c) => c.jurisdiction === "de",
+    );
+    const molecules = (de?.comparators ?? []).map((c) => c.molecule).join(",");
+    expect(molecules).not.toMatch(/vedolizumab|infliximab|ustekinumab/i);
+  });
+
+  it("'Duchenne muscular dystrophy' must NOT classify as IBD-UC", async () => {
+    const r = await scope({
+      drug: "x",
+      indication: "Duchenne muscular dystrophy",
+      drug_class: "small_molecule",
+      jurisdictions: ["de"],
+    });
+    const de = r.pico_matrix.country_specific.find(
+      (c) => c.jurisdiction === "de",
+    );
+    const molecules = (de?.comparators ?? []).map((c) => c.molecule).join(",");
+    expect(molecules).not.toMatch(/vedolizumab|infliximab|ustekinumab/i);
+  });
+
+  it("'glaucoma' must NOT classify as IBD-UC", async () => {
+    const r = await scope({
+      drug: "x",
+      indication: "primary open-angle glaucoma",
+      drug_class: "small_molecule",
+      jurisdictions: ["de"],
+    });
+    const de = r.pico_matrix.country_specific.find(
+      (c) => c.jurisdiction === "de",
+    );
+    const molecules = (de?.comparators ?? []).map((c) => c.molecule).join(",");
+    expect(molecules).not.toMatch(/vedolizumab|infliximab|ustekinumab/i);
+  });
+
+  it("real 'ulcerative colitis' still classifies as IBD-UC (regression guard)", async () => {
+    const r = await scope({
+      drug: "guselkumab",
+      indication: "moderate-to-severe ulcerative colitis",
+      drug_class: "monoclonal_antibody",
+      jurisdictions: ["de"],
+    });
+    const de = r.pico_matrix.country_specific.find(
+      (c) => c.jurisdiction === "de",
+    );
+    const molecules = (de?.comparators ?? []).map((c) => c.molecule).join(",");
+    expect(molecules).toMatch(/vedolizumab|infliximab|ustekinumab/i);
+  });
+});
+
+// ---- Surrogate-endpoint warning fires only for oncology -----------------
+
+describe("jca_pico_scope — surrogate-endpoint warning targeting", () => {
+  it("does NOT mention PFS/ORR for non-oncology indication (UC)", async () => {
+    const r = await scope({
+      drug: "guselkumab",
+      indication: "ulcerative colitis",
+      drug_class: "monoclonal_antibody",
+      jurisdictions: ["de"],
+    });
+    expect(String(r.content)).not.toMatch(/PFS|ORR|surrogate/i);
+  });
+});
+
+// ---- NSCLC line-of-therapy warning --------------------------------------
+
+describe("jca_pico_scope — NSCLC line-of-therapy coverage gap warning", () => {
+  it("warns when oncology NSCLC is queried with line_of_therapy != second_line", async () => {
+    // Code-review feedback: nsclcSecondLineComparators only fires for
+    // line_of_therapy="second_line"; otherwise the user gets a generic
+    // chemotherapy placeholder with no indication that the detailed
+    // EGFR-mutant comparators were skipped. Surface this gap.
+    const r = await scope({
+      drug: "osimertinib",
+      indication: "non-small cell lung cancer",
+      drug_class: "small_molecule",
+      line_of_therapy: "any",
+      jurisdictions: ["de"],
+    });
+    expect(String(r.content)).toMatch(/2L|second.line|line.of.therapy/i);
+  });
+});
+
+// ---- Round-trip integration: dossier USES the picos, not just IDs -------
+
+describe("jca_pico_scope — dossier round-trip uses comparator content", () => {
+  it("hta_dossier output mentions at least one comparator molecule from pico_matrix.picos", async () => {
+    const scopeRes = await scope({
+      drug: "guselkumab",
+      indication: "ulcerative colitis",
+      drug_class: "monoclonal_antibody",
+      jurisdictions: ["de", "fr"],
+    });
+    const dossier = await handleHtaDossierPrep({
+      hta_body: "jca",
+      submission_type: "initial",
+      drug_name: "guselkumab",
+      indication: "ulcerative colitis",
+      picos: scopeRes.pico_matrix.picos,
+    });
+    const t = String(dossier.content);
+    const hasAnyComparator = scopeRes.pico_matrix.picos.some((p) =>
+      t.includes(p.comparator),
+    );
+    expect(hasAnyComparator).toBe(true);
+  });
+});
+
 // ---- Performance --------------------------------------------------------
 
 describe("jca_pico_scope — performance", () => {

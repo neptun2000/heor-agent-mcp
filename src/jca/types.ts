@@ -17,7 +17,13 @@ export type LineOfTherapy =
   | "third_line_plus"
   | "any";
 
-export type OutcomePriority = "OS" | "PFS" | "HRQoL" | "AE" | "remission" | "other";
+export type OutcomePriority =
+  | "OS"
+  | "PFS"
+  | "HRQoL"
+  | "AE"
+  | "remission"
+  | "other";
 
 export interface ComparatorEntry {
   molecule: string;
@@ -28,9 +34,9 @@ export interface ComparatorEntry {
 export interface CountryProfile {
   jurisdiction: Jurisdiction;
   hta_body: string;
-  outcome_instrument_preferences: string[];
-  outcome_priority: OutcomePriority[];
-  /** Pure function — given a drug-class and indication category, returns the comparator universe for this country. */
+  /** Pure function — given a drug-class and indication category, returns the comparator universe for this country.
+   * Outcome instruments + priority order live on each ComparatorEntry / are derived from the indication category;
+   * intentionally NOT cached on the country profile to avoid a dead-field trap. */
   comparators: (
     indication_category: IndicationCategory,
     drug_class: DrugClass,
@@ -56,6 +62,7 @@ export type IndicationCategory =
 export interface PicoMatrix {
   drug: string;
   indication: string;
+  indication_category: IndicationCategory;
   jca_revision: "2026-05";
   picos: Array<{
     id: string;

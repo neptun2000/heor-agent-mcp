@@ -5,6 +5,8 @@
 [![node](https://img.shields.io/node/v/heor-agent-mcp.svg)](https://nodejs.org)
 [![Try in ChatGPT](https://img.shields.io/badge/Try_in-ChatGPT-10A37F?logo=openai&logoColor=white)](https://chatgpt.com/g/g-69f651f588f48191b1d69d54409857ec-heoragent)
 [![Web UI](https://img.shields.io/badge/Web_UI-Vercel-000000?logo=vercel&logoColor=white)](https://web-michael-ns-projects.vercel.app)
+[![EU AI Pact](https://img.shields.io/badge/EU_AI_Pact-Signatory-003399?logo=europeanunion&logoColor=FFCC00)](https://web-michael-ns-projects.vercel.app/ai-transparency)
+[![AI Transparency](https://img.shields.io/badge/AI-Transparency_Note-blue)](https://web-michael-ns-projects.vercel.app/ai-transparency)
 
 **AI-powered Health Economics and Outcomes Research (HEOR) agent as a Model Context Protocol server.**
 
@@ -525,6 +527,19 @@ npm run dev       # Run with tsx (no build step)
 ## License
 
 MIT — see [LICENSE](./LICENSE).
+
+---
+
+## Trust & Transparency
+
+HEORAgent is a **research and analysis tool** — not a clinical decision-support system. It is **not** classified as high-risk under the EU AI Act because it does not drive individual diagnosis, treatment, or monitoring; it falls under limited-risk transparency obligations only. Every output is intended for review by a qualified HEOR/HTA/PV professional before any action is taken.
+
+- **EU AI Pact signatory** — committed to AI governance, high-risk system mapping, and AI literacy promotion (voluntary commitments per the European Commission, ahead of the AI Act's August 2026 deadline).
+- **PRISMA-style audit trail** on every tool call (sources queried, succeeded, failed, assumptions applied).
+- **AI commentary explicitly labelled** — domain claims (ICERs, trial results, regulatory decisions) come exclusively from tool outputs, never from training-data recall.
+- **Methodology cited inline** — ISPOR, NICE DSU TSDs, NICE PMG36, Cochrane Handbook, GRADE, EMA GVP, Cope 2014, Phillippo 2016, Biz 2026.
+
+Full statement: **[/ai-transparency](https://web-michael-ns-projects.vercel.app/ai-transparency)** — risk classification, human oversight model, methodological references, and reporting channel.
 
 ---
 

@@ -92,4 +92,39 @@ describe("handleExamples — pre-filled inputs for heavy economic tools", () => 
     // Population 50000, 5-year horizon, simple uptake curve
     expect(txt).toMatch(/50000|10000|100000/);
   });
+
+  // 2026-05-04: ChatGPT GPT can't reliably chain 5+ literature_search
+  // calls in parallel for a full MAIC pipeline (tool-agency limitation).
+  // The maic_workflow_recipe entry returns a multi-step prompt the user
+  // can copy-paste, OR a recommendation to use the web UI / Claude
+  // Desktop where Claude's tool agency handles the chain natively.
+  describe("maic_workflow_recipe", () => {
+    it("returns a step-by-step prompt for ChatGPT users", async () => {
+      const r = await handleExamples({ tool: "maic_workflow_recipe" });
+      const txt = String(r.content);
+      expect(txt).toMatch(/maic|matching-adjusted/i);
+      expect(txt).toMatch(/literature_search/);
+      expect(txt).toMatch(/parallel|step/i);
+    });
+
+    it("recommends Claude web UI for full pipeline depth", async () => {
+      const r = await handleExamples({ tool: "maic_workflow_recipe" });
+      const txt = String(r.content);
+      expect(txt).toMatch(
+        /web-michael-ns-projects\.vercel\.app|web UI|Claude/i,
+      );
+    });
+
+    it("includes trial-name search suggestions", async () => {
+      const r = await handleExamples({ tool: "maic_workflow_recipe" });
+      const txt = String(r.content);
+      expect(txt).toMatch(/QUASAR|INSPIRE|U-ACHIEVE|trial name/i);
+    });
+  });
+
+  it("listing all examples includes maic_workflow_recipe", async () => {
+    const r = await handleExamples({});
+    const txt = String(r.content);
+    expect(txt).toMatch(/maic_workflow_recipe/);
+  });
 });

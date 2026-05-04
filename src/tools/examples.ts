@@ -22,6 +22,7 @@ const ExamplesSchema = z
         "survival_fitting",
         "population_adjusted_comparison",
         "evidence_indirect",
+        "maic_workflow_recipe",
       ])
       .optional()
       .describe(
@@ -205,10 +206,84 @@ export async function handleExamples(rawParams: unknown): Promise<ToolResult> {
       lines.push(ex.description);
       lines.push("");
     }
+    lines.push("### `maic_workflow_recipe`");
+    lines.push(
+      "Multi-step prompt template for running a full MAIC pipeline in ChatGPT (workaround for ChatGPT-5.3 tool-agency limitations). Recommends the web UI as the preferred path for full depth.",
+    );
+    lines.push("");
     lines.push("---");
     lines.push(
       "Example call: `examples({ tool: 'cost_effectiveness_model' })`",
     );
+    return { content: lines.join("\n"), audit };
+  }
+
+  // Special case: maic_workflow_recipe is a multi-step prompt template,
+  // not a JSON input. Returns a copy-paste recipe for ChatGPT users who
+  // want a full MAIC pipeline. ChatGPT-5.3's tool agency is weaker than
+  // Claude Sonnet 4.6, so a single broad prompt rarely produces the full
+  // 5-tool chain Claude can do natively. The recipe is a workaround until
+  // maic_workflow (server-side orchestration tool) ships.
+  if (params.tool === "maic_workflow_recipe") {
+    const lines = [
+      "## MAIC Workflow Recipe (for ChatGPT users)",
+      "",
+      "ChatGPT-5.3 doesn't reliably chain 5+ literature_search calls in parallel for a full MAIC pipeline. Two paths:",
+      "",
+      "### Option 1 — Use the web UI for full pipeline depth (recommended)",
+      "",
+      "The web UI uses Claude Sonnet 4.6, which has stronger tool agency and no 45-second timeout. It handles the full MAIC chain natively in one prompt.",
+      "",
+      "**Open:** https://web-michael-ns-projects.vercel.app",
+      "",
+      "Bring your own Anthropic API key. Paste your MAIC question. Claude does the rest.",
+      "",
+      "### Option 2 — Multi-step recipe in ChatGPT (more clicks, same depth)",
+      "",
+      "If you want to stay in ChatGPT, run these prompts in sequence. Each call kicks one specific tool, so the model can't stall on agency:",
+      "",
+      "**Step 1 — feasibility + broad evidence (parallel):**",
+      "```",
+      "Run itc_feasibility for [drug A] vs [drug B] in [indication]. At the same time, run literature_search with query='[drug A] [drug B] [indication]', sources=['pubmed','clinicaltrials','cochrane'], runs=2, max_results=50.",
+      "```",
+      "",
+      "**Step 2 — targeted trial-name searches (parallel — name the trials yourself):**",
+      "```",
+      "Now run literature_search 4 times in parallel for these specific trial names: '[TRIAL_A1] [drug A] [indication]', '[TRIAL_A2] [drug A] [indication]', '[TRIAL_B1] [drug B] [indication]', '[TRIAL_B2] [drug B] [indication]'. Use runs=2, max_results=50 on each.",
+      "```",
+      "",
+      "Common trial names by indication (use the ones that match your context):",
+      "- **UC biologics**: QUASAR, ASTRO (guselkumab); INSPIRE, COMMAND (risankizumab); TRUE NORTH (ozanimod); ELEVATE (etrasimod); U-ACHIEVE, U-ACCOMPLISH (upadacitinib); OCTAVE (tofacitinib); VARSITY (vedolizumab)",
+      "- **CD biologics**: ADVANCE, MOTIVATE, FORTIFY (risankizumab); GALAXI, GRAVITI (guselkumab); SEAVUE (risankizumab vs ustekinumab)",
+      "- **T2D**: SUSTAIN, PIONEER (semaglutide); SURPASS (tirzepatide); LEADER (liraglutide); EMPA-REG (empagliflozin); CANVAS (canagliflozin); DECLARE (dapagliflozin)",
+      "- **Obesity**: STEP (semaglutide); SURMOUNT (tirzepatide); SELECT (semaglutide CV)",
+      "- **HF**: PARADIGM-HF (sacubitril/valsartan); EMPEROR (empagliflozin); DAPA-HF, DELIVER (dapagliflozin)",
+      "- **Oncology**: KEYNOTE-XXX (pembrolizumab); CHECKMATE-XXX (nivolumab); FLAURA (osimertinib); MONALEESA (ribociclib)",
+      "- **RA**: SELECT (upadacitinib); ORAL (tofacitinib)",
+      "",
+      "**Step 3 — screen + RoB (parallel):**",
+      "```",
+      "Run screen_abstracts on the combined literature results with PICO=[your population/intervention/comparator/outcome]. At the same time, run risk_of_bias on the screened RCTs.",
+      "```",
+      "",
+      "**Step 4 — analyses + triangulation (parallel):**",
+      "```",
+      "Run population_adjusted_comparison (MAIC) AND evidence_indirect (Bucher) on the screened evidence. Also run evidence_network. Also run validate_links on every URL collected so far.",
+      "```",
+      "",
+      "**Step 5 — present the 12-section report:**",
+      "```",
+      "Present the full HEOR report following the 12-section format from the playbook. Include MAIC + Bucher triangulation, RoB table, GRADE certainty table, and validated references.",
+      "```",
+      "",
+      "### Why this works",
+      "",
+      "Each prompt is concrete enough that ChatGPT can't bail on tool agency. The 5-step chain takes ~3 minutes and produces depth comparable to Claude's one-prompt result.",
+      "",
+      "### Coming soon: maic_workflow tool",
+      "",
+      "We're building a server-side `maic_workflow` tool that runs all 5 steps in one call. When it ships, Step 1 will be the only call you need.",
+    ];
     return { content: lines.join("\n"), audit };
   }
 

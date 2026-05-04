@@ -70,7 +70,7 @@ Add to your MCP configuration:
 
 ---
 
-## Tools (20)
+## Tools (21)
 
 | Tool | Purpose |
 |------|---------|
@@ -368,7 +368,7 @@ A companion chat interface is available at:
 
 **https://web-michael-ns-projects.vercel.app**
 
-- Chat with Claude Sonnet 4.6 + all 20 HEOR tools
+- Chat with Claude Sonnet 4.6 + all 21 HEOR tools
 - **BYOK (Bring Your Own Key)** — paste your Anthropic API key in the settings; it stays in your browser's localStorage and is never stored on our servers
 - Markdown rendering with styled tables, tool call cards with live progress timers, and theme-aware mermaid network diagrams
 - 12 example prompts covering literature search, CEA, BIA, NMA, ITC feasibility, RoB, EQ-5D 5L, EU JCA dossiers

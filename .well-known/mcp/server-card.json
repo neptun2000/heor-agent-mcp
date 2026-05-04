@@ -1,8 +1,8 @@
 {
   "serverInfo": {
     "name": "heor-agent-mcp",
-    "version": "1.1.1",
-    "description": "AI-powered Health Economics and Outcomes Research (HEOR) MCP server. 20 tools for literature search (44 data sources incl. OHE and EuroQol), risk of bias assessment (RoB 2/ROBINS-I/AMSTAR-2 with GRADE integration), cost-effectiveness modeling (Markov/PartSA with PSA/EVPPI/scenarios, QALY + evLYG summary metrics), budget impact analysis, abstract screening, survival curve fitting, indirect comparisons (Bucher/NMA/MAIC/STC) with I²/Cochran Q heterogeneity, ITC feasibility assessment (3-assumption framework), pharmacovigilance study classification (PASS/PAES/RMP/DUS/registry per EMA GVP rev 4), MAIC pipeline orchestration, HTA dossier prep (NICE/EMA/FDA/IQWiG/HAS/EU JCA) with auto-GRADE + PV plan section, UK EQ-5D-5L value set impact estimator, examples + recipe templates."
+    "version": "1.2.0",
+    "description": "AI-powered Health Economics and Outcomes Research (HEOR) MCP server. 21 tools for literature search (44 data sources incl. OHE and EuroQol), risk of bias assessment (RoB 2/ROBINS-I/AMSTAR-2 with GRADE integration), cost-effectiveness modeling (Markov/PartSA with PSA/EVPPI/scenarios, QALY + evLYG summary metrics), budget impact analysis, abstract screening, survival curve fitting, indirect comparisons (Bucher/NMA/MAIC/STC) with I²/Cochran Q heterogeneity, ITC feasibility assessment (3-assumption framework), pharmacovigilance study classification (PASS/PAES/RMP/DUS/registry per EMA GVP rev 4), EU Joint Clinical Assessment (JCA) PICO matrix analyzer (DE/FR/IT/ES/NL + UK context), MAIC pipeline orchestration, HTA dossier prep (NICE/EMA/FDA/IQWiG/HAS/EU JCA) with auto-GRADE + PV plan + NICE severity modifier + health inequalities, UK EQ-5D-5L value set impact estimator, examples + recipe templates."
   },
   "authentication": {
     "required": false,
@@ -38,7 +38,8 @@
     { "name": "evidence.itc", "description": "Assess ITC feasibility via the 3-assumption framework (exchangeability, homogeneity, consistency). Recommends Bucher/NMA/MAIC/STC/ML-NMR or infeasible. Cites Cope 2014, NICE DSU TSD 18, Signorovitch 2023, Cochrane Ch 10-11." },
     { "name": "examples", "description": "Pre-filled JSON inputs for heavy-schema tools + maic_workflow_recipe (multi-step prompt template for ChatGPT users)." },
     { "name": "workflow.maic", "description": "One-shot MAIC pipeline orchestrator: ITC feasibility + parallel literature_search (broad + per-trial) + screen_abstracts + risk_of_bias + evidence_network. Returns a 9-section structured report. Stops short of MAIC/Bucher itself (those need IPD)." },
-    { "name": "pv.classify", "description": "Classify a planned study into its EMA pharmacovigilance regulatory category (PASS imposed/voluntary, PAES, RMP Annex 4, DUS, registry, pregnancy registry, spontaneous reporting, ICH E2E plan). Maps to GVP module + ENCePP template + RMP/FDA implications. Pass result to hta_dossier for the PV Plan section." }
+    { "name": "pv.classify", "description": "Classify a planned study into its EMA pharmacovigilance regulatory category (PASS imposed/voluntary, PAES, RMP Annex 4, DUS, registry, pregnancy registry, spontaneous reporting, ICH E2E plan). Maps to GVP module + ENCePP template + RMP/FDA implications. Pass result to hta_dossier for the PV Plan section." },
+    { "name": "jca.pico_scope", "description": "Produce the canonical EU Joint Clinical Assessment (JCA) PICO matrix for a drug-indication pair across selected EU jurisdictions (DE/FR/IT/ES/NL + UK context). Returns consolidated PICO list per Reg. 2021/2282, country-specific comparator universes, outcome instrument preferences, population subgroups, and a heterogeneity warning. Pipe pico_matrix.picos into hta_dossier for a multi-PICO JCA dossier." }
   ],
   "keywords": [
     "healthcare",
@@ -68,6 +69,10 @@
     "pass",
     "encepp",
     "gvp",
-    "rmp"
+    "rmp",
+    "jca",
+    "eu-hta-regulation",
+    "pico-scope",
+    "joint-clinical-assessment"
   ]
 }

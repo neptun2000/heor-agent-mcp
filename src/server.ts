@@ -89,6 +89,10 @@ import {
   maicWorkflowToolSchema,
 } from "./tools/maicWorkflow.js";
 import { handlePvClassify, pvClassifyToolSchema } from "./tools/pvClassify.js";
+import {
+  handleJcaPicoScope,
+  jcaPicoScopeToolSchema,
+} from "./tools/jcaPicoScope.js";
 import { randomUUID } from "node:crypto";
 import {
   trackToolCall,
@@ -244,6 +248,7 @@ function createMcpServer(
       examplesToolSchema,
       maicWorkflowToolSchema,
       pvClassifyToolSchema,
+      jcaPicoScopeToolSchema,
     ],
   }));
 
@@ -313,6 +318,9 @@ function createMcpServer(
           break;
         case "pv.classify":
           result = await handlePvClassify(args);
+          break;
+        case "jca.pico_scope":
+          result = await handleJcaPicoScope(args);
           break;
         default:
           trackToolCall(

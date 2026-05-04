@@ -84,6 +84,10 @@ import {
   itcFeasibilityToolSchema,
 } from "./tools/itcFeasibility.js";
 import { handleExamples, examplesToolSchema } from "./tools/examples.js";
+import {
+  handleMaicWorkflow,
+  maicWorkflowToolSchema,
+} from "./tools/maicWorkflow.js";
 import { randomUUID } from "node:crypto";
 import {
   trackToolCall,
@@ -237,6 +241,7 @@ function createMcpServer(
       utilityValueSetToolSchema,
       itcFeasibilityToolSchema,
       examplesToolSchema,
+      maicWorkflowToolSchema,
     ],
   }));
 
@@ -300,6 +305,9 @@ function createMcpServer(
           break;
         case "examples":
           result = await handleExamples(args);
+          break;
+        case "workflow.maic":
+          result = await handleMaicWorkflow(args);
           break;
         default:
           trackToolCall(

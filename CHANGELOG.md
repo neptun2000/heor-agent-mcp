@@ -2,6 +2,17 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.0.5 (2026-05-04) — MAIC workflow orchestration + ChatGPT recipe
+
+### Added
+- **`workflow.maic` orchestration tool** — runs the canonical MAIC discovery+screening pipeline in one MCP call: ITC feasibility + parallel `literature_search` (broad + per-trial) + PICO `screen_abstracts` + `risk_of_bias` + `evidence_network`. Returns a structured 9-section report with explicit Next Steps. Built because ChatGPT-5.3 cannot reliably chain 5+ tool calls in parallel; this absorbs the orchestration burden so the LLM only formulates the question. Stops short of running MAIC/Bucher itself — those still require IPD or trial-level effect estimates the search cannot supply. Phase failures degrade gracefully (one skipped phase doesn't abort the pipeline).
+- **`maic_workflow_recipe` example** — `examples({tool:"maic_workflow_recipe"})` returns a multi-step prompt template ChatGPT users can paste in sequence, plus a recommendation to use the web UI for one-shot depth. Includes trial-name suggestions by indication (UC: QUASAR/INSPIRE/U-ACHIEVE/TRUE NORTH; CD: ADVANCE/MOTIVATE; T2D: SUSTAIN/SURPASS; obesity: STEP/SURMOUNT; HF: PARADIGM/EMPEROR; oncology: KEYNOTE/CHECKMATE; etc.).
+
+### Tests
+- 453 MCP tests passing (was 442) — +11 maic_workflow tests + 4 examples tests for the new recipe.
+
+---
+
 ## v1.0.4 (2026-05-02) — Bucher consistency, GRADE upgrading, EQ-5D baseline-utility, ChatGPT support
 
 ### Added

@@ -11,7 +11,8 @@ export const GVP_REVISION = "rev_4" as const;
 
 interface CategoryMapping {
   gvp_module: GvpModule;
-  encepp_protocol_template?: string;
+  /** Plain-language ENCePP category label — NOT a registered protocol ID. */
+  encepp_study_category?: string;
   rmp_implications: string[];
   fda_analogue?: string;
   submission_obligations: string[];
@@ -20,7 +21,7 @@ interface CategoryMapping {
 export const CATEGORY_MAPPING: Record<PvCategory, CategoryMapping> = {
   PASS_imposed: {
     gvp_module: "VIII",
-    encepp_protocol_template: "ENCePP-PASS-001",
+    encepp_study_category: "PASS — post-authorisation safety study (imposed, GVP Module VIII). Use the ENCePP Code of Conduct checklist for protocol structure",
     rmp_implications: [
       "Update RMP Part III (PV Plan) to list this study as an imposed PASS.",
       "Annex 4 of the RMP must reference the protocol and timelines.",
@@ -34,7 +35,7 @@ export const CATEGORY_MAPPING: Record<PvCategory, CategoryMapping> = {
   },
   PASS_voluntary: {
     gvp_module: "VIII",
-    encepp_protocol_template: "ENCePP-PASS-002",
+    encepp_study_category: "PASS — post-authorisation safety study (voluntary, GVP Module VIII). ENCePP registration in EUPAS encouraged",
     rmp_implications: [
       "Document study as a voluntary PASS in RMP Part III.",
       "No PRAC pre-approval required; encouraged ENCePP registration.",
@@ -47,7 +48,7 @@ export const CATEGORY_MAPPING: Record<PvCategory, CategoryMapping> = {
   },
   PAES: {
     gvp_module: "VIII",
-    encepp_protocol_template: "ENCePP-PAES-001",
+    encepp_study_category: "PAES — post-authorisation efficacy study (GVP Module VIII)",
     rmp_implications: [
       "PAES results may trigger MA variation if effectiveness diverges from MA assumptions.",
     ],
@@ -59,7 +60,7 @@ export const CATEGORY_MAPPING: Record<PvCategory, CategoryMapping> = {
   },
   RMP_Annex_4_study: {
     gvp_module: "V",
-    encepp_protocol_template: "ENCePP-RMP-001",
+    encepp_study_category: "RMP Annex 4 study (GVP Module V)",
     rmp_implications: [
       "Listed in RMP Annex 4 with study ID, status, milestone dates.",
       "Study completion is a tracked RMP commitment.",
@@ -72,7 +73,7 @@ export const CATEGORY_MAPPING: Record<PvCategory, CategoryMapping> = {
   },
   DUS: {
     gvp_module: "VIII_Addendum_I",
-    encepp_protocol_template: "ENCePP-DUS-001",
+    encepp_study_category: "DUS — drug utilisation study (GVP Module VIII Addendum I)",
     rmp_implications: [
       "DUS may be referenced in RMP Part III for risk minimisation effectiveness.",
     ],
@@ -84,7 +85,7 @@ export const CATEGORY_MAPPING: Record<PvCategory, CategoryMapping> = {
   },
   active_surveillance_registry: {
     gvp_module: "VIII",
-    encepp_protocol_template: "ENCePP-REG-001",
+    encepp_study_category: "Active surveillance registry (GVP Module VIII)",
     rmp_implications: [
       "Registry serves as data source for ongoing PV signal detection in RMP Part III.",
     ],
@@ -96,7 +97,7 @@ export const CATEGORY_MAPPING: Record<PvCategory, CategoryMapping> = {
   },
   pregnancy_registry: {
     gvp_module: "VIII",
-    encepp_protocol_template: "ENCePP-PREG-001",
+    encepp_study_category: "Pregnancy registry (GVP Module VIII; refer to GVP Considerations P.III)",
     rmp_implications: [
       "Pregnancy registry is a standard RMP commitment for teratogenic-risk drugs (Annex 4).",
       "Outcomes feed into the Pregnancy section of every PSUR.",

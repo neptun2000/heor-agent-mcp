@@ -120,7 +120,7 @@ const DossierSchema = z.object({
         .default([]),
       gvp_module: z.enum(["V", "VI", "VIII", "VIII_Addendum_I"]),
       gvp_revision: z.literal("rev_4"),
-      encepp_protocol_template: z.string().optional(),
+      encepp_study_category: z.string().optional(),
       rmp_implications: z.array(z.string()).default([]),
       fda_analogue: z.string().optional(),
       submission_obligations: z.array(z.string()).default([]),
@@ -381,8 +381,8 @@ function appendPvPlanSection(lines: string[], pv: PvClassificationInput): void {
   lines.push(
     `**GVP Module:** Module ${pv.gvp_module} (EMA GVP ${pv.gvp_revision.replace("_", " ")})`,
   );
-  if (pv.encepp_protocol_template) {
-    lines.push(`**ENCePP template:** \`${pv.encepp_protocol_template}\``);
+  if (pv.encepp_study_category) {
+    lines.push(`**ENCePP category:** ${pv.encepp_study_category}`);
   }
   if (pv.fda_analogue) {
     lines.push(`**FDA analogue:** ${pv.fda_analogue}`);

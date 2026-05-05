@@ -48,8 +48,18 @@ const SERIOUS_THRESHOLDS: SignalThresholds = {
 };
 
 export interface SignalStatisticsResult {
-  prr: { value: number; ci_low: number; ci_high: number; threshold_met: boolean };
-  ror: { value: number; ci_low: number; ci_high: number; threshold_met: boolean };
+  prr: {
+    value: number;
+    ci_low: number;
+    ci_high: number;
+    threshold_met: boolean;
+  };
+  ror: {
+    value: number;
+    ci_low: number;
+    ci_high: number;
+    threshold_met: boolean;
+  };
   ic: { value: number; ic025: number; threshold_met: boolean };
   mgps: { ebgm: number; eb05: number; eb95: number; threshold_met: boolean };
   chi_squared: number;
@@ -107,6 +117,29 @@ export interface SignalDecisionInput {
   thresholds?: SignalThresholds;
 }
 
+/**
+ * Returns true if `reported_event` matches any string in `prior_known_signals`
+ * by case-insensitive substring containment in either direction. Avoids both
+ * false negatives ("severe lactic acidosis" should match prior "lactic
+ * acidosis") and false positives ("myocardial infarction" must NOT match
+ * prior "lactic acidosis" just because both are non-empty strings).
+ */
+function reportedEventMatchesPriorSignal(
+  reportedEvent: string | undefined,
+  priorKnownSignals: string[],
+): boolean {
+  if (!reportedEvent) return false;
+  if (!priorKnownSignals || priorKnownSignals.length === 0) return false;
+  const ev = reportedEvent.trim().toLowerCase();
+  if (!ev) return false;
+  for (const prior of priorKnownSignals) {
+    const p = prior.trim().toLowerCase();
+    if (!p) continue;
+    if (ev.includes(p) || p.includes(ev)) return true;
+  }
+  return false;
+}
+
 export function decideVerdict(input: SignalDecisionInput): SignalVerdict {
   const triggers = [
     input.stats.prr.threshold_met,
@@ -115,11 +148,16 @@ export function decideVerdict(input: SignalDecisionInput): SignalVerdict {
     input.stats.mgps.threshold_met,
   ].filter(Boolean).length;
 
-  // If user supplied prior known signals AND ≥2 methods trigger, classify as previously_known
+  // Previously-known classification fires only when the SPECIFIC reported
+  // event matches one of the prior known signals. Bare "prior_known_signals
+  // is non-empty" is NOT sufficient — that would suppress new signals for
+  // any drug with any known signal in its RMP.
   if (
     triggers >= 2 &&
-    input.prior_known_signals &&
-    input.prior_known_signals.length > 0
+    reportedEventMatchesPriorSignal(
+      input.reported_event,
+      input.prior_known_signals,
+    )
   ) {
     return "previously_known_signal";
   }
@@ -134,10 +172,11 @@ export function decideVerdict(input: SignalDecisionInput): SignalVerdict {
   }
 
   if (triggers === 0) return "no_signal";
-  if (triggers >= 3 && input.stats.n_cases >= 3 && input.stats.chi_squared >= 4) {
-    return "confirmed_signal";
-  }
-  if (triggers >= 2 && input.stats.n_cases >= 3 && input.stats.chi_squared >= 4) {
+  if (
+    triggers >= 2 &&
+    input.stats.n_cases >= 3 &&
+    input.stats.chi_squared >= 4
+  ) {
     return "confirmed_signal";
   }
   return "strengthening_signal";

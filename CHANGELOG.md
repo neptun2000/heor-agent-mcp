@@ -2,6 +2,36 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.3.1 (2026-05-05) — pv_classify + pv_signal_workflow code-review fixes
+
+Independent code reviews of both PV tools surfaced 1 CRITICAL + 6 HIGH findings of regulatory consequence. All addressed before redeployment.
+
+### `pv_signal_workflow` fixes
+
+- **CRITICAL — Cross-field validation.** Zod `.refine()` rules now reject `case_counts` that produce negative 2×2 cells (`drug_event > event_total`, `drug_event > drug_total`, or `grand_total` too small for the cells). Previously such inputs produced negative PRR/ROR and could fire `refuted_signal` for what is actually garbage input.
+- **HIGH — `previously_known_signal` ignored event identity.** New optional `reported_event` input; verdict requires case-insensitive substring match between `reported_event` and one of `prior_known_signals`. A drug with `prior_known_signals: ["lactic acidosis"]` reporting a fresh signal for "myocardial infarction" is now correctly classified as a new signal rather than silently suppressed.
+- **HIGH — IC posterior variance was missing 2 of 4 marginal terms** (Norén 2006 simplified form). Truncated formula gave IC025 ≈ 0.06 vs correct ≈ 1.07 for Evans 2001 vector — a 1.0-unit error that flipped IC `threshold_met` for borderline signals and systematically downgraded `confirmed_signal` to `strengthening_signal`.
+- **HIGH — Chi-squared was labelled "Yates" but not actually Yates-corrected.** Now applies `(|obs−exp| − 0.5)² / exp` per the label. Misrepresentation of the statistic to regulators eliminated.
+- **MEDIUM — Tool description warns callers about MGPS single-stratum confounding** (where it can inflate EBGM/EB05 for sex/age-stratified populations).
+- **LOW — Dead `triggers ≥ 3` branch removed** in decideVerdict.
+
+### `pv_classify` fixes
+
+- **HIGH — Fabricated ENCePP IDs replaced.** `ENCePP-PASS-001` style identifiers are not registered ENCePP templates. Field renamed from `encepp_protocol_template` to `encepp_study_category` with plain-language category labels (e.g., "PASS — post-authorisation safety study (imposed, GVP Module VIII). Use the ENCePP Code of Conduct checklist for protocol structure"). Markdown output explicitly notes the value is a category label, not a retrievable template reference.
+- **HIGH — ICH E2E rationale honesty.** Pre-authorisation rationale now explicitly states ICH E2E is a standalone ICH guideline, not a GVP module. The Module V reference reflects the downstream RMP that the E2E plan informs at MAA submission, not a direct ICH E2E → GVP V mapping.
+- **HIGH — Conditional/accelerated approval Specific Obligations warning.** When `regulatory_context` is `conditional_approval` or `accelerated_approval` AND `imposed_by_authority=false`, output emits an advisory warning prompting confirmation of CMA Article 14-a SOB status. Previously fell through silently to PASS_voluntary.
+- **MEDIUM — `rmp_commitment + imposed_by_authority=true` precedence reversed.** Now classifies as `PASS_imposed` primary with `RMP_Annex_4_study` as alternative. Article 107n imposition outranks Annex 4 listing per EMA practice; the prior ordering routed the wrong GVP module + omitted the PRAC pre-review obligation.
+- **MEDIUM — `spontaneous_reports + imposed_by_authority=true` warning.** Audit + markdown now flag this as a contradictory input (spontaneous reporting is an inherent obligation, not something an authority can impose as a study); the `imposed_by_authority` flag is no longer silently dropped.
+- **MEDIUM — CMS IRA legal claim softened.** Removed the inaccurate claim that "IRA excludes pharmacovigilance cost data from Medicare drug-price negotiation calculations" (no statutory basis). New language: "PV study costs are typically tracked as regulatory obligations separate from HEOR cost-effectiveness modelling and are not standard inputs to the IRA Maximum Fair Price calculation under current CMS guidance."
+
+### Tests
+- 577 MCP tests passing (was 558) — +19 behavioural tests covering all the review findings (cross-field validation cases, reported_event matching, full Norén IC variance against Evans 2001 vector, Yates chi² value, CMA SOB warning, ENCePP fabricated-ID guard, IRA-claim wording, rmp_commitment + imposed precedence, spontaneous_reports + imposed warning).
+
+### Why this is a patch release
+Pure correctness + transparency fixes. No API breaking changes (the `encepp_protocol_template` field rename is a transparency improvement; the previous IDs were not real ENCePP references, so callers depending on them were depending on a fiction). No new tools.
+
+---
+
 ## v1.3.0 (2026-05-05) — pv_signal_workflow tool (EMA GVP Module IX rev 2)
 
 ### Added

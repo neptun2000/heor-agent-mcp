@@ -34,15 +34,37 @@ const PvSignalWorkflowSchema = z
     drug: z.string().min(1, "drug is required"),
     indication: z.string().min(1, "indication is required"),
     reporting_period_months: z.number().int().min(1).max(120).default(12),
-    case_counts: z.object({
-      drug_event: z.number().int().nonnegative(),
-      drug_total: z.number().int().nonnegative(),
-      event_total: z.number().int().nonnegative(),
-      grand_total: z.number().int().nonnegative(),
-    }),
+    case_counts: z
+      .object({
+        drug_event: z.number().int().nonnegative(),
+        drug_total: z.number().int().nonnegative(),
+        event_total: z.number().int().nonnegative(),
+        grand_total: z.number().int().nonnegative(),
+      })
+      .refine((d) => d.drug_total >= d.drug_event, {
+        message:
+          "drug_total must be >= drug_event (cell b = drug_total - drug_event would be negative)",
+      })
+      .refine((d) => d.event_total >= d.drug_event, {
+        message:
+          "event_total must be >= drug_event (cell c = event_total - drug_event would be negative)",
+      })
+      .refine(
+        (d) => d.grand_total >= d.drug_total + (d.event_total - d.drug_event),
+        {
+          message:
+            "grand_total too small — cell d = grand_total - drug_total - (event_total - drug_event) would be negative. Check that all 4 counts come from the same database.",
+        },
+      ),
     data_source: z.enum(DATA_SOURCES).default("eudravigilance"),
     pregnancy_exposure: z.boolean().default(false),
     prior_known_signals: z.array(z.string()).default([]),
+    reported_event: z
+      .string()
+      .optional()
+      .describe(
+        "Optional: the specific adverse event being scored (e.g., 'lactic acidosis'). REQUIRED to enable previously_known_signal classification — without it, the tool cannot determine whether the disproportionality applies to a known event vs a new one. When omitted with prior_known_signals non-empty, output emits a warning and treats the case as a potentially new signal.",
+      ),
     outcome_serious: z.boolean().default(false),
     rmp_has_pregnancy_concern: z.boolean().default(false),
   })
@@ -92,8 +114,29 @@ export async function handlePvSignalWorkflow(
   const verdict = decideVerdict({
     stats,
     prior_known_signals: input.prior_known_signals,
+    reported_event: input.reported_event,
     outcome_serious: input.outcome_serious,
   });
+
+  // Honest-API guard: when caller has prior_known_signals but didn't supply
+  // reported_event, we cannot match the disproportionality to a specific
+  // known signal. Surface this in the audit so reviewers see we treated it
+  // as a potentially new signal rather than silently suppressing it.
+  if (
+    input.prior_known_signals.length > 0 &&
+    !input.reported_event &&
+    [
+      stats.prr.threshold_met,
+      stats.ror.threshold_met,
+      stats.ic.threshold_met,
+      stats.mgps.threshold_met,
+    ].filter(Boolean).length >= 2
+  ) {
+    audit = addWarning(
+      audit,
+      "prior_known_signals supplied but reported_event missing — cannot match to a specific known signal. Verdict treats this as a potentially new signal. Re-run with reported_event to enable previously_known_signal classification.",
+    );
+  }
 
   audit = addAssumption(
     audit,
@@ -341,7 +384,7 @@ function rmpSignalSectionText(
 export const pvSignalWorkflowToolSchema = {
   name: "pv.signal_workflow",
   description:
-    "Compute disproportionality statistics (PRR, ROR, IC/BCPNN, MGPS/EBGM) on user-supplied drug-AE case counts and decide a signal verdict per EMA GVP Module IX rev 2. Returns the verdict (no/strengthening/confirmed/previously known/refuted), workflow recommendations, and canonical RMP signal-section text. Optionally layers in GVP Considerations P.III pregnancy follow-up (birth/3mo/12mo) when both pregnancy_exposure and rmp_has_pregnancy_concern are true. Pairs with pv_classify. v1 takes user counts; v2 will integrate EVDAS programmatic access per Reg. 2025/1466.",
+    "Compute disproportionality statistics (PRR, ROR, IC/BCPNN, MGPS/EBGM) on user-supplied drug-AE case counts and decide a signal verdict per EMA GVP Module IX rev 2. Returns the verdict (no/strengthening/confirmed/previously known/refuted), workflow recommendations, and canonical RMP signal-section text. To classify a finding as previously_known_signal, supply BOTH prior_known_signals AND reported_event so the tool can match the disproportionality to a specific known event. Optionally layers in GVP Considerations P.III pregnancy follow-up (birth/3mo/12mo) when both pregnancy_exposure and rmp_has_pregnancy_concern are true. Pairs with pv_classify. ⚠️ MGPS uses single-stratum gamma-Poisson shrinkage in v1 — when database counts are confounded by sex/age strata, EBGM/EB05 may be inflated; stratified MGPS is planned for v2. v1 takes user counts; v2 will also integrate EVDAS programmatic access per Reg. 2025/1466.",
   annotations: {
     title: "PV Signal Workflow",
     readOnlyHint: true,

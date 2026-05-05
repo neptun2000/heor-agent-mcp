@@ -4,7 +4,7 @@
  * Maps a planned study's metadata onto its EMA GVP regulatory category
  * (PASS imposed/voluntary, PAES, RMP Annex 4, DUS, registry, pregnancy
  * registry, spontaneous reporting, ICH E2E plan) plus the matching GVP
- * module + ENCePP protocol template + RMP/FDA implications. Pure logic,
+ * module + ENCePP study-category label + RMP/FDA implications. Pure logic,
  * no I/O — modelled on itc_feasibility.
  *
  * See design log #11 for the decision tree and design rationale.
@@ -72,9 +72,7 @@ const PvClassifySchema = z
   })
   .strict();
 
-export async function handlePvClassify(
-  rawInput: unknown,
-): Promise<ToolResult> {
+export async function handlePvClassify(rawInput: unknown): Promise<ToolResult> {
   const parsed = PvClassifySchema.safeParse(rawInput);
   if (!parsed.success) {
     const messages: string[] = [];
@@ -131,13 +129,18 @@ export async function handlePvClassify(
       "Pregnant population in scope — pregnancy registry obligations apply on top of any other classification.",
     );
   }
+  // Surface advisory warnings from the decision tree (CMA SOB hint,
+  // contradictory-input detection, etc.)
+  for (const w of decision.advisory_warnings ?? []) {
+    audit = addWarning(audit, w);
+  }
 
   const classification: PvClassification = {
     primary_category: decision.primary_category,
     alternatives: decision.alternatives,
     gvp_module: mapping.gvp_module,
     gvp_revision: GVP_REVISION,
-    encepp_protocol_template: mapping.encepp_protocol_template,
+    encepp_study_category: mapping.encepp_study_category,
     rmp_implications: mapping.rmp_implications,
     fda_analogue: mapping.fda_analogue,
     submission_obligations: mapping.submission_obligations,
@@ -159,14 +162,25 @@ export async function handlePvClassify(
   lines.push(
     `Module ${mapping.gvp_module} (EMA GVP ${GVP_REVISION.replace("_", " ")})`,
   );
-  if (mapping.encepp_protocol_template) {
-    lines.push(`ENCePP protocol template: \`${mapping.encepp_protocol_template}\``);
+  if (mapping.encepp_study_category) {
+    lines.push(`ENCePP study category: ${mapping.encepp_study_category}`);
+    lines.push(
+      `*(Category label, not a registered template ID. Consult the [ENCePP Code of Conduct](https://www.encepp.eu/code_of_conduct/) checklist for protocol structure and the [EUPAS register](https://www.encepp.eu/encepp/studiesDatabase.jsp) for actual study protocols.)*`,
+    );
   }
   lines.push("");
 
   lines.push("## Rationale");
   lines.push(decision.rationale);
   lines.push("");
+
+  if (decision.advisory_warnings && decision.advisory_warnings.length > 0) {
+    lines.push("## ⚠️ Advisory Warnings");
+    for (const w of decision.advisory_warnings) {
+      lines.push(`- ${w}`);
+    }
+    lines.push("");
+  }
 
   lines.push("## Submission Obligations");
   for (const o of mapping.submission_obligations) {
@@ -186,9 +200,9 @@ export async function handlePvClassify(
       `FDA analogue: ${mapping.fda_analogue ?? "not yet mapped"}. Full FDA REMS / Sentinel / FAERS integration is planned for v2 of this tool — for now this is an indicative mapping, not a regulatory-grade FDA classification.`,
     );
     lines.push("");
-    lines.push("### CMS IRA note");
+    lines.push("### CMS IRA note (US jurisdiction)");
     lines.push(
-      "**Inflation Reduction Act (CMS IRA) excludes pharmacovigilance cost data from Medicare drug-price negotiation calculations.** PV obligations recorded here do not enter the IRA negotiation threshold; track them separately in the regulatory budget, not the HEOR cost-effectiveness model.",
+      "PV study costs are typically tracked as regulatory obligations separate from HEOR cost-effectiveness modelling and are **not standard inputs to the IRA Maximum Fair Price calculation** under current CMS guidance. The IRA statute (P.L. 117-169) does not contain a specific carve-out for pharmacovigilance costs — track these in the regulatory budget rather than embedding them in the HEOR CEA, and verify the latest CMS implementation guidance before final pricing analyses.",
     );
     lines.push("");
   }
@@ -202,7 +216,9 @@ export async function handlePvClassify(
   }
 
   lines.push("## References");
-  lines.push("- EMA GVP Module VIII (Post-Authorisation Safety Studies, rev 4)");
+  lines.push(
+    "- EMA GVP Module VIII (Post-Authorisation Safety Studies, rev 4)",
+  );
   lines.push("- EMA GVP Module V (Risk Management Systems)");
   lines.push("- EMA GVP Module VIII Addendum I (Drug Utilisation Studies)");
   lines.push("- EU Regulation 1235/2010, Article 107a (imposed PASS)");
@@ -227,7 +243,7 @@ export async function handlePvClassify(
 export const pvClassifyToolSchema = {
   name: "pv.classify",
   description:
-    "Classify a planned study into its EMA pharmacovigilance regulatory category (PASS imposed/voluntary, PAES, RMP Annex 4, DUS, active surveillance registry, pregnancy registry, spontaneous reporting, ICH E2E plan). Returns the matching GVP module + ENCePP protocol template + submission obligations + RMP implications + FDA analogue. Use BEFORE preparing an HTA dossier or before designing a post-authorisation study. Pass the structured `pv_classification` output to `hta_dossier` to populate its Pharmacovigilance Plan section.",
+    "Classify a planned study into its EMA pharmacovigilance regulatory category (PASS imposed/voluntary, PAES, RMP Annex 4, DUS, active surveillance registry, pregnancy registry, spontaneous reporting, ICH E2E plan). Returns the matching GVP module + ENCePP study-category label (not a registered protocol ID — consult the ENCePP Code of Conduct checklist for templates) + submission obligations + RMP implications + FDA analogue. Use BEFORE preparing an HTA dossier or before designing a post-authorisation study. Pass the structured `pv_classification` output to `hta_dossier` to populate its Pharmacovigilance Plan section.",
   annotations: {
     title: "PV Study Classification",
     readOnlyHint: true,

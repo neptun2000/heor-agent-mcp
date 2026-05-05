@@ -186,7 +186,8 @@ describe("handleHtaDossierPrep — pv_classification integration", () => {
     alternatives: ["RMP_Annex_4_study"],
     gvp_module: "VIII",
     gvp_revision: "rev_4",
-    encepp_protocol_template: "ENCePP-PASS-001",
+    encepp_study_category:
+      "PASS — post-authorisation safety study (imposed, GVP Module VIII)",
     rmp_implications: [
       "Update RMP Part III (PV Plan) to list this study as an imposed PASS.",
       "Annex 4 of the RMP must reference the protocol and timelines.",
@@ -210,7 +211,8 @@ describe("handleHtaDossierPrep — pv_classification integration", () => {
     expect(txt).toMatch(/##\s+Pharmacovigilance Plan/i);
     expect(txt).toContain("PASS_imposed");
     expect(txt).toContain("Module VIII");
-    expect(txt).toContain("ENCePP-PASS-001");
+    // Per code-review fix: ENCePP value is now a category label, not a fabricated protocol ID
+    expect(txt).toMatch(/ENCePP category|PASS — post-authorisation/);
   });
 
   it("includes submission_obligations and rmp_implications in the PV section", async () => {

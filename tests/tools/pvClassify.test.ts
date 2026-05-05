@@ -29,7 +29,9 @@ async function classify(input: Record<string, unknown>): Promise<PvResult> {
 
 describe("pv_classify — schema validation", () => {
   it("requires drug, indication, study_design, primary_objective, regulatory_context", async () => {
-    await expect(handlePvClassify({})).rejects.toThrow(/required|drug|indication/i);
+    await expect(handlePvClassify({})).rejects.toThrow(
+      /required|drug|indication/i,
+    );
   });
 
   it("accepts the minimal valid input", async () => {
@@ -267,13 +269,41 @@ describe("pv_classify — GVP module and ENCePP template mapping", () => {
   it("every primary category resolves to exactly one GVP module", async () => {
     // The mapping must be total (no undefined gvp_module values).
     const inputs = [
-      { regulatory_context: "post_authorisation", imposed_by_authority: true, primary_objective: "safety" },
-      { regulatory_context: "post_authorisation", imposed_by_authority: false, primary_objective: "safety" },
-      { regulatory_context: "post_authorisation", imposed_by_authority: false, primary_objective: "effectiveness" },
-      { regulatory_context: "post_authorisation", imposed_by_authority: false, primary_objective: "drug_utilization" },
-      { regulatory_context: "post_authorisation", imposed_by_authority: false, primary_objective: "natural_history" },
-      { regulatory_context: "pre_authorisation", imposed_by_authority: false, primary_objective: "safety" },
-      { regulatory_context: "rmp_commitment", imposed_by_authority: false, primary_objective: "safety" },
+      {
+        regulatory_context: "post_authorisation",
+        imposed_by_authority: true,
+        primary_objective: "safety",
+      },
+      {
+        regulatory_context: "post_authorisation",
+        imposed_by_authority: false,
+        primary_objective: "safety",
+      },
+      {
+        regulatory_context: "post_authorisation",
+        imposed_by_authority: false,
+        primary_objective: "effectiveness",
+      },
+      {
+        regulatory_context: "post_authorisation",
+        imposed_by_authority: false,
+        primary_objective: "drug_utilization",
+      },
+      {
+        regulatory_context: "post_authorisation",
+        imposed_by_authority: false,
+        primary_objective: "natural_history",
+      },
+      {
+        regulatory_context: "pre_authorisation",
+        imposed_by_authority: false,
+        primary_objective: "safety",
+      },
+      {
+        regulatory_context: "rmp_commitment",
+        imposed_by_authority: false,
+        primary_objective: "safety",
+      },
     ];
     for (const inp of inputs) {
       const r = await classify({
@@ -282,11 +312,13 @@ describe("pv_classify — GVP module and ENCePP template mapping", () => {
         study_design: "rct",
         ...inp,
       });
-      expect(r.pv_classification.gvp_module).toMatch(/^(V|VI|VIII|VIII_Addendum_I)$/);
+      expect(r.pv_classification.gvp_module).toMatch(
+        /^(V|VI|VIII|VIII_Addendum_I)$/,
+      );
     }
   });
 
-  it("includes an ENCePP protocol template reference for PASS/registry categories", async () => {
+  it("includes an ENCePP study-category label for PASS/registry categories (not a fabricated protocol ID)", async () => {
     const r = await classify({
       drug: "x",
       indication: "y",
@@ -295,8 +327,15 @@ describe("pv_classify — GVP module and ENCePP template mapping", () => {
       regulatory_context: "post_authorisation",
       imposed_by_authority: true,
     });
-    expect(r.pv_classification.encepp_protocol_template).toBeDefined();
-    expect(r.pv_classification.encepp_protocol_template).toMatch(/ENCePP/);
+    expect(r.pv_classification.encepp_study_category).toBeDefined();
+    // Must be a category label (mentions PASS / Module / ENCePP context),
+    // NOT a fabricated protocol-ID pattern like "ENCePP-PASS-001".
+    expect(r.pv_classification.encepp_study_category).toMatch(
+      /PASS|Module|ENCePP/,
+    );
+    expect(r.pv_classification.encepp_study_category).not.toMatch(
+      /ENCePP-PASS-\d{3}/,
+    );
   });
 });
 
@@ -389,5 +428,170 @@ describe("pv_classify — performance", () => {
       regulatory_context: "post_authorisation",
     });
     expect(Date.now() - start).toBeLessThan(200);
+  });
+});
+
+// ── Code-review fixes (HIGH / MEDIUM from 2026-05-05 review) ─────────────
+
+describe("pv_classify — conditional_approval without imposed flag (HIGH)", () => {
+  it("emits a CMA Specific-Obligations warning when conditional_approval + imposed_by_authority=false", async () => {
+    // EMA conditional MA carries Specific Obligations (SOBs) under Article 14-a.
+    // Even without imposed_by_authority=true, the user should be prompted to
+    // confirm SOB status — silent fall-through to PASS_voluntary is misleading.
+    const r = await classify({
+      drug: "x",
+      indication: "y",
+      study_design: "single_arm",
+      primary_objective: "safety",
+      regulatory_context: "conditional_approval",
+      imposed_by_authority: false,
+    });
+    expect(String(r.content)).toMatch(
+      /conditional|specific obligation|CMA|Article 14|SOB/i,
+    );
+  });
+
+  it("accelerated_approval also flags possible imposition", async () => {
+    const r = await classify({
+      drug: "x",
+      indication: "y",
+      study_design: "single_arm",
+      primary_objective: "safety",
+      regulatory_context: "accelerated_approval",
+      imposed_by_authority: false,
+    });
+    expect(String(r.content)).toMatch(
+      /accelerated|conditional|specific obligation|imposition|imposed/i,
+    );
+  });
+});
+
+describe("pv_classify — ENCePP field is honest (HIGH)", () => {
+  it("does NOT include fabricated 'ENCePP-PASS-001' style IDs that imply a real protocol reference", async () => {
+    // Per code review: those IDs are not registered in any ENCePP catalogue.
+    // The output must use category labels, not fabricated protocol identifiers.
+    const r = await classify({
+      drug: "x",
+      indication: "y",
+      study_design: "single_arm",
+      primary_objective: "safety",
+      regulatory_context: "post_authorisation",
+      imposed_by_authority: true,
+    });
+    expect(String(r.content)).not.toMatch(
+      /ENCePP-PASS-\d{3}|ENCePP-PAES-\d{3}|ENCePP-RMP-\d{3}|ENCePP-DUS-\d{3}|ENCePP-REG-\d{3}|ENCePP-PREG-\d{3}/,
+    );
+  });
+
+  it("output references ENCePP Code of Conduct / EUPAS register, not made-up template IDs", async () => {
+    const r = await classify({
+      drug: "x",
+      indication: "y",
+      study_design: "single_arm",
+      primary_objective: "safety",
+      regulatory_context: "post_authorisation",
+      imposed_by_authority: true,
+    });
+    expect(String(r.content)).toMatch(
+      /ENCePP Code of Conduct|EUPAS|study category|PASS|Module VIII/,
+    );
+  });
+});
+
+describe("pv_classify — ICH E2E mapping honesty (HIGH)", () => {
+  it("rationale text for pre_authorisation acknowledges ICH E2E is a separate ICH guideline (not a GVP module)", async () => {
+    const r = await classify({
+      drug: "x",
+      indication: "y",
+      study_design: "rct",
+      primary_objective: "safety",
+      regulatory_context: "pre_authorisation",
+    });
+    expect(r.pv_classification.rationale).toMatch(
+      /ICH E2E.*(guideline|standalone|not.*GVP module|informs the RMP)/i,
+    );
+  });
+});
+
+describe("pv_classify — rmp_commitment precedence (MEDIUM)", () => {
+  it("rmp_commitment + imposed_by_authority=true yields PASS_imposed primary, RMP_Annex_4_study alternative", async () => {
+    // Per code review: an imposed PASS that's also tracked in RMP Annex 4
+    // is primarily a PASS_imposed under Article 107n. Inverting precedence
+    // would route the GVP Module V metadata, not Module VIII PRAC review.
+    const r = await classify({
+      drug: "x",
+      indication: "y",
+      study_design: "prospective_cohort",
+      primary_objective: "safety",
+      regulatory_context: "rmp_commitment",
+      imposed_by_authority: true,
+    });
+    expect(r.pv_classification.primary_category).toBe("PASS_imposed");
+    expect(r.pv_classification.alternatives).toContain("RMP_Annex_4_study");
+  });
+
+  it("rmp_commitment + imposed_by_authority=false still yields RMP_Annex_4_study", async () => {
+    const r = await classify({
+      drug: "x",
+      indication: "y",
+      study_design: "prospective_cohort",
+      primary_objective: "safety",
+      regulatory_context: "rmp_commitment",
+      imposed_by_authority: false,
+    });
+    expect(r.pv_classification.primary_category).toBe("RMP_Annex_4_study");
+  });
+});
+
+describe("pv_classify — spontaneous_reports + imposed conflict (MEDIUM)", () => {
+  it("emits a warning when study_design=spontaneous_reports AND imposed_by_authority=true (contradictory)", async () => {
+    const r = await classify({
+      drug: "x",
+      indication: "y",
+      study_design: "spontaneous_reports",
+      primary_objective: "safety",
+      regulatory_context: "post_authorisation",
+      imposed_by_authority: true,
+    });
+    // Verdict stays as spontaneous_reporting_only, but the audit / output
+    // flags that imposed_by_authority is meaningless for spontaneous reporting.
+    expect(String(r.content)).toMatch(
+      /spontaneous.*imposed|imposed.*spontaneous|contradictory|inherent obligation/i,
+    );
+  });
+});
+
+describe("pv_classify — CMS IRA claim accuracy (MEDIUM)", () => {
+  it("does NOT claim IRA contains a specific PV-cost-data carve-out (no statutory basis for that claim)", async () => {
+    const r = await classify({
+      drug: "x",
+      indication: "y",
+      study_design: "rct",
+      primary_objective: "safety",
+      regulatory_context: "post_authorisation",
+      jurisdictions: ["us"],
+    });
+    const t = String(r.content);
+    // Older copy: "CMS IRA excludes pharmacovigilance cost data from
+    // Medicare drug-price negotiation calculations." — not in the statute.
+    expect(t).not.toMatch(/IRA excludes pharmacovigilance cost data/i);
+    expect(t).not.toMatch(
+      /excludes pharmacovigilance cost data from Medicare/i,
+    );
+  });
+
+  it("mentions IRA-PV separation in softened language (track separately, not statutory exclusion)", async () => {
+    const r = await classify({
+      drug: "x",
+      indication: "y",
+      study_design: "rct",
+      primary_objective: "safety",
+      regulatory_context: "post_authorisation",
+      jurisdictions: ["us"],
+    });
+    const t = String(r.content);
+    expect(t).toMatch(
+      /track.*separately|regulatory budget|not.*input.*Maximum Fair Price|separate from the HEOR/i,
+    );
   });
 });

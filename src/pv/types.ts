@@ -19,7 +19,14 @@ export interface PvClassification {
   alternatives: PvCategory[];
   gvp_module: GvpModule;
   gvp_revision: "rev_4";
-  encepp_protocol_template?: string;
+  /**
+   * Plain-language ENCePP study category label (NOT a registered protocol
+   * template ID — ENCePP does not maintain a public catalogue of reusable
+   * template IDs). Examples: "PASS — post-authorisation safety study (Module VIII)".
+   * Use this as a category label only; consult the ENCePP Code of Conduct
+   * checklist and the EUPAS register for actual protocol templates.
+   */
+  encepp_study_category?: string;
   rmp_implications: string[];
   fda_analogue?: string;
   submission_obligations: string[];

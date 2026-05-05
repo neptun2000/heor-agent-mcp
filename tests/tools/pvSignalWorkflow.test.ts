@@ -264,7 +264,9 @@ describe("pv_signal_workflow — verdicts", () => {
     expect(r.signal_assessment.verdict).toBe("no_signal");
   });
 
-  it("previously_known_signal: same disproportionality, but listed in prior_known_signals", async () => {
+  it("previously_known_signal: same disproportionality, prior signal listed AND reported_event matches", async () => {
+    // Per code-review HIGH #1 fix (2026-05-05): previously_known_signal
+    // requires a SPECIFIC event match, not just a non-empty prior list.
     const r = await run({
       drug: "metformin",
       indication: "T2D",
@@ -275,6 +277,7 @@ describe("pv_signal_workflow — verdicts", () => {
         grand_total: 5000000,
       },
       prior_known_signals: ["lactic acidosis"],
+      reported_event: "lactic acidosis",
     });
     expect(r.signal_assessment.verdict).toBe("previously_known_signal");
   });
@@ -445,6 +448,170 @@ describe("pv_signal_workflow — output content", () => {
       },
     });
     expect(r.signal_assessment.gvp_revision).toBe("rev_4");
+  });
+});
+
+// ---- Code-review fixes (CRITICAL / HIGH from 2026-05-05 review) ---------
+
+describe("pv_signal_workflow — cross-field validation (CRITICAL)", () => {
+  it("rejects drug_event > event_total (would produce negative cell c)", async () => {
+    await expect(
+      run({
+        drug: "x",
+        indication: "y",
+        case_counts: {
+          drug_event: 10,
+          drug_total: 100,
+          event_total: 5, // smaller than drug_event — invalid
+          grand_total: 1000,
+        },
+      }),
+    ).rejects.toThrow(/event_total|drug_event|cell c/i);
+  });
+
+  it("rejects drug_event > drug_total (would produce negative cell b)", async () => {
+    await expect(
+      run({
+        drug: "x",
+        indication: "y",
+        case_counts: {
+          drug_event: 100,
+          drug_total: 50, // smaller than drug_event — invalid
+          event_total: 200,
+          grand_total: 10000,
+        },
+      }),
+    ).rejects.toThrow(/drug_total|drug_event|cell b/i);
+  });
+
+  it("rejects grand_total too small to accommodate the four cells (negative d)", async () => {
+    await expect(
+      run({
+        drug: "x",
+        indication: "y",
+        case_counts: {
+          drug_event: 10,
+          drug_total: 50,
+          event_total: 30,
+          grand_total: 60, // d = 60 - 50 - (30-10) = -10
+        },
+      }),
+    ).rejects.toThrow(/grand_total|cell d/i);
+  });
+});
+
+describe("pv_signal_workflow — previously_known_signal event matching (HIGH)", () => {
+  it("does NOT classify as previously_known when reported_event differs from prior signals", async () => {
+    // Drug has known "lactic acidosis" signal; current report is for "myocardial
+    // infarction" — must be classified as a NEW signal, not previously known.
+    const r = await run({
+      drug: "metformin",
+      indication: "T2D",
+      case_counts: {
+        drug_event: 50,
+        drug_total: 100000,
+        event_total: 1000,
+        grand_total: 5000000,
+      },
+      prior_known_signals: ["lactic acidosis"],
+      reported_event: "myocardial infarction",
+    });
+    expect(r.signal_assessment.verdict).not.toBe("previously_known_signal");
+  });
+
+  it("DOES classify as previously_known when reported_event matches a prior signal (case-insensitive)", async () => {
+    const r = await run({
+      drug: "metformin",
+      indication: "T2D",
+      case_counts: {
+        drug_event: 50,
+        drug_total: 100000,
+        event_total: 1000,
+        grand_total: 5000000,
+      },
+      prior_known_signals: ["Lactic Acidosis"],
+      reported_event: "lactic acidosis",
+    });
+    expect(r.signal_assessment.verdict).toBe("previously_known_signal");
+  });
+
+  it("substring match: reported_event 'severe lactic acidosis' matches prior 'lactic acidosis'", async () => {
+    const r = await run({
+      drug: "metformin",
+      indication: "T2D",
+      case_counts: {
+        drug_event: 50,
+        drug_total: 100000,
+        event_total: 1000,
+        grand_total: 5000000,
+      },
+      prior_known_signals: ["lactic acidosis"],
+      reported_event: "severe lactic acidosis",
+    });
+    expect(r.signal_assessment.verdict).toBe("previously_known_signal");
+  });
+
+  it("when reported_event is missing AND prior_known_signals is non-empty, audit warns and verdict is NOT previously_known", async () => {
+    // Cannot suppress a signal as previously-known without knowing what
+    // event we're scoring. Audit must reflect the ambiguity.
+    const r = await run({
+      drug: "metformin",
+      indication: "T2D",
+      case_counts: {
+        drug_event: 50,
+        drug_total: 100000,
+        event_total: 1000,
+        grand_total: 5000000,
+      },
+      prior_known_signals: ["lactic acidosis"],
+      // reported_event omitted
+    });
+    expect(r.signal_assessment.verdict).not.toBe("previously_known_signal");
+  });
+});
+
+describe("pv_signal_workflow — IC variance per Norén 2006 (HIGH)", () => {
+  // Evans 2001 vector with full Norén posterior variance:
+  //   IC = log2((10+0.5)/(2.1+0.5)) ≈ 2.014
+  //   var(IC) = (1/10.5 + 1/100.5 + 1/210.5 + 1/10000.5) / ln(2)² ≈ 0.229
+  //   SE ≈ 0.479; IC025 = 2.014 - 1.96 * 0.479 ≈ 1.076
+  // The previous variance formula (only 2 of 4 terms) gave IC025 ≈ 0.055,
+  // a systematic under-trigger that flipped IC threshold_met for borderline
+  // signals.
+  it("IC025 matches Norén 2006 simplified posterior variance (~1.07 for Evans)", async () => {
+    const r = await run({
+      drug: "x",
+      indication: "y",
+      case_counts: {
+        drug_event: 10,
+        drug_total: 100,
+        event_total: 210,
+        grand_total: 10000,
+      },
+    });
+    expect(r.signal_assessment.statistics.ic.ic025).toBeGreaterThan(0.9);
+    expect(r.signal_assessment.statistics.ic.ic025).toBeLessThan(1.3);
+  });
+});
+
+describe("pv_signal_workflow — chi-squared with Yates correction applied (HIGH)", () => {
+  // Evans 2001 vector:
+  //   Pearson uncorrected ≈ 30.66
+  //   Yates-corrected ≈ 26.90
+  // The markdown labels the value "χ² (Yates)", so the math must match.
+  it("chi-squared matches Yates-corrected Evans 2001 vector (~26.9)", async () => {
+    const r = await run({
+      drug: "x",
+      indication: "y",
+      case_counts: {
+        drug_event: 10,
+        drug_total: 100,
+        event_total: 210,
+        grand_total: 10000,
+      },
+    });
+    expect(r.signal_assessment.statistics.chi_squared).toBeGreaterThan(25);
+    expect(r.signal_assessment.statistics.chi_squared).toBeLessThan(28);
   });
 });
 

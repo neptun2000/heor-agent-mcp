@@ -1,6 +1,6 @@
 # HEORAgent MCP Server — Features
 
-17 tools, 44 data sources, complete HEOR workflow automation.
+21 tools, 44 data sources, complete HEOR workflow automation.
 
 ## Core Workflow Tools
 

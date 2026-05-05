@@ -34,7 +34,7 @@ If you have Claude Code installed:
 claude mcp add heor-agent -- npx heor-agent-mcp
 ```
 
-Then restart Claude Code. The 17 HEOR tools become available in any conversation.
+Then restart Claude Code. The 21 HEOR tools become available in any conversation.
 
 ### For Claude Desktop users (manual config)
 
@@ -66,7 +66,7 @@ That's it — click the link, pick a conversation starter, start querying. ChatG
 
 #### Want to build your own GPT against the same backend?
 
-The web tier exposes the 17 tools as an OpenAPI 3.1 adapter at `/api/openapi`. To wire up your own ChatGPT Custom GPT:
+The web tier exposes the 21 tools as an OpenAPI 3.1 adapter at `/api/openapi`. To wire up your own ChatGPT Custom GPT:
 
 1. Go to **[chatgpt.com/gpts/editor](https://chatgpt.com/gpts/editor)** → click **Create**
 2. **Configure** tab — give it a name and short description

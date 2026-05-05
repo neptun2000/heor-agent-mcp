@@ -1,8 +1,8 @@
 {
   "serverInfo": {
     "name": "heor-agent-mcp",
-    "version": "1.2.2",
-    "description": "AI-powered Health Economics and Outcomes Research (HEOR) MCP server. 21 tools for literature search (44 data sources incl. OHE and EuroQol), risk of bias assessment (RoB 2/ROBINS-I/AMSTAR-2 with GRADE integration), cost-effectiveness modeling (Markov/PartSA with PSA/EVPPI/scenarios, QALY + evLYG summary metrics), budget impact analysis, abstract screening, survival curve fitting, indirect comparisons (Bucher/NMA/MAIC/STC) with I²/Cochran Q heterogeneity, ITC feasibility assessment (3-assumption framework), pharmacovigilance study classification (PASS/PAES/RMP/DUS/registry per EMA GVP rev 4), EU Joint Clinical Assessment (JCA) PICO matrix analyzer (DE/FR/IT/ES/NL + UK context), MAIC pipeline orchestration, HTA dossier prep (NICE/EMA/FDA/IQWiG/HAS/EU JCA) with auto-GRADE + PV plan + NICE severity modifier + health inequalities, UK EQ-5D-5L value set impact estimator, examples + recipe templates."
+    "version": "1.3.0",
+    "description": "AI-powered Health Economics and Outcomes Research (HEOR) MCP server. 22 tools for literature search (44 data sources incl. OHE and EuroQol), risk of bias assessment (RoB 2/ROBINS-I/AMSTAR-2 with GRADE integration), cost-effectiveness modeling (Markov/PartSA with PSA/EVPPI/scenarios, QALY + evLYG summary metrics), budget impact analysis, abstract screening, survival curve fitting, indirect comparisons (Bucher/NMA/MAIC/STC) with I²/Cochran Q heterogeneity, ITC feasibility assessment (3-assumption framework), pharmacovigilance study classification (PASS/PAES/RMP/DUS/registry per EMA GVP rev 4), EU Joint Clinical Assessment (JCA) PICO matrix analyzer (DE/FR/IT/ES/NL + UK context), pharmacovigilance signal workflow (PRR/ROR/IC/MGPS per GVP Module IX rev 2 + GVP P.III pregnancy follow-up), MAIC pipeline orchestration, HTA dossier prep (NICE/EMA/FDA/IQWiG/HAS/EU JCA) with auto-GRADE + PV plan + NICE severity modifier + health inequalities, UK EQ-5D-5L value set impact estimator, examples + recipe templates."
   },
   "authentication": {
     "required": false,
@@ -39,7 +39,8 @@
     { "name": "examples", "description": "Pre-filled JSON inputs for heavy-schema tools + maic_workflow_recipe (multi-step prompt template for ChatGPT users)." },
     { "name": "workflow.maic", "description": "One-shot MAIC pipeline orchestrator: ITC feasibility + parallel literature_search (broad + per-trial) + screen_abstracts + risk_of_bias + evidence_network. Returns a 9-section structured report. Stops short of MAIC/Bucher itself (those need IPD)." },
     { "name": "pv.classify", "description": "Classify a planned study into its EMA pharmacovigilance regulatory category (PASS imposed/voluntary, PAES, RMP Annex 4, DUS, registry, pregnancy registry, spontaneous reporting, ICH E2E plan). Maps to GVP module + ENCePP template + RMP/FDA implications. Pass result to hta_dossier for the PV Plan section." },
-    { "name": "jca.pico_scope", "description": "Produce the canonical EU Joint Clinical Assessment (JCA) PICO matrix for a drug-indication pair across selected EU jurisdictions (DE/FR/IT/ES/NL + UK context). Returns consolidated PICO list per Reg. 2021/2282, country-specific comparator universes, outcome instrument preferences, population subgroups, and a heterogeneity warning. Pipe pico_matrix.picos into hta_dossier for a multi-PICO JCA dossier." }
+    { "name": "jca.pico_scope", "description": "Produce the canonical EU Joint Clinical Assessment (JCA) PICO matrix for a drug-indication pair across selected EU jurisdictions (DE/FR/IT/ES/NL + UK context). Returns consolidated PICO list per Reg. 2021/2282, country-specific comparator universes, outcome instrument preferences, population subgroups, and a heterogeneity warning. Pipe pico_matrix.picos into hta_dossier for a multi-PICO JCA dossier." },
+    { "name": "pv.signal_workflow", "description": "Compute disproportionality statistics (PRR/ROR/IC/MGPS) on drug-AE case counts and decide a signal verdict per EMA GVP Module IX rev 2. Returns workflow recommendations + canonical RMP signal-section text + optional GVP P.III pregnancy follow-up. Pairs with pv.classify." }
   ],
   "keywords": [
     "healthcare",
@@ -73,6 +74,14 @@
     "jca",
     "eu-hta-regulation",
     "pico-scope",
-    "joint-clinical-assessment"
+    "joint-clinical-assessment",
+    "signal-detection",
+    "prr",
+    "ror",
+    "bcpnn",
+    "mgps",
+    "ebgm",
+    "eudravigilance",
+    "evdas"
   ]
 }

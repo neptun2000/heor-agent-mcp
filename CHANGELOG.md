@@ -2,6 +2,34 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.3.0 (2026-05-05) — pv_signal_workflow tool (EMA GVP Module IX rev 2)
+
+### Added
+- **`pv_signal_workflow` tool** — given drug-AE case counts (from EudraVigilance / FAERS / national PV DB / internal spontaneous reports), computes four disproportionality statistics: **PRR** (Evans 2001), **ROR** (van Puijenbroek 2002), **IC** (Bate 1998 / Norén 2006 BCPNN posterior), and **MGPS** (DuMouchel 1999, EBGM with EB05/EB95 via gamma-Poisson shrinkage). Decides a signal verdict (no_signal / strengthening_signal / confirmed_signal / previously_known_signal / refuted_signal) and emits canonical RMP signal-section text. Pairs with `pv_classify` (planned-study classifier).
+- **GVP Considerations P.III pregnancy follow-up.** When `pregnancy_exposure: true` AND `rmp_has_pregnancy_concern: true`, output includes structured follow-up timepoints (birth / 3 months / 12 months) per the actual P.III gating logic — not blanket-triggered for any pregnancy exposure.
+- **`outcome_serious: true`** lowers PRR/ROR/MGPS thresholds (2.0 → 1.5) per accelerated-review convention for serious / fatal / life-threatening AEs.
+- **Multi-method signal corroboration.** Per EMA + Maven 2026 guidance, signals confirmed by ≥2 of 4 methods (with N≥3 + χ²≥4) are classified as `confirmed_signal`. Single-method triggers are `strengthening_signal`. Matching `prior_known_signals` reclassifies as `previously_known_signal` so no spurious new RMP variations.
+- **5th NEW landing-page card** "PV Signal Detection" added to the web UI showcase grid (16 examples total).
+
+### Why this release
+EMA GVP Module IX rev 2 (effective 2026) makes EVDAS integration mandatory for all EU MAHs from 12 February 2026, ending the EudraVigilance signal-detection pilot. EMA's accompanying message: "AI-powered pharmacovigilance is now expected, not optional." This tool absorbs the disproportionality-statistics + workflow-recommendation step into HEORAgent so PV teams stop maintaining ad-hoc Excel signal sheets.
+
+### Roadmap committed (not in v1.3.0)
+- **EVDAS programmatic access (eRMR / ICSR download per Reg. 2025/1466)** — v2; v1 takes user-supplied case counts.
+- **Stratified MGPS** (by sex / age band) — v2; v1 uses single-stratum gamma-Poisson shrinkage.
+- **`hta_dossier` integration** — pipe active signals into the PV plan section — v3+.
+
+### Tests
+- 558 MCP tests passing (was 535) — +23 pv_signal_workflow tests including math against Evans 2001 / Bate 1998 / DuMouchel 1999 published vectors, all 5 verdicts reachable, P.III gating correctness, threshold-tier behaviour, and <300ms performance.
+
+### References
+- EMA GVP Module IX rev 2 — Signal management (2026)
+- EU Implementing Regulation 2025/1466 — mandatory EVDAS integration
+- EMA GVP Considerations P.III — Pregnant and breastfeeding women (effective 2026-02-09)
+- Evans SJW et al. 2001 (PRR) · van Puijenbroek 2002 (ROR) · Bate 1998 + Norén 2006 (BCPNN/IC) · DuMouchel 1999 (MGPS/EBGM)
+
+---
+
 ## v1.2.2 (2026-05-05) — error telemetry + permissive input validation
 
 ### Fixed

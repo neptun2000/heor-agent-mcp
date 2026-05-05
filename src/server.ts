@@ -93,6 +93,10 @@ import {
   handleJcaPicoScope,
   jcaPicoScopeToolSchema,
 } from "./tools/jcaPicoScope.js";
+import {
+  handlePvSignalWorkflow,
+  pvSignalWorkflowToolSchema,
+} from "./tools/pvSignalWorkflow.js";
 import { randomUUID } from "node:crypto";
 import {
   trackToolCall,
@@ -250,6 +254,7 @@ function createMcpServer(
       maicWorkflowToolSchema,
       pvClassifyToolSchema,
       jcaPicoScopeToolSchema,
+      pvSignalWorkflowToolSchema,
     ],
   }));
 
@@ -322,6 +327,9 @@ function createMcpServer(
           break;
         case "jca.pico_scope":
           result = await handleJcaPicoScope(args);
+          break;
+        case "pv.signal_workflow":
+          result = await handlePvSignalWorkflow(args);
           break;
         default:
           trackToolCall(

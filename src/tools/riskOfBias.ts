@@ -14,8 +14,12 @@ import { auditToMarkdown } from "../formatters/markdown.js";
 // at the schema boundary. PostHog showed 71% of real risk_of_bias calls
 // were failing on missing source/authors/date/url; this fixes that.
 const StudyInputSchema = z.object({
-  title: z.string().min(1),
-  abstract: z.string(), // may be empty; tool returns Unclear for missing detail
+  // 2026-05-05: PostHog showed 26% error rate, mostly from LLM clients
+  // sending studies without titles/abstracts. The tool already returns
+  // "Unclear" for any missing reporting signal, so a missing title is
+  // not actually a methodological problem — relax to optional + default.
+  title: z.string().default("(untitled study)"),
+  abstract: z.string().default(""),
   study_type: z.string().default("unknown"),
   id: z.string().optional(),
   source: z.string().optional(),
@@ -538,7 +542,28 @@ function buildGradeSummary(
 export async function handleRiskOfBias(
   rawParams: unknown,
 ): Promise<ToolResult> {
-  const params = RiskOfBiasSchema.parse(rawParams);
+  // Surface the most common LLM failure mode (passing a single study
+  // object instead of {studies:[...]}) with a one-line hint before Zod
+  // dumps the raw issue tree.
+  if (
+    rawParams &&
+    typeof rawParams === "object" &&
+    !Array.isArray(rawParams) &&
+    !("studies" in rawParams) &&
+    ("title" in rawParams || "abstract" in rawParams)
+  ) {
+    throw new Error(
+      "Invalid input: pass studies as an array, e.g. { studies: [{ title, abstract, study_type }] }, not a single study object.",
+    );
+  }
+  const parsed = RiskOfBiasSchema.safeParse(rawParams);
+  if (!parsed.success) {
+    const lines = parsed.error.issues.map(
+      (i) => `${i.path.join(".") || "input"}: ${i.message}`,
+    );
+    throw new Error(`Invalid input:\n${lines.join("\n")}`);
+  }
+  const params = parsed.data;
   const outputFormat = params.output_format ?? "text";
 
   let audit = createAuditRecord(

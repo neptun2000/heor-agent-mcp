@@ -65,6 +65,37 @@ export function trackEvent(
   });
 }
 
+/**
+ * Extracts structured analytics properties from a thrown value. Always
+ * returns the same two property names so PostHog dashboards can query
+ * `properties.error_class` and `properties.error_message` reliably.
+ *
+ * - Error subclasses → constructor name + message (truncated to 500 chars)
+ * - Strings / numbers / null → class="unknown", message=stringified
+ * - Circular objects / weird values → class="unknown", message=safe stringify
+ */
+export function classifyToolError(err: unknown): {
+  error_class: string;
+  error_message: string;
+} {
+  if (err instanceof Error) {
+    return {
+      error_class: err.constructor?.name ?? "Error",
+      error_message: (err.message ?? "").slice(0, 500),
+    };
+  }
+  let message: string;
+  try {
+    message = err === null ? "null" : String(err);
+  } catch {
+    message = "(unstringifiable)";
+  }
+  return {
+    error_class: "unknown",
+    error_message: message.slice(0, 500),
+  };
+}
+
 export function trackToolCall(
   toolName: string,
   durationMs: number,

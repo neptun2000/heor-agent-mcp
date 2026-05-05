@@ -99,6 +99,7 @@ import {
   trackSession,
   shutdownAnalytics,
   inferSurface,
+  classifyToolError,
 } from "./analytics.js";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
@@ -331,6 +332,7 @@ function createMcpServer(
             {
               surface: surfaceRef.value,
               error_class: "unknown_tool",
+              error_message: `Unknown tool: ${name}`,
             },
           );
           return {
@@ -356,7 +358,7 @@ function createMcpServer(
         content: [{ type: "text", text: content }],
       };
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const { error_class, error_message } = classifyToolError(err);
       trackToolCall(
         name,
         Date.now() - callStart,
@@ -364,9 +366,11 @@ function createMcpServer(
         sessionIdRef.value || undefined,
         {
           surface: surfaceRef.value,
-          error: message,
+          error_class,
+          error_message,
         },
       );
+      const message = error_message;
       return {
         content: [{ type: "text", text: `Error: ${message}` }],
         isError: true,

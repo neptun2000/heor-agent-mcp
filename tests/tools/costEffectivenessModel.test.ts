@@ -110,4 +110,61 @@ describe("handleCostEffectivenessModel", () => {
     const result = await handleCostEffectivenessModel(validParams as unknown);
     expect(result.audit.tool).toBe("models.cost_effectiveness");
   });
+
+  // ── Better error messages — addresses 40% error rate (PostHog 2026-05-05)
+
+  describe("schema-error helpfulness", () => {
+    it("error message names which field is missing (Zod issue path included)", async () => {
+      try {
+        await handleCostEffectivenessModel({
+          intervention: "x",
+          comparator: "y",
+          indication: "z",
+        } as never);
+        throw new Error("should have thrown");
+      } catch (e) {
+        const msg = (e as Error).message;
+        expect(msg).toMatch(/time_horizon|perspective|clinical_inputs/i);
+      }
+    });
+
+    it("hints at clinical_inputs wrapper when caller flattens efficacy_delta to top level", async () => {
+      // Common LLM failure: passing efficacy_delta directly under root
+      // instead of inside clinical_inputs.
+      try {
+        await handleCostEffectivenessModel({
+          intervention: "x",
+          comparator: "y",
+          indication: "z",
+          time_horizon: "5yr",
+          perspective: "nhs",
+          efficacy_delta: 0.4, // wrong — should be inside clinical_inputs
+          cost_inputs: { drug_cost_annual: 1000, comparator_cost_annual: 500 },
+        } as never);
+        throw new Error("should have thrown");
+      } catch (e) {
+        const msg = (e as Error).message;
+        expect(msg).toMatch(/clinical_inputs/i);
+      }
+    });
+
+    it("flags efficacy_delta > 1 as out-of-range with the field name cited", async () => {
+      // Common LLM failure: sending percentage 45 instead of fraction 0.45
+      try {
+        await handleCostEffectivenessModel({
+          intervention: "x",
+          comparator: "y",
+          indication: "z",
+          time_horizon: "5yr",
+          perspective: "nhs",
+          clinical_inputs: { efficacy_delta: 45 }, // wrong: should be 0.45
+          cost_inputs: { drug_cost_annual: 1000, comparator_cost_annual: 500 },
+        } as never);
+        throw new Error("should have thrown");
+      } catch (e) {
+        const msg = (e as Error).message;
+        expect(msg).toMatch(/efficacy_delta/i);
+      }
+    });
+  });
 });

@@ -2,6 +2,21 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.2.2 (2026-05-05) — error telemetry + permissive input validation
+
+### Fixed
+- **Analytics instrumentation gap.** Tool-call errors now emit structured `error_class` (Error subclass name — `ZodError`, `TypeError`, etc.) and `error_message` (truncated to 500 chars) properties to PostHog. Before this fix, every error event had `error_class:"(none)"` and `error_message:"(no message)"` because `trackToolCall()` call sites only attached a generic `error` field that the dashboards weren't querying. Future production errors are now diagnosable from telemetry alone. New `classifyToolError()` helper handles Error / TypeError / ZodError / non-Error thrown values uniformly.
+- **`evidence.risk_of_bias` 26% error rate fix.** PostHog showed LLM clients frequently sent studies without `title` or `abstract` (both previously required). The tool already returned "Unclear" for any missing reporting signal — strict validation was adding zero methodological rigour and causing 1 in 4 calls to fail. Both fields now default to safe values (`title: "(untitled study)"`, `abstract: ""`). Added an explicit wrapper-shape error: when caller passes a single study object instead of `{studies:[...]}`, the error message hints at the correct shape.
+- **`models.cost_effectiveness` 40% error rate fix.** Switched from `.parse()` to `.safeParse()` with a structured field-path error format so LLM clients can self-correct on the next call. Added an explicit hint when caller flattens `efficacy_delta` to the top level instead of placing it inside `clinical_inputs`.
+
+### Tests
+- 535 MCP tests passing (was 521) — +14 behavioural tests covering the three fixes (error classifier shape, risk_of_bias permissive input, cost_effectiveness error helpfulness).
+
+### Why this is a patch release
+Pure telemetry + UX improvements. No API changes; no breaking changes; no new features.
+
+---
+
 ## v1.2.1 (2026-05-04) — jca_pico_scope code-review fixes
 
 ### Fixed

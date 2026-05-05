@@ -105,12 +105,17 @@ describe("handleRiskOfBias", () => {
     expect(result.audit.tool).toBe("evidence.risk_of_bias");
   });
 
-  it("still requires title (needed for RoB inference)", async () => {
-    await expect(
-      handleRiskOfBias({
-        studies: [{ abstract: "x", study_type: "RCT" }],
-      }),
-    ).rejects.toThrow();
+  // 2026-05-05: title and abstract were previously REQUIRED, but PostHog
+  // production telemetry showed a 26% error rate driven primarily by
+  // LLM clients omitting one or both. The tool already returns "Unclear"
+  // for any missing reporting signal — strict input validation was
+  // adding zero methodological rigour and a lot of friction. Both fields
+  // now have safe defaults.
+  it("accepts a study without a title (defaults to '(untitled study)')", async () => {
+    const r = await handleRiskOfBias({
+      studies: [{ abstract: "x", study_type: "RCT" }],
+    });
+    expect(r.audit.tool).toBe("evidence.risk_of_bias");
   });
 
   it("accepts empty abstract (tool returns Unclear domains gracefully)", async () => {
@@ -120,12 +125,11 @@ describe("handleRiskOfBias", () => {
     expect(result.audit.tool).toBe("evidence.risk_of_bias");
   });
 
-  it("still requires abstract field to be PRESENT (even if empty string)", async () => {
-    await expect(
-      handleRiskOfBias({
-        studies: [{ title: "x", study_type: "RCT" }],
-      }),
-    ).rejects.toThrow();
+  it("accepts a study without an abstract field (defaults to empty string)", async () => {
+    const r = await handleRiskOfBias({
+      studies: [{ title: "x", study_type: "RCT" }],
+    });
+    expect(r.audit.tool).toBe("evidence.risk_of_bias");
   });
 
   // ── Instrument auto-detection ───────────────────────────────────────────────
@@ -403,5 +407,43 @@ describe("handleRiskOfBias", () => {
     const result = await handleRiskOfBias({ studies: [rctStudy] });
     expect(result.audit).toBeDefined();
     expect(result.audit.tool).toBe("evidence.risk_of_bias");
+  });
+
+  // ── Permissive input handling — addresses 26% error rate (PostHog 2026-05-05)
+
+  describe("permissive input handling", () => {
+    it("accepts a study with missing title (defaults to '(untitled study)')", async () => {
+      const r = await handleRiskOfBias({
+        studies: [{ abstract: "RCT of drug X vs placebo." }],
+      });
+      expect(r.audit.tool).toBe("evidence.risk_of_bias");
+    });
+
+    it("accepts a study with empty abstract (defaults to empty string)", async () => {
+      const r = await handleRiskOfBias({
+        studies: [{ title: "Study A" }],
+      });
+      expect(r.audit.tool).toBe("evidence.risk_of_bias");
+    });
+
+    it("accepts a study with no fields at all (everything is now optional)", async () => {
+      const r = await handleRiskOfBias({ studies: [{}] });
+      expect(r.audit.tool).toBe("evidence.risk_of_bias");
+    });
+
+    it("rejects with helpful did-you-mean when caller passes a single study (not wrapped in studies[])", async () => {
+      // Common LLM failure mode: forgetting the {studies: [...]} wrapper
+      // and passing the study object directly. Error message must hint
+      // at the correct shape.
+      await expect(
+        handleRiskOfBias({ title: "Study A", abstract: "..." } as never),
+      ).rejects.toThrow(/studies/i);
+    });
+
+    it("rejects with helpful error when caller passes empty studies array", async () => {
+      await expect(handleRiskOfBias({ studies: [] })).rejects.toThrow(
+        /studies|at least 1/i,
+      );
+    });
   });
 });

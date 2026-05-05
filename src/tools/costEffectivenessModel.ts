@@ -270,7 +270,29 @@ function buildWTPAssessment(
 export async function handleCostEffectivenessModel(
   rawParams: unknown,
 ): Promise<ToolResult> {
-  const params = CEModelSchema.parse(rawParams) as CEModelParams;
+  // 2026-05-05: PostHog showed 40% error rate (n=5). Switch to safeParse
+  // and emit a clean field-by-field error so LLM callers can self-correct
+  // on the next turn. Surface the most common shape mistake (flattened
+  // efficacy_delta) explicitly before Zod's raw issue list.
+  if (
+    rawParams &&
+    typeof rawParams === "object" &&
+    !Array.isArray(rawParams) &&
+    "efficacy_delta" in rawParams &&
+    !("clinical_inputs" in rawParams)
+  ) {
+    throw new Error(
+      "Invalid input: 'efficacy_delta' must be inside the clinical_inputs object, e.g. { clinical_inputs: { efficacy_delta: 0.4, ... } }, not at the top level.",
+    );
+  }
+  const parsed = CEModelSchema.safeParse(rawParams);
+  if (!parsed.success) {
+    const lines = parsed.error.issues.map(
+      (i) => `${i.path.join(".") || "input"}: ${i.message}`,
+    );
+    throw new Error(`Invalid input:\n${lines.join("\n")}`);
+  }
+  const params = parsed.data as CEModelParams;
   const outputFormat = params.output_format ?? "text";
   let audit = createAuditRecord(
     "models.cost_effectiveness",

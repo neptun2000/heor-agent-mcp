@@ -88,6 +88,10 @@ import {
   handleMaicWorkflow,
   maicWorkflowToolSchema,
 } from "./tools/maicWorkflow.js";
+import {
+  handleHtaWorkflow,
+  htaWorkflowToolSchema,
+} from "./tools/htaWorkflow.js";
 import { handlePvClassify, pvClassifyToolSchema } from "./tools/pvClassify.js";
 import {
   handleJcaPicoScope,
@@ -255,6 +259,7 @@ function createMcpServer(
       pvClassifyToolSchema,
       jcaPicoScopeToolSchema,
       pvSignalWorkflowToolSchema,
+      htaWorkflowToolSchema,
     ],
   }));
 
@@ -330,6 +335,9 @@ function createMcpServer(
           break;
         case "pv.signal_workflow":
           result = await handlePvSignalWorkflow(args);
+          break;
+        case "hta.workflow":
+          result = await handleHtaWorkflow(args);
           break;
         default:
           trackToolCall(

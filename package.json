@@ -1,6 +1,6 @@
 {
   "name": "heor-agent-mcp",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "mcpName": "io.github.neptun2000/heor-agent",
   "license": "MIT",
   "author": "mnaumov",

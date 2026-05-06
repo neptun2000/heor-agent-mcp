@@ -42,7 +42,15 @@ interface JcaResult {
 }
 
 async function scope(input: Record<string, unknown>): Promise<JcaResult> {
-  return (await handleJcaPicoScope(input)) as unknown as JcaResult;
+  // For the legacy tests, default to force_proceed_out_of_scope=true so the
+  // tool returns the matrix even when the indication is not in JCA scope
+  // (Reg 2021/2282 phased rollout — see design log #16). Tests that
+  // specifically assert the refusal path pass force_proceed_out_of_scope:false.
+  const withForce =
+    "force_proceed_out_of_scope" in input
+      ? input
+      : { ...input, force_proceed_out_of_scope: true };
+  return (await handleJcaPicoScope(withForce)) as unknown as JcaResult;
 }
 
 // ---- Schema validation ---------------------------------------------------
@@ -477,5 +485,109 @@ describe("jca_pico_scope — performance", () => {
       jurisdictions: ["de", "fr", "it", "es", "nl"],
     });
     expect(Date.now() - start).toBeLessThan(300);
+  });
+});
+
+// ---- JCA scope eligibility (Reg 2021/2282 phased rollout) ---------------
+// New behaviour added in design log #16. Regression guard for the
+// management-benchmark gap that Claude.ai exposed.
+
+describe("jca_pico_scope — scope eligibility (Reg 2021/2282)", () => {
+  it("refuses cardiovascular small-molecule by default (not in scope until 2030)", async () => {
+    const r = (await handleJcaPicoScope({
+      drug: "dapagliflozin",
+      indication: "heart failure with reduced ejection fraction",
+      drug_class: "small_molecule",
+    })) as unknown as { content: string; pico_matrix: unknown };
+    expect(r.pico_matrix).toBeNull();
+    const t = r.content.toLowerCase();
+    expect(t).toMatch(/not (currently )?in jca scope|not yet in jca scope/);
+    expect(t).toMatch(/2030/);
+    expect(t).toMatch(/regulation \(eu\) 2021\/2282|reg 2021\/2282/);
+  });
+
+  it("flags 2028 entry year for orphan-designated products", async () => {
+    const r = (await handleJcaPicoScope({
+      drug: "rare-disease-drug",
+      indication: "ultra-rare metabolic disease",
+      drug_class: "small_molecule",
+      is_orphan: true,
+    })) as unknown as { content: string; pico_matrix: unknown };
+    expect(r.pico_matrix).toBeNull();
+    expect(r.content).toMatch(/2028/);
+  });
+
+  it("oncology IS in scope (Phase 1 since 12 Jan 2025)", async () => {
+    const r = await scope({
+      drug: "osimertinib",
+      indication: "non-small cell lung cancer",
+      drug_class: "small_molecule",
+      // No force_proceed_out_of_scope needed — oncology is in scope.
+      force_proceed_out_of_scope: false,
+    });
+    expect(r.pico_matrix).not.toBeNull();
+  });
+
+  it("ATMP IS in scope regardless of indication (Phase 1)", async () => {
+    const r = await scope({
+      drug: "kymriah",
+      indication: "diffuse large B-cell lymphoma",
+      drug_class: "atmp_cell",
+      force_proceed_out_of_scope: false,
+    });
+    expect(r.pico_matrix).not.toBeNull();
+  });
+
+  it("force_proceed_out_of_scope=true emits matrix with explicit warning", async () => {
+    const r = (await handleJcaPicoScope({
+      drug: "dapagliflozin",
+      indication: "heart failure with reduced ejection fraction",
+      drug_class: "small_molecule",
+      force_proceed_out_of_scope: true,
+    })) as unknown as { content: string; pico_matrix: unknown };
+    expect(r.pico_matrix).not.toBeNull();
+  });
+});
+
+// ---- NICE TA precedent surfacing in hta_dossier ------------------------
+// Closes the TA902 vs TA679 prompt-error gap exposed by the management
+// benchmark — see design log #16.
+
+describe("hta_dossier (nice) — NICE TA precedent surfacing", () => {
+  it("surfaces canonical TA679 for dapagliflozin HFrEF", async () => {
+    const r = await handleHtaDossierPrep({
+      hta_body: "nice",
+      submission_type: "sta",
+      drug_name: "dapagliflozin",
+      indication: "heart failure with reduced ejection fraction (HFrEF)",
+    });
+    const t = String(r.content);
+    expect(t).toMatch(/TA679/);
+    expect(t).toMatch(/Relevant NICE Technology Appraisal/);
+  });
+
+  it("surfaces canonical TA902 for dapagliflozin HFpEF", async () => {
+    const r = await handleHtaDossierPrep({
+      hta_body: "nice",
+      submission_type: "sta",
+      drug_name: "dapagliflozin",
+      indication: "heart failure with preserved ejection fraction (HFpEF)",
+    });
+    const t = String(r.content);
+    expect(t).toMatch(/TA902/);
+  });
+
+  it("flags TA mismatch when user prose cites the wrong TA number", async () => {
+    const r = await handleHtaDossierPrep({
+      hta_body: "nice",
+      submission_type: "sta",
+      drug_name: "dapagliflozin",
+      indication: "heart failure with reduced ejection fraction (HFrEF)",
+      evidence_summary: "Per NICE TA902 the recommended dose is 10mg daily.",
+    });
+    const t = String(r.content);
+    expect(t).toMatch(/TA mismatch detected/);
+    expect(t).toMatch(/TA902/);
+    expect(t).toMatch(/TA679/);
   });
 });

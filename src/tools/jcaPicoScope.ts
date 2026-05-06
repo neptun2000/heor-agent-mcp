@@ -17,6 +17,8 @@ import { auditToMarkdown } from "../formatters/markdown.js";
 import { suggestForEnum } from "../util/didYouMean.js";
 import { buildScope } from "../jca/scopeBuilder.js";
 import { JCA_REVISION } from "../jca/countryRegistry.js";
+import { checkScopeEligibility } from "../jca/scopeEligibility.js";
+import type { ScopeEligibility } from "../jca/scopeEligibility.js";
 import type { PicoMatrix } from "../jca/types.js";
 import type { ToolResult } from "../providers/types.js";
 
@@ -55,6 +57,19 @@ const JcaPicoScopeSchema = z
       .min(1)
       .default(["de", "fr", "it", "es", "nl"]),
     regulatory_context: z.enum(REG_CONTEXTS).default("post_authorisation"),
+    is_orphan: z
+      .boolean()
+      .optional()
+      .describe(
+        "Optional: orphan-designated medicinal product. Affects JCA scope eligibility (orphans enter scope 2028 vs 2030 for general medicinal products).",
+      ),
+    force_proceed_out_of_scope: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe(
+        "Override the JCA scope check. Default false. Set true to produce a JCA-style matrix anyway when the indication is not yet in JCA scope (e.g., for protocol-design or anticipatory market-access work). Output will carry an explicit out-of-scope warning either way.",
+      ),
   })
   .strict();
 
@@ -109,10 +124,86 @@ export async function handleJcaPicoScope(
     regulatory_context: input.regulatory_context,
   });
 
+  // ── JCA scope eligibility check (Reg 2021/2282 phased rollout).
+  //    Closes the gap surfaced by Claude.ai during the management
+  //    benchmark — see design log #16. We compute eligibility against
+  //    the indication category that scopeBuilder already classified.
+  const eligibility = checkScopeEligibility({
+    indication_category: matrix.indication_category,
+    drug_class: input.drug_class,
+    is_orphan: input.is_orphan,
+  });
+
   audit = addAssumption(
     audit,
     `JCA scope produced for ${input.jurisdictions.join(", ")} (revision ${JCA_REVISION}). ${matrix.picos.length} consolidated PICO(s).`,
   );
+  audit = addAssumption(
+    audit,
+    `JCA scope eligibility per Reg 2021/2282 Article 7: in_scope=${eligibility.in_scope} (phase: ${eligibility.phase}, in scope from ${eligibility.in_scope_from_year}).`,
+  );
+
+  // Out-of-scope short-circuit — refuse to produce a JCA matrix
+  // and explain why, unless the caller explicitly set
+  // force_proceed_out_of_scope=true (for anticipatory work).
+  if (!eligibility.in_scope && !input.force_proceed_out_of_scope) {
+    const refusalLines: string[] = [];
+    refusalLines.push(
+      `# JCA Scope Eligibility Check — ${input.drug} (${input.indication})`,
+    );
+    refusalLines.push("");
+    refusalLines.push(
+      `> ⚠️ **Not currently in JCA scope.** ${eligibility.explanation}`,
+    );
+    refusalLines.push("");
+    refusalLines.push(`**Indication category:** ${matrix.indication_category}`);
+    refusalLines.push(`**Drug class:** ${input.drug_class}`);
+    refusalLines.push(
+      `**JCA phase that gates scope entry:** ${eligibility.phase}`,
+    );
+    refusalLines.push(
+      `**In JCA scope from:** 13 January ${eligibility.in_scope_from_year}`,
+    );
+    refusalLines.push("");
+    refusalLines.push("## What to do instead");
+    refusalLines.push(
+      "Produce a **consolidated national-HTA PICO matrix** synthesising what each jurisdiction (G-BA/IQWiG, HAS, AIFA, AEMPS/RedETS, Zorginstituut, NICE) would require if the dossier were submitted today. This is what an MAH preparing for a future JCA dossier should compile now to anticipate consolidated PICOs at submission.",
+    );
+    refusalLines.push("");
+    refusalLines.push(
+      "To proceed anyway (e.g., for protocol-design or anticipatory market-access work), call this tool again with `force_proceed_out_of_scope: true`. The output will be labelled as out-of-scope.",
+    );
+    refusalLines.push("");
+    refusalLines.push("## References");
+    for (const r of eligibility.references) refusalLines.push(`- ${r}`);
+    refusalLines.push("");
+
+    audit = addWarning(
+      audit,
+      `Refused to produce JCA PICO matrix: indication "${input.indication}" (${matrix.indication_category}) is not in JCA scope until ${eligibility.in_scope_from_year}.`,
+    );
+    refusalLines.push(auditToMarkdown(audit));
+
+    return {
+      content: refusalLines.join("\n"),
+      audit,
+      pico_matrix: null,
+      scope_eligibility: eligibility,
+    } as ToolResult & {
+      pico_matrix: null;
+      scope_eligibility: ScopeEligibility;
+    };
+  }
+
+  // If we got here either we're in scope, or the caller forced it.
+  // Either way, emit the matrix — but add an out-of-scope warning
+  // when forced, so downstream readers know.
+  if (!eligibility.in_scope && input.force_proceed_out_of_scope) {
+    audit = addWarning(
+      audit,
+      `JCA matrix produced under force_proceed_out_of_scope=true. Indication is not in JCA scope until ${eligibility.in_scope_from_year}. Output should be treated as anticipatory only.`,
+    );
+  }
   if (matrix.heterogeneity_warning) {
     audit = addWarning(
       audit,

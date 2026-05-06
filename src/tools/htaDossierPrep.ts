@@ -10,6 +10,11 @@ import {
   RobResultsSchema,
   CEModelResultSchema,
 } from "../schemas/dossierInputSchemas.js";
+import {
+  detectMismatch,
+  extractTaNumber,
+  findPrecedents,
+} from "../data/niceTaPrecedents.js";
 
 const DossierSchema = z.object({
   hta_body: z.enum(["nice", "ema", "fda", "iqwig", "has", "jca", "gvd"]),
@@ -942,6 +947,51 @@ export async function handleHtaDossierPrep(
     `**Drug:** ${params.drug_name} | **Indication:** ${params.indication}`,
   );
   lines.push(`**Template:** ${methodology}\n`);
+
+  // ── NICE TA precedent surfacing (closes the TA902/TA679 gap
+  //    revealed by the management benchmark — see design log #16).
+  //    For NICE submissions, we look up the canonical TA for the
+  //    drug-indication and emit it upfront. If the user passed a
+  //    different TA number anywhere in their evidence_summary
+  //    prose, we flag the mismatch with both URLs so the user
+  //    can choose the correct one rather than silently overriding.
+  if (params.hta_body === "nice") {
+    const matches = findPrecedents(params.drug_name, params.indication);
+    if (matches.length > 0) {
+      const top = matches[0];
+      lines.push(`### Relevant NICE Technology Appraisal`);
+      lines.push(`- **${top.ta_number}** — ${top.title}`);
+      lines.push(`- Date: ${top.date} · URL: ${top.url}`);
+      if (top.notes) lines.push(`- ⚠️ ${top.notes}`);
+      lines.push("");
+      audit = addAssumption(
+        audit,
+        `Canonical NICE TA precedent surfaced: ${top.ta_number} (${top.title}).`,
+      );
+      // Scan user-supplied evidence prose for a competing TA number.
+      // This catches the "cite TA902 for HFrEF" prompt error pattern.
+      if (typeof params.evidence_summary === "string") {
+        const userTa = extractTaNumber(params.evidence_summary);
+        if (userTa) {
+          const mismatch = detectMismatch(
+            params.drug_name,
+            params.indication,
+            userTa,
+          );
+          if (mismatch) {
+            lines.push(
+              `> ⚠️ **TA mismatch detected.** ${mismatch.explanation}`,
+            );
+            lines.push("");
+            audit = addWarning(
+              audit,
+              `User-supplied TA ${mismatch.user_supplied} does not match canonical ${mismatch.canonical} for "${params.drug_name} ${params.indication}".`,
+            );
+          }
+        }
+      }
+    }
+  }
 
   const gaps: string[] = [];
   for (const sectionName of sections) {

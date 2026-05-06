@@ -30,6 +30,11 @@ function instrumentsFor(category: IndicationCategory): string[] {
   if (category === "diabetes_t2" || category === "obesity") {
     return ["EQ-5D-5L", "IWQOL-Lite"];
   }
+  if (category === "cardiovascular_hfref") {
+    // KCCQ-12 is the disease-specific HRQoL instrument used in DAPA-HF
+    // and EMPEROR-Reduced and required by EUnetHTA Annex II for HFrEF.
+    return ["KCCQ-12", "EQ-5D-5L"];
+  }
   return ["EQ-5D-5L"];
 }
 
@@ -46,11 +51,17 @@ function chronicOutcomePriority(): OutcomePriority[] {
 }
 
 function hfrefOutcomePriority(): OutcomePriority[] {
-  // EuroQol Annex II preference + DAPA-HF / EMPEROR-Reduced primary
-  // composite. CV death and HF hospitalization sit at the top of the
-  // patient-relevant outcomes hierarchy for HFrEF; HRQoL via KCCQ/EQ-5D
-  // is a key secondary.
+  // DAPA-HF and EMPEROR-Reduced both used "CV death OR HF hospitalization"
+  // as a SINGLE co-primary composite endpoint, not two independent ranked
+  // outcomes. EUnetHTA Annex II accepts this composite as the primary
+  // patient-relevant outcome for HFrEF. We list the composite first so the
+  // tool output doesn't imply a hierarchy regulators reject. Component
+  // outcomes (CV_death, HF_hospitalization) follow for transparency.
+  // all_cause_mortality is reported but logically subsumes CV_death; it's
+  // listed below the components rather than between them to avoid the
+  // contradiction the prior order produced.
   return [
+    "CV_death_or_HF_hospitalization",
     "CV_death",
     "HF_hospitalization",
     "all_cause_mortality",
@@ -252,8 +263,9 @@ function cardiovascularHfrefComparators(
     ];
   }
   if (country === "uk") {
-    // Post-Brexit context only — NICE TA679 already established empagliflozin
-    // as a relevant in-class comparator; SoC includes ARNI per NG106.
+    // Post-Brexit context only — NICE TA773 (empagliflozin HFrEF, March 2022)
+    // and TA679 (dapagliflozin HFrEF, Feb 2021) already established the SGLT2i
+    // class as relevant in-class comparators; SoC includes ARNI per NG106.
     return [gdmtArni, empa];
   }
   // eu_other or unknown — degrade gracefully
@@ -318,6 +330,16 @@ function subgroupsFor(category: IndicationCategory): string[] {
   }
   if (category === "obesity") {
     return ["BMI category", "comorbidities (T2D, CV, OSA)"];
+  }
+  if (category === "cardiovascular_hfref") {
+    return [
+      "NYHA class (II vs III-IV)",
+      "LVEF stratum (≤35% vs 35-40%)",
+      "background GDMT completeness (ACEi/ARB/ARNI + beta-blocker + MRA)",
+      "ARNI eligibility (ESC 2021)",
+      "eGFR tier (renal impairment)",
+      "diabetes status (T2D yes/no)",
+    ];
   }
   return ["age strata", "comorbidity status"];
 }

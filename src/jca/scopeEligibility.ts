@@ -2,7 +2,7 @@
  * EU JCA scope eligibility checker.
  *
  * Per Regulation (EU) 2021/2282, JCA scope is phased:
- *   • From 12 January 2025: oncology medicinal products + ATMPs with
+ *   • From 13 January 2025: oncology medicinal products + ATMPs with
  *     new active substances.
  *   • From 13 January 2028: orphan medicinal products added.
  *   • From 13 January 2030: all new medicinal products.
@@ -70,7 +70,7 @@ export function checkScopeEligibility(args: {
     "European Commission factsheet, JCA for Medicinal Products (Jan 2025): https://health.ec.europa.eu/document/download/ced91156-ffe1-472d-85eb-aa6a91dd707e_en?filename=hta_htar_factsheet-jca_en.pdf",
   ];
 
-  // Phase 1 (in scope NOW, since 12 Jan 2025): oncology medicinal
+  // Phase 1 (in scope NOW, since 13 Jan 2025): oncology medicinal
   // products + ATMP-class drugs (cell, gene, tissue) with new
   // active substances.
   const isOncology =
@@ -86,7 +86,7 @@ export function checkScopeEligibility(args: {
       in_scope_from_year: 2025,
       phase: "oncology_atmp",
       explanation:
-        "In JCA scope since 12 January 2025 (Phase 1: oncology medicinal products + ATMPs with new active substances).",
+        "In JCA scope since 13 January 2025 (Phase 1: oncology medicinal products + ATMPs with new active substances).",
       references: refs,
     };
   }

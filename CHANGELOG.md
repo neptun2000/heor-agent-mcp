@@ -2,6 +2,41 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.4.2 (2026-05-06) — code-review fixes for v1.3.2 / v1.4.0 / v1.4.1
+
+Three releases (v1.3.2 NICE TA precedents + JCA scope eligibility, v1.4.0 hta_workflow orchestrator, v1.4.1 HFrEF per-country comparator depth) shipped to production without independent review. Three parallel code reviews surfaced 10 HIGH and 8 MEDIUM findings of regulatory consequence. The headline "CRITICAL" turned out to be a reviewer hallucination (TA773 → TA849 swap that would have introduced a real fabrication; verified via webfetch against nice.org.uk that TA773 is in fact correct for empagliflozin HFrEF). All real findings addressed.
+
+### Fixed (HIGH)
+
+- **JCA scope-eligibility date typo: "12 January 2025" → "13 January 2025"** in `src/jca/scopeEligibility.ts`. Reg 2021/2282 Article 34 specifies 13 January 2025 as Phase 1 start; the wrong date was printing into refusal markdown that customers paste into dossiers.
+- **`is_orphan` + `force_proceed_out_of_scope` now in MCP inputSchema.** Zod schema had the fields but the JSON Schema advertised to MCP clients did not — making the safeguard's recovery path invisible to the LLM. Now discoverable.
+- **`extractTaNumber` regex handles "TA 679" (space) format.** Previously matched only "TA679" without space; missed common NICE prose patterns. New `extractAllTaNumbers` companion picks up multiple TA citations in one prose block.
+- **`findPrecedents` drug match is now token-set equality, not bidirectional substring.** Bare "valsartan" (ARB) no longer matches "sacubitril valsartan" (ARNI) precedent — eliminates a class of false-positive TA mismatches as the precedents table grows.
+- **`hta_workflow` Phase 2 abstract preservation.** `screen_abstracts` JSON output drops the `abstract` field; if those records were piped straight to `risk_of_bias`, RoB inference would silently run on empty abstracts and corrupt GRADE downstream. Phase 2 now extracts the included IDs from the screening output and re-maps them onto the original literature records (which still carry abstracts).
+- **`hta_workflow` JCA scope bypass warning.** `hta_body="jca"` runs the standard pipeline without calling `jca_pico_scope`, so the JCA scope eligibility check (Reg 2021/2282 phased rollout) was bypassed silently. Now emits an explicit audit warning so an out-of-scope indication can't produce a credible-looking JCA dossier draft.
+- **`hta_workflow` summary-table honesty.** Phase 5 row used to hardcode `"NICE STA draft"` regardless of whether the dossier phase succeeded. Now correctly reads `"FAILED — see audit"` when `dossierRes.ok === false`, eliminating a contradiction between the summary table and the body.
+- **HFrEF outcome priorities lead with the composite primary endpoint.** DAPA-HF and EMPEROR-Reduced both used "CV death OR HF hospitalization" as a single co-primary composite — the prior order split the components and ranked all-cause mortality after them, which inverted the logical relationship and implied a hierarchy regulators reject.
+- **HFrEF instrument list now includes KCCQ-12.** The Kansas City Cardiomyopathy Questionnaire is the disease-specific HRQoL instrument used in DAPA-HF / EMPEROR-Reduced and required by EUnetHTA Annex II for HFrEF; the prior `instrumentsFor("cardiovascular_hfref")` fell through to EQ-5D-5L only.
+- **HFrEF `population_subgroups` includes NYHA class, LVEF stratum, ARNI eligibility, eGFR tier, T2D status.** Was falling through to generic `["age strata", "comorbidity status"]` despite the country-specific comparator universes assuming these subgroups (especially the NL ARNI-eligible split).
+- **Bare "heart failure" indication ambiguity warning.** When the user passes "heart failure" without an EF qualifier, `classifyIndication` routes to generic `cardiovascular`. The handler now emits an explicit advisory warning that HFpEF / HFmrEF / HFrEF have materially different comparator universes and prompts re-running with the specific phenotype.
+
+### Fixed (MEDIUM)
+
+- `hta_workflow` `idempotentHint: false` (was `true` — wrong because Phase 4 PSA is stochastic and Phases 1+6 hit live external APIs).
+- `hta_workflow` `openWorldHint: true` (was `false` — wrong because `literature_search` calls PubMed/CT/Cochrane/ICER and `validate_links` makes HTTP requests).
+- `hta_workflow` `phase_timings_ms.cost_effectiveness_model` no longer set when `skip_ce_model: true` — was a small non-zero value that misled programmatic consumers checking the timing as a "did CE run?" proxy and caused intermittent test flakes.
+- Comment fix in `countryRegistry.ts` UK branch: was attributing TA679 to empagliflozin (TA679 is dapagliflozin); now correctly cites TA773 (empagliflozin) and TA679 (dapagliflozin) separately.
+
+### Tests
+
+- 626 MCP tests passing (was 609) — +17 behavioural regression tests covering each fix.
+
+### Process learning
+
+The HFrEF reviewer's "CRITICAL" — claiming TA773 is ivosidenib for AML and that empagliflozin HFrEF is TA849 — was a confident regulatory hallucination. WebFetch against nice.org.uk confirmed: TA773 IS empagliflozin HFrEF (9 March 2022); TA849 is cabozantinib for HCC. Without verifying we would have introduced a real fabrication while "fixing" a false alarm. Memory note saved: always verify subagent regulatory ID claims against the official public database before editing code.
+
+---
+
 ## v1.3.1 (2026-05-05) — pv_classify + pv_signal_workflow code-review fixes
 
 Independent code reviews of both PV tools surfaced 1 CRITICAL + 6 HIGH findings of regulatory consequence. All addressed before redeployment.

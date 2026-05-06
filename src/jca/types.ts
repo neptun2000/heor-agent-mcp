@@ -23,6 +23,7 @@ export type OutcomePriority =
   | "HRQoL"
   | "AE"
   | "remission"
+  | "CV_death_or_HF_hospitalization" // HFrEF composite primary (DAPA-HF, EMPEROR-Reduced)
   | "CV_death"
   | "HF_hospitalization"
   | "all_cause_mortality"

@@ -225,6 +225,23 @@ export async function handleJcaPicoScope(
       `NSCLC comparator detail (chemo doublet + IO + alternative TKI) is currently modeled only for line_of_therapy="second_line"; you passed "${input.line_of_therapy}", so the per-country EGFR-mutant detail was skipped and a generic chemotherapy anchor was used instead. Re-run with line_of_therapy="second_line" for the well-modeled case.`,
     );
   }
+  // Heart-failure ambiguity warning: HFpEF and HFrEF have completely
+  // different comparator universes. When a user passes bare "heart
+  // failure" without an EF qualifier, classifyIndication routes to
+  // generic `cardiovascular` and serves placeholders. Surface this so
+  // the user re-runs with HFrEF / HFpEF / HFmrEF specified.
+  if (
+    matrix.indication_category === "cardiovascular" &&
+    /heart\s*failure/i.test(input.indication) &&
+    !/reduced ejection|hfref|preserved ejection|hfpef|mildly reduced|hfmref/i.test(
+      input.indication,
+    )
+  ) {
+    audit = addWarning(
+      audit,
+      `Indication "${input.indication}" is ambiguous: HFpEF, HFmrEF, and HFrEF have materially different comparator universes (e.g., SGLT2i + ARNI structure differs). Currently routing to generic cardiovascular placeholders. Re-run with the specific phenotype (e.g., "heart failure with reduced ejection fraction" / "HFrEF" / "HFpEF") for the well-modeled case.`,
+    );
+  }
 
   const lines: string[] = [];
   lines.push(`# JCA PICO Scope — ${input.drug} (${input.indication})`);
@@ -404,6 +421,17 @@ export const jcaPicoScopeToolSchema = {
         type: "string",
         enum: REG_CONTEXTS,
         default: "post_authorisation",
+      },
+      is_orphan: {
+        type: "boolean",
+        description:
+          "Optional. Orphan-designated medicinal product. Affects JCA scope eligibility (orphans enter scope from 13 January 2028 vs 13 January 2030 for general medicinal products).",
+      },
+      force_proceed_out_of_scope: {
+        type: "boolean",
+        default: false,
+        description:
+          "Override the JCA scope eligibility check. Default false. Set true to produce a JCA-style matrix anyway when the indication is not yet in JCA scope (e.g., for protocol-design or anticipatory market-access work). Output will carry an explicit out-of-scope warning either way.",
       },
     },
     required: ["drug", "indication", "drug_class"],

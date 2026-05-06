@@ -717,3 +717,127 @@ describe("hta_dossier (nice) — NICE TA precedent surfacing", () => {
     expect(t).toMatch(/TA679/);
   });
 });
+
+// ── v1.4.2 code-review regression tests ───────────────────────────────
+
+import { jcaPicoScopeToolSchema as jcaSchemaForTests } from "../../src/tools/jcaPicoScope.js";
+import {
+  extractTaNumber as extractTaNumberFn,
+  extractAllTaNumbers as extractAllTaNumbersFn,
+  findPrecedents as findPrecedentsFn,
+} from "../../src/data/niceTaPrecedents.js";
+
+describe("jca_pico_scope — v1.4.2 fixes", () => {
+  it("scopeEligibility source does not contain the buggy '12 January 2025' date (regression guard)", () => {
+    // Bug fixed in v1.4.2: file referenced "12 January 2025" instead of
+    // "13 January 2025" (Reg 2021/2282 Article 34) in three places.
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const src = fs.readFileSync(
+      path.join(__dirname, "../../src/jca/scopeEligibility.ts"),
+      "utf8",
+    );
+    expect(src).not.toMatch(/12 January 2025/);
+    expect(src).toMatch(/13 January 2025/);
+  });
+
+  it("inputSchema advertises is_orphan + force_proceed_out_of_scope so MCP clients can discover them", () => {
+    const props = (
+      jcaSchemaForTests as unknown as {
+        inputSchema: { properties: Record<string, unknown> };
+      }
+    ).inputSchema.properties;
+    expect(props).toHaveProperty("is_orphan");
+    expect(props).toHaveProperty("force_proceed_out_of_scope");
+  });
+
+  it("HFrEF outcome priorities lead with the composite primary endpoint", async () => {
+    const r = await scope({
+      drug: "dapagliflozin",
+      indication: "heart failure with reduced ejection fraction",
+      drug_class: "small_molecule",
+      jurisdictions: ["de"],
+    });
+    const de = r.pico_matrix.country_specific.find(
+      (c) => c.jurisdiction === "de",
+    );
+    expect(de?.outcome_priorities[0]).toBe("CV_death_or_HF_hospitalization");
+  });
+
+  it("HFrEF instrument list includes KCCQ-12 (mandatory per EUnetHTA Annex II)", async () => {
+    const r = await scope({
+      drug: "dapagliflozin",
+      indication: "heart failure with reduced ejection fraction",
+      drug_class: "small_molecule",
+      jurisdictions: ["de"],
+    });
+    const de = r.pico_matrix.country_specific.find(
+      (c) => c.jurisdiction === "de",
+    );
+    const allInstruments = (de?.comparators ?? []).flatMap(
+      (c) => c.outcome_instrument_preferences,
+    );
+    expect(allInstruments).toContain("KCCQ-12");
+  });
+
+  it("HFrEF subgroups include NYHA class, LVEF stratum, and ARNI eligibility", async () => {
+    const r = await scope({
+      drug: "dapagliflozin",
+      indication: "heart failure with reduced ejection fraction",
+      drug_class: "small_molecule",
+      jurisdictions: ["nl"],
+    });
+    const nl = r.pico_matrix.country_specific.find(
+      (c) => c.jurisdiction === "nl",
+    );
+    expect(nl?.population_subgroups.join(" ")).toMatch(/NYHA/i);
+    expect(nl?.population_subgroups.join(" ")).toMatch(/LVEF/i);
+    expect(nl?.population_subgroups.join(" ")).toMatch(/ARNI/i);
+  });
+
+  it("bare 'heart failure' (no EF qualifier) emits an ambiguity warning", async () => {
+    const r = await scope({
+      drug: "drugX",
+      indication: "heart failure",
+      drug_class: "small_molecule",
+      jurisdictions: ["de"],
+    });
+    const t = String(r.content);
+    expect(t).toMatch(/ambiguous|HFpEF.*HFrEF|specific phenotype/i);
+  });
+});
+
+describe("extractTaNumber regex robustness (v1.4.2)", () => {
+  it("matches 'TA679' (no space)", () => {
+    expect(extractTaNumberFn("Per TA679 the recommended dose is...")).toBe(
+      "TA679",
+    );
+  });
+
+  it("matches 'TA 679' (with space) — common in NICE prose", () => {
+    expect(extractTaNumberFn("As outlined in NICE TA 773.")).toBe("TA773");
+  });
+
+  it("extractAllTaNumbers picks up multiple TA citations in one prose", () => {
+    const list = extractAllTaNumbersFn(
+      "Per TA902 for HFpEF and TA 679 for HFrEF.",
+    );
+    expect(list).toContain("TA902");
+    expect(list).toContain("TA679");
+  });
+});
+
+describe("findPrecedents drug match — word-boundary, not substring (v1.4.2)", () => {
+  it("'valsartan' (ARB) does NOT match 'sacubitril valsartan' (ARNI) precedent", () => {
+    const matches = findPrecedentsFn("valsartan", "heart failure HFrEF");
+    expect(matches.find((p) => p.ta_number === "TA388")).toBeUndefined();
+  });
+
+  it("'sacubitril valsartan' does match TA388", () => {
+    const matches = findPrecedentsFn(
+      "sacubitril valsartan",
+      "heart failure HFrEF",
+    );
+    expect(matches.find((p) => p.ta_number === "TA388")).toBeDefined();
+  });
+});

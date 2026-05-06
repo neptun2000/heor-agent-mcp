@@ -17,7 +17,11 @@ interface RawResult {
     n_records_searched: number;
     n_records_screened: number;
     n_urls_validated: number;
-    url_validation_counts: { working: number; broken: number; browser_only: number };
+    url_validation_counts: {
+      working: number;
+      broken: number;
+      browser_only: number;
+    };
   };
 }
 
@@ -46,15 +50,17 @@ const SAMPLE_RECORDS = [
   },
 ];
 
-function makeDeps(opts: {
-  literatureFails?: boolean;
-  screenFails?: boolean;
-  robFails?: boolean;
-  ceFails?: boolean;
-  dossierFails?: boolean;
-  validateFails?: boolean;
-  records?: typeof SAMPLE_RECORDS;
-} = {}) {
+function makeDeps(
+  opts: {
+    literatureFails?: boolean;
+    screenFails?: boolean;
+    robFails?: boolean;
+    ceFails?: boolean;
+    dossierFails?: boolean;
+    validateFails?: boolean;
+    records?: typeof SAMPLE_RECORDS;
+  } = {},
+) {
   const records = opts.records ?? SAMPLE_RECORDS;
   return {
     literatureSearch: async () => {
@@ -159,21 +165,27 @@ describe("hta_workflow — pipeline sequencing", () => {
   });
 
   it("skips CE model phase when skip_ce_model=true", async () => {
-    const r = await run({ drug: "drugX", indication: "Y", skip_ce_model: true });
+    const r = await run({
+      drug: "drugX",
+      indication: "Y",
+      skip_ce_model: true,
+    });
     expect(r.content).toMatch(/skipped/);
     // CE phase timing should be missing/zero
-    expect(r.workflow_summary?.phase_timings_ms?.cost_effectiveness_model ?? 0).toBe(0);
+    expect(
+      r.workflow_summary?.phase_timings_ms?.cost_effectiveness_model ?? 0,
+    ).toBe(0);
   });
 
   it("returns workflow_summary with phase timings", async () => {
     const r = await run({ drug: "drugX", indication: "Y" });
     expect(r.workflow_summary).toBeDefined();
-    expect(r.workflow_summary?.phase_timings_ms?.literature_search).toBeGreaterThanOrEqual(
-      0,
-    );
-    expect(r.workflow_summary?.phase_timings_ms?.hta_dossier).toBeGreaterThanOrEqual(
-      0,
-    );
+    expect(
+      r.workflow_summary?.phase_timings_ms?.literature_search,
+    ).toBeGreaterThanOrEqual(0);
+    expect(
+      r.workflow_summary?.phase_timings_ms?.hta_dossier,
+    ).toBeGreaterThanOrEqual(0);
   });
 
   it("includes URL validation table when URLs are present", async () => {
@@ -202,7 +214,9 @@ describe("hta_workflow — fault tolerance (safe-run)", () => {
       makeDeps({ ceFails: true }),
     );
     expect(r.content).toMatch(/HTA Submission Workflow/);
-    expect(r.content).toMatch(/cost_effectiveness_model.*failed|Phase 4.*failed/i);
+    expect(r.content).toMatch(
+      /cost_effectiveness_model.*failed|Phase 4.*failed/i,
+    );
   });
 
   it("continues when dossier fails", async () => {
@@ -250,5 +264,99 @@ describe("hta_workflow — performance", () => {
     const start = Date.now();
     await run({ drug: "drugX", indication: "Y" });
     expect(Date.now() - start).toBeLessThan(1000);
+  });
+});
+
+// ---- v1.4.2 code-review regression tests ───────────────────────────────
+
+import { htaWorkflowToolSchema as htaWorkflowSchemaForTests } from "../../src/tools/htaWorkflow.js";
+
+describe("hta_workflow — v1.4.2 fixes", () => {
+  it("hta_body='jca' emits an explicit JCA-scope-bypass warning", async () => {
+    const r = await run({
+      drug: "drugX",
+      indication: "Y",
+      hta_body: "jca",
+      submission_type: "initial",
+    });
+    expect(r.content).toMatch(
+      /JCA scope|jca_pico_scope|verify the indication is actually in JCA scope/i,
+    );
+  });
+
+  it("pipeline summary table shows 'FAILED' (not 'draft') when dossier phase fails", async () => {
+    const r = await run(
+      { drug: "x", indication: "y" },
+      makeDeps({ dossierFails: true }),
+    );
+    // The summary table row for Phase 5 must say "FAILED", not "draft"
+    expect(r.content).toMatch(/\| 5 \| hta_dossier \|.*FAILED/);
+  });
+
+  it("idempotentHint is false (PSA stochastic + live external APIs)", () => {
+    expect(htaWorkflowSchemaForTests.annotations.idempotentHint).toBe(false);
+  });
+
+  it("openWorldHint is true (calls external PubMed/CT/validate_links HTTP)", () => {
+    expect(htaWorkflowSchemaForTests.annotations.openWorldHint).toBe(true);
+  });
+
+  it("phase_timings_ms.cost_effectiveness_model is undefined when skip_ce_model=true", async () => {
+    const r = await run({
+      drug: "x",
+      indication: "y",
+      skip_ce_model: true,
+    });
+    expect(
+      r.workflow_summary?.phase_timings_ms.cost_effectiveness_model,
+    ).toBeUndefined();
+  });
+
+  it("screen_abstracts → risk_of_bias preserves the abstract field on screened records", async () => {
+    // Stub screen to return JSON with screening_status but NO abstract field
+    // (matches the real screenAbstracts JSON output shape).
+    // Stub risk_of_bias to record what it received in `studies`.
+    const robReceivedStudies: Array<{ id?: string; abstract?: string }> = [];
+    const customDeps = {
+      ...makeDeps(),
+      screenAbstracts: async (_args: unknown) => ({
+        content: JSON.stringify([
+          { id: "pubmed_1", screening_status: "include" },
+          { id: "ct_1", screening_status: "include" },
+        ]),
+      }),
+      riskOfBias: async (args: unknown) => {
+        const a = args as {
+          studies?: Array<{ id?: string; abstract?: string }>;
+        };
+        for (const s of a.studies ?? []) robReceivedStudies.push(s);
+        return {
+          content: JSON.stringify({
+            summary: {
+              n_assessed: 2,
+              rob2_count: 2,
+              robins_i_count: 0,
+              amstar2_count: 0,
+              rob_judgment: "Low",
+            },
+            studies: [],
+          }),
+        };
+      },
+    };
+
+    await run(
+      { drug: "x", indication: "y" },
+      customDeps as unknown as ReturnType<typeof makeDeps>,
+    );
+
+    // Each record passed to RoB must have a non-empty abstract — the
+    // original literature_search abstracts must survive Phase 2's JSON
+    // re-mapping. Pre-v1.4.2 this would receive abstracts as empty strings.
+    expect(robReceivedStudies.length).toBeGreaterThan(0);
+    for (const s of robReceivedStudies) {
+      expect(s.abstract).toBeDefined();
+      expect((s.abstract ?? "").length).toBeGreaterThan(0);
+    }
   });
 });

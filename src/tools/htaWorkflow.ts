@@ -33,7 +33,15 @@ import { suggestForEnum } from "../util/didYouMean.js";
 import type { AuditRecord } from "../audit/types.js";
 import type { ToolResult } from "../providers/types.js";
 
-const HTA_BODIES = ["nice", "ema", "fda", "iqwig", "has", "jca", "gvd"] as const;
+const HTA_BODIES = [
+  "nice",
+  "ema",
+  "fda",
+  "iqwig",
+  "has",
+  "jca",
+  "gvd",
+] as const;
 const SUBMISSION_TYPES = [
   "sta",
   "mta",
@@ -247,6 +255,18 @@ export async function runHtaWorkflow(
     "End-to-end HTA submission pipeline: literature_search (runs=N for stability) → screen_abstracts (PICO) → risk_of_bias (RoB 2 / ROBINS-I / AMSTAR-2 auto-instrument) → cost_effectiveness_model (Markov/PartSA + PSA) → hta_dossier (auto-GRADE from RoB output) → validate_links (post-hoc URL audit). Each phase wrapped in safe-run so single-step failures do not abort the pipeline.",
   );
 
+  // JCA-route guard: when hta_body="jca", this orchestrator runs the
+  // standard pipeline without calling jca_pico_scope, so the JCA scope
+  // eligibility check (Reg 2021/2282 phased rollout) does NOT fire.
+  // Surface this so an out-of-scope indication can't silently produce
+  // a credible-looking JCA dossier.
+  if (input.hta_body === "jca") {
+    audit = addWarning(
+      audit,
+      "hta_body='jca' — this orchestrator does NOT run jca_pico_scope, so the JCA scope eligibility check (Reg 2021/2282: oncology+ATMP from 13 Jan 2025; orphans from 13 Jan 2028; all medicines from 13 Jan 2030) is bypassed. Verify the indication is actually in JCA scope before treating this output as submission-grade. To check scope explicitly, call jca_pico_scope first.",
+    );
+  }
+
   const t0 = Date.now();
   const phaseTimings: Record<string, number> = {};
 
@@ -285,7 +305,8 @@ export async function runHtaWorkflow(
       deps.screenAbstracts({
         results: literatureRecords,
         criteria: {
-          population: input.pico?.population ?? `adults with ${input.indication}`,
+          population:
+            input.pico?.population ?? `adults with ${input.indication}`,
           intervention: input.pico?.intervention ?? input.drug,
           comparator: input.pico?.comparator,
           outcomes: input.pico?.outcomes,
@@ -294,12 +315,43 @@ export async function runHtaWorkflow(
       }),
     );
     if (screenRes.ok) {
+      // CRITICAL FIX (v1.4.2 code review): screen_abstracts JSON output
+      // returns ScreeningResult objects that LACK the `abstract` field.
+      // If we passed those straight through to risk_of_bias, RoB
+      // inference would silently run on empty abstracts and return
+      // "Unclear" for every domain — corrupting GRADE downstream.
+      //
+      // Instead: extract the included/uncertain IDs from the screening
+      // result and re-map them onto the ORIGINAL literatureRecords
+      // (which still carry the abstract text).
       const screened = extractLiteratureResults(screenRes.value);
-      if (screened.length > 0) {
-        screenedRecords = screened;
+      const includedIds = new Set(
+        screened
+          .filter((r) => {
+            const status = (r as unknown as Record<string, unknown>)
+              .screening_status;
+            return !status || status === "include" || status === "uncertain";
+          })
+          .map((r) => String(r.id ?? ""))
+          .filter(Boolean),
+      );
+      const remapped =
+        includedIds.size > 0
+          ? literatureRecords.filter((r) => includedIds.has(String(r.id ?? "")))
+          : [];
+
+      if (remapped.length > 0) {
+        screenedRecords = remapped;
         audit = addAssumption(
           audit,
-          `Phase 2 (screen_abstracts) included ${screened.length} of ${literatureRecords.length} records via PICO filter.`,
+          `Phase 2 (screen_abstracts) included ${remapped.length} of ${literatureRecords.length} records via PICO filter; abstracts preserved for downstream RoB inference.`,
+        );
+      } else if (screened.length > 0) {
+        // Screening returned results but none mapped back to original IDs.
+        // Fall back to the unfiltered set with abstracts intact and warn.
+        audit = addWarning(
+          audit,
+          `Phase 2 (screen_abstracts) returned ${screened.length} screened records but none could be re-mapped to original literature IDs (likely an ID-shape mismatch). Falling back to unfiltered ${literatureRecords.length} records with abstracts preserved.`,
         );
       } else {
         // Fallback: if screener returns 0, keep the unfiltered set with a warning.
@@ -384,8 +436,7 @@ export async function runHtaWorkflow(
           admin_cost: ce.admin_cost ?? 0,
         },
         utility_inputs:
-          ce.qaly_on_treatment !== undefined ||
-          ce.qaly_comparator !== undefined
+          ce.qaly_on_treatment !== undefined || ce.qaly_comparator !== undefined
             ? {
                 qaly_on_treatment: ce.qaly_on_treatment,
                 qaly_comparator: ce.qaly_comparator,
@@ -434,7 +485,13 @@ export async function runHtaWorkflow(
       `Phase 4 (cost_effectiveness_model) skipped (skip_ce_model=true).`,
     );
   }
-  phaseTimings.cost_effectiveness_model = Date.now() - tCe;
+  // Only record CE timing when CE actually ran. Setting it to a small
+  // non-zero on the skip path made `phase_timings_ms.cost_effectiveness_model`
+  // a misleading proxy for "did CE run?" and caused the skip-path test to
+  // be flaky on slower CI.
+  if (!input.skip_ce_model) {
+    phaseTimings.cost_effectiveness_model = Date.now() - tCe;
+  }
 
   // ── Phase 5: hta_dossier ──────────────────────────────────────────
   const tDossier = Date.now();
@@ -444,7 +501,8 @@ export async function runHtaWorkflow(
       submission_type: input.submission_type,
       drug_name: input.drug,
       indication: input.indication,
-      evidence_summary: screenedRecords.length > 0 ? screenedRecords : undefined,
+      evidence_summary:
+        screenedRecords.length > 0 ? screenedRecords : undefined,
       rob_results: robResults,
       model_results: ceResults,
     }),
@@ -469,13 +527,13 @@ export async function runHtaWorkflow(
   const tValidate = Date.now();
   const urlsFromDossier = extractUrls(dossierContent);
   const urlsFromRecords = screenedRecords.map((r) => r.url).filter(Boolean);
-  const allUrls = Array.from(new Set([...urlsFromRecords, ...urlsFromDossier])).slice(0, 50);
+  const allUrls = Array.from(
+    new Set([...urlsFromRecords, ...urlsFromDossier]),
+  ).slice(0, 50);
   let validationContent = "";
   let validationCounts = { working: 0, browser_only: 0, broken: 0 };
   if (allUrls.length > 0) {
-    const valRes = await safeRun(() =>
-      deps.validateLinks({ urls: allUrls }),
-    );
+    const valRes = await safeRun(() => deps.validateLinks({ urls: allUrls }));
     if (valRes.ok) {
       validationContent = asText(valRes.value);
       // Best-effort summary extraction
@@ -550,7 +608,11 @@ export async function runHtaWorkflow(
     );
   }
   lines.push(
-    `| 5 | hta_dossier | ${phaseTimings.hta_dossier ?? 0} | ${input.hta_body.toUpperCase()} ${input.submission_type.toUpperCase()} draft |`,
+    `| 5 | hta_dossier | ${phaseTimings.hta_dossier ?? 0} | ${
+      dossierRes.ok
+        ? `${input.hta_body.toUpperCase()} ${input.submission_type.toUpperCase()} draft`
+        : "FAILED — see audit"
+    } |`,
   );
   lines.push(
     `| 6 | validate_links | ${phaseTimings.validate_links ?? 0} | ${validationCounts.working}/${allUrls.length} working, ${validationCounts.broken} broken |`,
@@ -637,8 +699,12 @@ export const htaWorkflowToolSchema = {
     title: "HTA Submission Workflow Orchestrator",
     readOnlyHint: true,
     destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false,
+    // Stochastic Phase 4 PSA + live external API calls (PubMed,
+    // ClinicalTrials.gov, validate_links HTTP) make this NOT idempotent
+    // and definitively open-world. Caching by MCP clients on the
+    // idempotent hint would return stale CE estimates.
+    idempotentHint: false,
+    openWorldHint: true,
   },
   inputSchema: {
     type: "object",

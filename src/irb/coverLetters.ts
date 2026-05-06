@@ -41,12 +41,11 @@ const SAE_LABEL: Record<SaeFramework, string> = {
 
 const COI_LABEL: Record<CoiFramework, string> = {
   phs_42_cfr_50:
-    "PHS 42 CFR 50 Subpart F (Promoting Objectivity in Research)",
-  eu_ctr_article_14:
-    "EU CTR 536/2014 Article 14 (transparency and conflict-of-interest disclosure)",
-  both:
-    "PHS 42 CFR 50 Subpart F (US) and EU CTR 536/2014 Article 14 (EU)",
-  none: "No conflict-of-interest framework triggered (non-industry funding)",
+    "PHS 42 CFR 50 Subpart F (Promoting Objectivity in Research) — applies to all PHS-funded research (NIH, AHRQ, CDC) AND industry-funded US studies",
+  eu_ctr_annex_i_point_66:
+    "EU CTR 536/2014 Annex I, Section M, Point 66 (investigator suitability — declaration of economic interests and institutional affiliations affecting impartiality)",
+  both: "PHS 42 CFR 50 Subpart F (US) and EU CTR 536/2014 Annex I §M Point 66 (EU)",
+  none: "No conflict-of-interest framework triggered (non-PHS, non-industry funding outside EU)",
 };
 
 export function buildCoverLetter(args: {

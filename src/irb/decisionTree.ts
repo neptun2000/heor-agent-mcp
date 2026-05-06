@@ -20,7 +20,12 @@
  * See verification criteria 1-10 in design log #21 §"Verification Criteria".
  */
 import { buildCoverLetter } from "./coverLetters.js";
-import { CTR_536_2014_TIMELINES, FDA_IND_TIMELINES, PSUR_TIMELINES, VULNERABLE_OBLIGATIONS } from "./rulesets.js";
+import {
+  CTR_536_2014_TIMELINES,
+  FDA_IND_TIMELINES,
+  PSUR_TIMELINES,
+  VULNERABLE_OBLIGATIONS,
+} from "./rulesets.js";
 import {
   IRB_RULESET,
   type CoiFramework,
@@ -86,7 +91,19 @@ function classifyUs(input: IrbReviewInput, warnings: string[]): UsTier | null {
     };
   }
 
+  // Surface contradictory hint inputs upfront — the hint switch below
+  // silently ignores hints that don't match the study_design, which
+  // confuses callers who set them deliberately.
+  if (input.benign_behavioural && input.study_design !== "interventional") {
+    warnings.push(
+      `benign_behavioural=true requires study_design='interventional' per 45 CFR 46.104(d)(3); hint ignored because study_design is '${input.study_design}'.`,
+    );
+  }
+
   // Hint-driven exempt categories (highest specificity first).
+  // Precedence: educational → benign_behavioural → federal_demonstration →
+  // taste_test → broad_consent_obtained × 2. Only one hint should be set
+  // per call; if multiple are set, the first match in this order wins.
   if (input.exempt_category_hint === "educational") {
     return {
       tier: "exempt",
@@ -161,10 +178,16 @@ function classifyUs(input: IrbReviewInput, warnings: string[]): UsTier | null {
           exempt_category: 2,
           expedited_categories: [],
           rationale:
-            "Educational tests, surveys, interviews, or public observation with non-identifiable responses (45 CFR 46.104(d)(2)).",
+            "Educational tests, surveys, interviews, or public observation with non-identifiable responses (45 CFR 46.104(d)(2), first prong).",
         };
       }
       // Identifiable survey/interview → expedited cat 7.
+      // §46.104(d)(2) has a SECOND prong (no-disclosure-risk) we don't
+      // mechanise — surface as advisory so the IRB can apply it manually
+      // for non-sensitive identifiable surveys.
+      warnings.push(
+        "Questionnaire with identifiable responses classified as expedited cat 7. §46.104(d)(2) has a second prong (exempt if disclosure of responses outside research could not reasonably place subjects at risk) that this tool does not mechanise — confirm with the IRB whether exempt cat 2 may apply.",
+      );
       return {
         tier: "expedited",
         exempt_category: null,
@@ -250,6 +273,11 @@ function classifyUs(input: IrbReviewInput, warnings: string[]): UsTier | null {
             "Retrospective chart review using identifiable existing records at minimal risk (45 CFR 46.110 cat 5).",
         };
       }
+      if (input.risk_level === "unknown") {
+        warnings.push(
+          "risk_level was 'unknown' on a retrospective chart review with identifiable records — defaulted conservatively to full-board review. Re-run with risk_level set when finalised.",
+        );
+      }
       return {
         tier: "full_board",
         exempt_category: null,
@@ -306,12 +334,29 @@ function classifyUs(input: IrbReviewInput, warnings: string[]): UsTier | null {
         };
       }
       if (input.risk_level === "greater_than_minimal") {
+        if (input.marketed_drug) {
+          warnings.push(
+            "marketed_drug=true was supplied but risk_level=greater_than_minimal — expedited cat 1 requires minimal risk. Defaulting to full-board; PSUR SAE framework still applies via marketed_drug flag.",
+          );
+        }
         return {
           tier: "full_board",
           exempt_category: null,
           expedited_categories: [],
           rationale:
             "Non-interventional prospective study at greater-than-minimal risk → full-board review (45 CFR 46.108).",
+        };
+      }
+      if (input.risk_level === "unknown") {
+        warnings.push(
+          "risk_level was 'unknown' on a non-interventional prospective study — defaulted conservatively to full-board review. Re-run with risk_level set when finalised.",
+        );
+        return {
+          tier: "full_board",
+          exempt_category: null,
+          expedited_categories: [],
+          rationale:
+            "Non-interventional prospective study with unknown risk classification → conservative full-board review.",
         };
       }
       return {
@@ -342,12 +387,16 @@ function classifyUs(input: IrbReviewInput, warnings: string[]): UsTier | null {
             "Registry using identifiable existing data at minimal risk (45 CFR 46.110 cat 5).",
         };
       }
+      if (input.risk_level === "unknown") {
+        warnings.push(
+          "risk_level was 'unknown' on a registry — defaulted conservatively to full-board review. Re-run with risk_level set when finalised.",
+        );
+      }
       return {
         tier: "full_board",
         exempt_category: null,
         expedited_categories: [],
-        rationale:
-          "Registry at greater-than-minimal risk → full-board review.",
+        rationale: "Registry at greater-than-minimal risk → full-board review.",
       };
     }
 
@@ -361,15 +410,19 @@ function classifyUs(input: IrbReviewInput, warnings: string[]): UsTier | null {
             "Interventional study of a marketed drug at minimal risk per labeling (45 CFR 46.110 cat 1).",
         };
       }
-      // Default: interventional is greater-than-minimal-risk-by-default →
-      // full-board, regardless of explicit risk level (interventional drug
-      // / device studies almost always qualify).
+      // Default: interventional → full-board. Rationale text branches on
+      // the actual risk_level so the report doesn't falsely claim
+      // "greater-than-minimal" when the user supplied "minimal" — earlier
+      // version always asserted the former, which read as a misclassification
+      // back to the user.
       return {
         tier: "full_board",
         exempt_category: null,
         expedited_categories: [],
         rationale:
-          "Interventional drug / device / behavioural-intervention study at greater-than-minimal risk → full-board review under 45 CFR 46.108.",
+          input.risk_level === "minimal"
+            ? "Interventional study at minimal risk but no marketed-drug/device hint supplied — defaulted to full-board review under 45 CFR 46.108. If the product is a marketed drug or device used per labeling with no IND/IDE required, set marketed_drug=true to unlock expedited cat 1."
+            : "Interventional drug / device / behavioural-intervention study at greater-than-minimal risk → full-board review under 45 CFR 46.108.",
       };
     }
   }
@@ -439,7 +492,8 @@ function buildDmp(input: IrbReviewInput): DataManagementPlan {
   let deid: DeIdMethod;
   if (input.data_handling === "fully_identifiable") deid = "must_implement";
   else if (input.data_handling === "pseudonymized") deid = "pseudonymization";
-  else if (input.data_handling === "anonymized_safe_harbor") deid = "safe_harbor";
+  else if (input.data_handling === "anonymized_safe_harbor")
+    deid = "safe_harbor";
   else if (input.data_handling === "anonymized_expert_determination")
     deid = "expert_determination";
   else deid = "not_required";
@@ -457,7 +511,7 @@ function buildDmp(input: IrbReviewInput): DataManagementPlan {
   }
   if (hipaaPhi) {
     xfer.push(
-      "HIPAA §164.514 — implement Safe Harbor (18-identifier removal) or Expert Determination prior to data sharing outside the covered entity.",
+      "HIPAA §164.514(b)(2) Safe Harbor (18-identifier removal) or §164.514(b)(1) Expert Determination required prior to data sharing outside the covered entity.",
     );
   }
 
@@ -518,21 +572,41 @@ function computeIcfTier(
   }
   const isMinimal = input.risk_level === "minimal";
   const isNonInt = NON_INTERVENTIONAL_DESIGNS.has(input.study_design);
-  if (isMinimal && isNonInt) return "basic";
+  // Benign-behavioural minimal-risk interventional studies (§46.104(d)(3)
+  // exempt cat 3) warrant a basic ICF — the intervention is by definition
+  // brief, harmless, and painless, so the consent is no more complex than
+  // a non-interventional minimal-risk study.
+  if (isMinimal && (isNonInt || input.benign_behavioural)) return "basic";
   return "standard";
 }
 
-function computeCoi(
-  input: IrbReviewInput,
-): { required: boolean; framework: CoiFramework } {
-  if (input.funding_source !== "industry") {
-    return { required: false, framework: "none" };
-  }
+function computeCoi(input: IrbReviewInput): {
+  required: boolean;
+  framework: CoiFramework;
+} {
   const onUs = input.jurisdictions.includes("us_irb");
   const onEu = input.jurisdictions.includes("eu_cec");
-  if (onUs && onEu) return { required: true, framework: "both" };
-  if (onUs) return { required: true, framework: "phs_42_cfr_50" };
-  if (onEu) return { required: true, framework: "eu_ctr_article_14" };
+  // PHS 42 CFR 50 Subpart F (FCOI regulation) applies to ALL Public Health
+  // Service-funded research — NIH, AHRQ, CDC, HRSA, FDA, IHS, SAMHSA — plus
+  // industry-funded US studies subject to the same disclosure obligations
+  // when the institution is a PHS grantee. Pre-fix, this only fired for
+  // industry funding, leaving NIH/CDC/AHRQ-funded studies with
+  // coi_framework="none" — a real legal gap.
+  const phsApplies =
+    onUs &&
+    (input.funding_source === "industry" ||
+      input.funding_source === "nih" ||
+      input.funding_source === "other_government");
+  // EU CTR 536/2014 Annex I §M Point 66 disclosure of investigator economic
+  // interests / institutional affiliations applies to industry-sponsored
+  // trials (academic and government-funded EU trials are covered by national
+  // ethics frameworks rather than CTR-specific COI sections).
+  const euCtrApplies = onEu && input.funding_source === "industry";
+
+  if (phsApplies && euCtrApplies) return { required: true, framework: "both" };
+  if (phsApplies) return { required: true, framework: "phs_42_cfr_50" };
+  if (euCtrApplies)
+    return { required: true, framework: "eu_ctr_annex_i_point_66" };
   return { required: false, framework: "none" };
 }
 
@@ -551,7 +625,8 @@ function reconcileExpeditedClaim(
   if (claimMissing.length === 0 && derivedMissing.length === 0) return;
 
   const claimStr = claim.join(", ");
-  const derivedStr = derivedCategories.length > 0 ? derivedCategories.join(", ") : "none";
+  const derivedStr =
+    derivedCategories.length > 0 ? derivedCategories.join(", ") : "none";
   warnings.push(
     `expedited_category_claim mismatch: investigator claimed cat [${claimStr}], decision tree derived cat [${derivedStr}]. Surfacing both — confirm which classification fits the protocol with the IRB. Reference: 45 CFR 46.110 (OHRP expedited categories).`,
   );

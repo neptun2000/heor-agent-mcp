@@ -28,8 +28,7 @@ export const EXEMPT_CATEGORIES: ReadonlyArray<ExemptCategoryDef> = [
   },
   {
     category: 2,
-    title:
-      "Educational tests, surveys, interviews, public observation",
+    title: "Educational tests, surveys, interviews, public observation",
     citation: "45 CFR 46.104(d)(2)",
     summary:
       "Educational tests, surveys, interviews, or observation of public behavior — when responses are recorded such that identification is not readily ascertainable, or disclosure outside research would not place subjects at risk.",
@@ -50,8 +49,7 @@ export const EXEMPT_CATEGORIES: ReadonlyArray<ExemptCategoryDef> = [
   },
   {
     category: 5,
-    title:
-      "Federal demonstration projects under benefit / service programs",
+    title: "Federal demonstration projects under benefit / service programs",
     citation: "45 CFR 46.104(d)(5)",
     summary:
       "Research and demonstration projects conducted or supported by a Federal department or agency to study or evaluate public benefit / service programs.",
@@ -104,7 +102,8 @@ export const EXPEDITED_CATEGORIES: ReadonlyArray<ExpeditedCategoryDef> = [
   },
   {
     category: 3,
-    title: "Prospective collection of biological specimens by noninvasive means",
+    title:
+      "Prospective collection of biological specimens by noninvasive means",
     citation: "45 CFR 46.110, Cat 3",
     summary:
       "Prospective collection of biological specimens for research purposes by noninvasive means (e.g., hair, nail clippings, saliva, expectorated sputum).",
@@ -118,8 +117,7 @@ export const EXPEDITED_CATEGORIES: ReadonlyArray<ExpeditedCategoryDef> = [
   },
   {
     category: 5,
-    title:
-      "Research using existing data / documents / records / specimens",
+    title: "Research using existing data / documents / records / specimens",
     citation: "45 CFR 46.110, Cat 5",
     summary:
       "Research involving materials (data, documents, records, specimens) that have been collected, or will be collected solely for non-research purposes.",
@@ -166,7 +164,8 @@ export const FDA_IND_TIMELINES: ReadonlyArray<{
   reporting_window: string;
 }> = [
   {
-    event_type: "Unexpected fatal or life-threatening suspected adverse reaction",
+    event_type:
+      "Unexpected fatal or life-threatening suspected adverse reaction",
     reporting_window: "≤7 calendar days (initial)",
   },
   {
@@ -205,7 +204,7 @@ export const VULNERABLE_OBLIGATIONS = {
     regulatory_basis: "45 CFR 46 Subpart B (pregnant women, fetuses, neonates)",
     obligations: [
       "Risk to the fetus must be the least possible to achieve study objectives.",
-      "Both parents' consent required when research holds no direct benefit, except where father is unavailable / unable / not reasonably available, or pregnancy resulted from rape or incest.",
+      "Both pregnant woman + father consent required (§46.204(e)) when research holds out the prospect of direct benefit SOLELY to the fetus — father's consent not required if unavailable, incompetent, temporarily incapacitated, or pregnancy resulted from rape or incest. When research has no direct benefit (at ≤ minimal fetal risk), only the pregnant woman's consent is required (§46.204(d)).",
       "No financial inducements to terminate pregnancy.",
       "EU CTR 536/2014 Article 33 — additional EC scrutiny for pregnant subjects in interventional trials.",
     ],
@@ -213,8 +212,8 @@ export const VULNERABLE_OBLIGATIONS = {
   prisoners: {
     regulatory_basis: "45 CFR 46 Subpart C (prisoners)",
     obligations: [
-      "Research must fall into one of the four permitted prisoner-research categories (§46.306) — practices that may improve health/well-being of prisoners as a class is the broadest.",
-      "IRB composition must include a prisoner advocate (≥1 IRB member must be a prisoner or prisoner representative).",
+      "Research must fall into one of the four permitted prisoner-research categories (§46.306(a)(2)(i-iv)): (i) causes/effects of incarceration/criminal behavior (minimal risk only); (ii) study of prisons as institutions (minimal risk only); (iii) conditions particularly affecting prisoners as a class (requires Secretary consultation + Federal Register notice); (iv) practices likely to improve health/well-being of the individual subject — the most commonly invoked category for therapeutic research.",
+      "IRB composition must include a prisoner advocate (§46.304: ≥1 IRB member must be a prisoner or prisoner representative).",
       "Risks must be commensurate with risks accepted by non-prisoner volunteers.",
       "Parole considerations cannot be tied to study participation; living conditions during study must be considered.",
     ],
@@ -222,7 +221,7 @@ export const VULNERABLE_OBLIGATIONS = {
   pediatric: {
     regulatory_basis: "45 CFR 46 Subpart D (children)",
     obligations: [
-      "Risk-tier classification: §46.404 (minimal risk), §46.405 (greater-than-minimal with prospect of direct benefit), §46.406 (minor increase over minimal, no direct benefit), §46.407 (otherwise unapprovable, requires HHS Secretary panel review).",
+      "Risk-tier classification: §46.404 (minimal risk); §46.405 (greater-than-minimal with prospect of direct benefit); §46.406 (minor increase over minimal, no direct benefit, but ALSO requires the research be likely to yield generalizable knowledge about the subjects' disorder or condition — §46.406(c); cannot be applied to healthy-child studies unrelated to the enrolled population's disorder); §46.407 (otherwise unapprovable — requires HHS Secretary determination after expert-panel consultation and public comment period).",
       "Permission of parents (one parent for §46.404/405; both for §46.406/407 unless waived).",
       "Assent of the child when capable — IRB determines capability based on age and condition.",
       "EU CTR 536/2014 Article 32 — additional protections for paediatric subjects; Paediatric Investigation Plan (PIP) under EMA Reg. 1901/2006 may apply.",

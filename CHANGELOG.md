@@ -2,6 +2,48 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.5.1 (2026-05-06) — `irb_review` code-review fixes
+
+Three parallel reviewers (regulatory accuracy with WebFetch verification, decision-tree correctness, test-gap analysis) audited v1.5.0 within hours of ship. **3 HIGH regulatory citation errors + 4 HIGH correctness bugs + 6 untested branches** identified. All real findings verified against primary sources (eCFR via govinfo.gov / Cornell LII; EU CTR 536/2014 via legislation.gov.uk + European Commission) and patched. Total tests 683 → 708.
+
+### Fixed (HIGH — regulatory accuracy)
+
+- **Pregnant women consent trigger inverted (rulesets.ts).** v1.5.0 wording said "Both parents' consent required when research holds **no** direct benefit" — that's §46.204(d), which actually requires only the woman's consent. Both-parent consent is §46.204(**e**) and the trigger is "research holds out the prospect of direct benefit **solely to the fetus**." An investigator following the v1.5.0 obligation text would have obtained father consent unnecessarily on no-benefit studies, or skipped it on benefit-solely-to-fetus studies. Corrected per eCFR §46.204(d) and (e) verbatim.
+- **§46.306 prisoner-research subcategories misattributed (rulesets.ts).** v1.5.0 said "practices that may improve health/well-being of prisoners as a class is the broadest." That description maps to (a)(2)(**iii**) (class-level), not the broadest. The most commonly invoked sub-paragraph for therapeutic prisoner research is (a)(2)(**iv**) which is about the **individual subject**'s health/well-being. Now enumerates all four sub-paragraphs (i-iv) with the correct attribution.
+- **§46.406 missing "generalizable knowledge" eligibility gate (rulesets.ts).** v1.5.0 wording read "§46.406 (minor increase over minimal, no direct benefit)" — but §46.406(c) imposes an additional mandatory IRB finding: the research must be "likely to yield generalizable knowledge about the subjects' disorder or condition." Without this, healthy-child studies could be misclassified to §46.406 when they actually require the stricter §46.407 Secretary-determination pathway.
+
+### Fixed (HIGH — decision-tree correctness)
+
+- **NIH-funded research reported no COI obligation (decisionTree.ts:computeCoi).** Pre-fix: `funding_source !== "industry"` returned `{ required: false, framework: "none" }` for ALL non-industry funding. Real legal bug — PHS 42 CFR 50 Subpart F (FCOI regulation) applies to all PHS-funded research (NIH, AHRQ, CDC, HRSA, FDA, IHS, SAMHSA), not only industry. Now: `phsApplies = onUs && (industry || nih || other_government)` triggers PHS framework; EU CTR Annex I §M Point 66 unchanged (industry-only).
+- **Interventional full-board rationale falsely asserted "greater-than-minimal risk" when input was actually `risk_level: "minimal"` without `marketed_drug` hint.** Now branches on the actual `risk_level` value — minimal-risk + no-hint reads "Interventional study at minimal risk but no marketed-drug/device hint supplied" with explicit guidance to set `marketed_drug=true` for cat 1 expedited.
+- **`risk_level: "unknown"` warning was gated to `study_design === "interventional"` only.** Other designs (registry, retrospective_chart_review, non_interventional_prospective) silently fell through to full-board with no advisory. Now emits a tier-specific warning on each branch.
+- **`benign_behavioural=true` with non-interventional study_design silently ignored.** Hint requires `study_design === "interventional"` per §46.104(d)(3); now warns when set on a non-interventional design instead of dropping silently.
+
+### Fixed (MEDIUM)
+
+- **CTR 536/2014 Article 14 → Annex I §M Point 66 for COI.** The `coi_framework: "eu_ctr_article_14"` enum value pointed at the wrong article. CTR Article 14 is "Addition of a Member State" (extending a trial to additional EU Member States), not COI. Verified via legislation.gov.uk: investigator economic-interest disclosure lives in **Annex I, Section M, Point 66** ("Suitability of the Investigator"). **Breaking change to the structured `coi_framework` field**: `eu_ctr_article_14` → `eu_ctr_annex_i_point_66`. The cover-letter text and dashboard label also updated. Acceptable break — irb_review shipped only hours before this patch; no external consumers expected.
+- **HIPAA subsection citations promoted to user-visible output.** v1.5.0 user output cited only "§164.514" without the (b)(1)/(b)(2) sub-precision. Now: "HIPAA §164.514(b)(2) Safe Harbor (18-identifier removal) or §164.514(b)(1) Expert Determination required prior to data sharing outside the covered entity."
+- **`marketed_drug=true` + `risk_level: "greater_than_minimal"` silently dropped.** Now warns that expedited cat 1 requires minimal risk; PSUR SAE framework still applies via `marketed_drug`.
+- **`computeIcfTier` returned "standard" for benign-behavioural exempt-cat-3 studies.** Pre-fix: only non-interventional designs unlocked "basic" ICF. Post-fix: `isMinimal && (isNonInt || benign_behavioural)` → benign-behavioural exempt cat 3 now correctly produces a basic ICF.
+- **Questionnaire-only cat-7 expedited path now emits §46.104(d)(2) second-prong advisory.** Surveys with identifiable responses default to cat 7 expedited, but §46.104(d)(2) has a no-disclosure-risk prong this tool doesn't mechanise. Now warns explicitly so the IRB can apply the second prong manually for non-sensitive surveys.
+
+### Fixed (LOW)
+
+- §46.407 wording: "HHS Secretary panel review" → "HHS Secretary determination after expert-panel consultation and public comment period" (the panel consults; the Secretary determines).
+
+### Tests
+
++25 new regression tests across:
+- 5 v1.5.1 regulatory citation regressions (pregnant §46.204(e), prisoner §46.306(a)(2)(i-iv), pediatric §46.406(c), Annex I in cover letter, HIPAA subsection cites)
+- 11 v1.5.1 decision-tree regressions (NIH/other_government COI, academic-only no-COI, foundation-EU no-COI, NIH-EU-only no-COI, interventional rationale text, 3 unknown-risk warnings on non-interventional designs, benign_behavioural mismatch, marketed_drug+greater warning, ICF basic for benign minimal, questionnaire second-prong advisory)
+- 7 untested-branch regressions (retrospective+greater+identifiable, registry+minimal+pseudonymized, registry+greater, non_int default cat 4, hint precedence marketed > noninvasive, secondary_data+identifiable, specimen+identifiable)
+
+683 → 708 tests, 100% pass rate, no regressions.
+
+### Process learning
+
+The reviewer-hallucination memory (saved 2026-05-05 after 3 incidents in 48h) saved this patch from introducing fabricated regulatory citations. **All 4 regulatory findings were verified against official sources before applying any patch** — eCFR via govinfo.gov for §46.204, Cornell LII for §46.306 and §46.406, legislation.gov.uk for CTR 536/2014 Article 14 and Annex I. Each verification quote was checked verbatim against the reviewer's claim. The pattern of "spawn 3 reviewers in parallel, fan out by audit angle, verify regulatory claims via WebFetch before patching" is now the default for every release with regulatory output.
+
 ## v1.5.0 (2026-05-06) — `irb_review` tool
 
 New IRB / Ethics Committee submission classifier (design log #21). Pure decision-tree logic, <300ms, no external I/O. Tool count 22 → 23.

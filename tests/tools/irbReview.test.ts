@@ -615,14 +615,14 @@ describe("irb_review — COI framework", () => {
     expect(r.irb_assessment.coi_framework).toMatch(/phs|42 CFR 50/);
   });
 
-  it("industry funding + EU → EU CTR Article 14 applies", async () => {
+  it("industry funding + EU → EU CTR Annex I §M Point 66 applies (v1.5.1: was Article 14)", async () => {
     const r = await review({
       ...MINIMAL_INTERVENTIONAL,
       jurisdictions: ["eu_cec"],
       funding_source: "industry",
     });
     expect(r.irb_assessment.coi_disclosure_required).toBe(true);
-    expect(r.irb_assessment.coi_framework).toMatch(/article 14|ctr/i);
+    expect(r.irb_assessment.coi_framework).toBe("eu_ctr_annex_i_point_66");
   });
 
   it("industry + US + EU → both frameworks apply", async () => {
@@ -759,5 +759,351 @@ describe("irb_review — performance", () => {
     const start = Date.now();
     await review(MINIMAL_INTERVENTIONAL);
     expect(Date.now() - start).toBeLessThan(300);
+  });
+});
+
+// ---- v1.5.1 code-review regression tests --------------------------------
+//
+// Surfaced by 3 parallel reviewers (regulatory accuracy via WebFetch
+// verification, decision-tree correctness, test-gap analysis). Each fix is
+// pinned by a regression test so a future refactor cannot silently revert.
+
+describe("irb_review — v1.5.1 regulatory citation fixes", () => {
+  it("pregnant women obligation cites §46.204(e) and 'solely to the fetus' trigger", async () => {
+    const r = await review({
+      ...MINIMAL_INTERVENTIONAL,
+      population_includes_pregnant: true,
+    });
+    const pregnant = r.irb_assessment.vulnerable_population_obligations.find(
+      (g) => g.group === "pregnant",
+    );
+    const obligationsText = pregnant?.obligations.join(" ") ?? "";
+    expect(obligationsText).toMatch(/§46\.204\(e\)/);
+    expect(obligationsText).toMatch(/solely to the fetus/i);
+    // Pre-fix wording had "no direct benefit" as the trigger — make sure
+    // we don't regress.
+    expect(obligationsText).not.toMatch(
+      /Both parents' consent required when research holds no direct benefit/i,
+    );
+  });
+
+  it("prisoner obligation enumerates §46.306(a)(2)(i-iv) and identifies (iv) as individual-subject", async () => {
+    const r = await review({
+      ...MINIMAL_INTERVENTIONAL,
+      population_includes_prisoners: true,
+    });
+    const prisoners = r.irb_assessment.vulnerable_population_obligations.find(
+      (g) => g.group === "prisoners",
+    );
+    const obligationsText = prisoners?.obligations.join(" ") ?? "";
+    expect(obligationsText).toMatch(/§46\.306\(a\)\(2\)\(i-iv\)/);
+    expect(obligationsText).toMatch(/individual subject/i);
+    expect(obligationsText).toMatch(/prisoners as a class/i);
+  });
+
+  it("pediatric obligation cites §46.406(c) generalizable-knowledge condition", async () => {
+    const r = await review({
+      ...MINIMAL_INTERVENTIONAL,
+      population_includes_pediatric: true,
+    });
+    const peds = r.irb_assessment.vulnerable_population_obligations.find(
+      (g) => g.group === "pediatric",
+    );
+    const obligationsText = peds?.obligations.join(" ") ?? "";
+    expect(obligationsText).toMatch(/§46\.406\(c\)/);
+    expect(obligationsText).toMatch(/generalizable knowledge/i);
+    expect(obligationsText).toMatch(/disorder or condition/i);
+  });
+
+  it("cover letter for industry+EU cites 'Annex I' (not 'Article 14') for COI", async () => {
+    const r = await review({
+      ...MINIMAL_INTERVENTIONAL,
+      jurisdictions: ["eu_cec"],
+    });
+    expect(r.irb_assessment.cover_letter_template).toMatch(/Annex I/);
+    // Article 14 is "Addition of a Member State" — verified against
+    // legislation.gov.uk; using it for COI was the v1.5.0 bug.
+    expect(r.irb_assessment.cover_letter_template).not.toMatch(/Article 14/);
+  });
+
+  it("HIPAA DMP cross-border obligations cite §164.514(b)(1) and (b)(2)", async () => {
+    const r = await review({
+      ...MINIMAL_INTERVENTIONAL,
+      jurisdictions: ["us_irb"],
+      data_handling: "fully_identifiable",
+    });
+    const xfer =
+      r.irb_assessment.data_management_plan.cross_border_transfer_obligations.join(
+        " ",
+      );
+    expect(xfer).toMatch(/§164\.514\(b\)\(2\)/);
+    expect(xfer).toMatch(/§164\.514\(b\)\(1\)/);
+  });
+});
+
+describe("irb_review — v1.5.1 decision-tree correctness fixes", () => {
+  it("NIH funding + US → coi_framework='phs_42_cfr_50', required=true (v1.5.1: was 'none')", async () => {
+    const r = await review({
+      ...MINIMAL_RETROSPECTIVE,
+      funding_source: "nih",
+    });
+    expect(r.irb_assessment.coi_disclosure_required).toBe(true);
+    expect(r.irb_assessment.coi_framework).toBe("phs_42_cfr_50");
+  });
+
+  it("other_government funding + US → coi_framework='phs_42_cfr_50' (CDC/AHRQ etc.)", async () => {
+    const r = await review({
+      ...MINIMAL_RETROSPECTIVE,
+      funding_source: "other_government",
+    });
+    expect(r.irb_assessment.coi_disclosure_required).toBe(true);
+    expect(r.irb_assessment.coi_framework).toBe("phs_42_cfr_50");
+  });
+
+  it("academic funding + US → no COI (academic-only is correctly excluded)", async () => {
+    const r = await review(MINIMAL_RETROSPECTIVE);
+    expect(r.irb_assessment.coi_disclosure_required).toBe(false);
+    expect(r.irb_assessment.coi_framework).toBe("none");
+  });
+
+  it("foundation funding + EU → no COI (CTR Annex I §M Point 66 only fires for industry sponsors)", async () => {
+    const r = await review({
+      ...MINIMAL_INTERVENTIONAL,
+      jurisdictions: ["eu_cec"],
+      funding_source: "foundation",
+    });
+    expect(r.irb_assessment.coi_disclosure_required).toBe(false);
+  });
+
+  it("nih + EU only → phs_42_cfr_50 does not apply (no us_irb), CTR Annex I requires industry", async () => {
+    const r = await review({
+      ...MINIMAL_INTERVENTIONAL,
+      jurisdictions: ["eu_cec"],
+      funding_source: "nih",
+    });
+    expect(r.irb_assessment.coi_disclosure_required).toBe(false);
+  });
+
+  it("interventional full-board rationale text NEVER falsely asserts 'greater-than-minimal' when risk_level='minimal'", async () => {
+    const r = await review({
+      study_design: "interventional",
+      intervention: "x",
+      indication: "y",
+      data_handling: "pseudonymized",
+      risk_level: "minimal",
+      funding_source: "industry",
+      jurisdictions: ["us_irb"],
+      // No marketed_drug hint → falls through to full_board
+    });
+    expect(r.irb_assessment.review_tier_us).toBe("full_board");
+    expect(r.irb_assessment.rationale).not.toMatch(
+      /at greater-than-minimal risk/,
+    );
+    expect(r.irb_assessment.rationale).toMatch(/marketed_drug=true|hint/i);
+  });
+
+  it("retrospective_chart_review + risk_level='unknown' + identifiable → full_board + warning", async () => {
+    const r = await review({
+      study_design: "retrospective_chart_review",
+      intervention: "x",
+      indication: "y",
+      data_handling: "pseudonymized",
+      risk_level: "unknown",
+      funding_source: "academic",
+      jurisdictions: ["us_irb"],
+    });
+    expect(r.irb_assessment.review_tier_us).toBe("full_board");
+    const warnings = r.irb_assessment.advisory_warnings.join(" ");
+    expect(warnings).toMatch(/risk_level.*unknown/i);
+  });
+
+  it("registry + risk_level='unknown' + identifiable → full_board + warning", async () => {
+    const r = await review({
+      study_design: "registry",
+      intervention: "x",
+      indication: "y",
+      data_handling: "pseudonymized",
+      risk_level: "unknown",
+      funding_source: "industry",
+      jurisdictions: ["us_irb"],
+    });
+    expect(r.irb_assessment.review_tier_us).toBe("full_board");
+    const warnings = r.irb_assessment.advisory_warnings.join(" ");
+    expect(warnings).toMatch(/risk_level.*unknown.*registry/i);
+  });
+
+  it("non_interventional_prospective + risk_level='unknown' → full_board + warning", async () => {
+    const r = await review({
+      study_design: "non_interventional_prospective",
+      intervention: "x",
+      indication: "y",
+      data_handling: "pseudonymized",
+      risk_level: "unknown",
+      funding_source: "academic",
+      jurisdictions: ["us_irb"],
+    });
+    expect(r.irb_assessment.review_tier_us).toBe("full_board");
+    const warnings = r.irb_assessment.advisory_warnings.join(" ");
+    expect(warnings).toMatch(/risk_level.*unknown.*non-interventional/i);
+  });
+
+  it("benign_behavioural=true + study_design='non_interventional_prospective' → contradictory-input warning", async () => {
+    const r = await review({
+      study_design: "non_interventional_prospective",
+      intervention: "x",
+      indication: "y",
+      data_handling: "pseudonymized",
+      risk_level: "minimal",
+      funding_source: "academic",
+      jurisdictions: ["us_irb"],
+      benign_behavioural: true,
+    });
+    const warnings = r.irb_assessment.advisory_warnings.join(" ");
+    expect(warnings).toMatch(
+      /benign_behavioural.*requires.*study_design.*interventional/i,
+    );
+  });
+
+  it("marketed_drug=true + risk_level='greater_than_minimal' → silent-drop warning", async () => {
+    const r = await review({
+      study_design: "non_interventional_prospective",
+      intervention: "x",
+      indication: "y",
+      data_handling: "pseudonymized",
+      risk_level: "greater_than_minimal",
+      funding_source: "industry",
+      jurisdictions: ["us_irb"],
+      marketed_drug: true,
+    });
+    expect(r.irb_assessment.review_tier_us).toBe("full_board");
+    const warnings = r.irb_assessment.advisory_warnings.join(" ");
+    expect(warnings).toMatch(
+      /marketed_drug.*greater_than_minimal|expedited cat 1 requires minimal/i,
+    );
+  });
+
+  it("interventional + benign_behavioural + minimal → icf_complexity_tier='basic' (was 'standard' pre-fix)", async () => {
+    const r = await review({
+      study_design: "interventional",
+      intervention: "5-min breathing exercise",
+      indication: "stress",
+      data_handling: "pseudonymized",
+      risk_level: "minimal",
+      funding_source: "academic",
+      jurisdictions: ["us_irb"],
+      benign_behavioural: true,
+    });
+    expect(r.irb_assessment.icf_complexity_tier).toBe("basic");
+  });
+
+  it("questionnaire_only + identifiable → cat 7 + advisory about §46.104(d)(2) second prong", async () => {
+    const r = await review({
+      study_design: "questionnaire_only",
+      intervention: "patient interviews",
+      indication: "treatment burden",
+      data_handling: "pseudonymized",
+      risk_level: "minimal",
+      funding_source: "academic",
+      jurisdictions: ["us_irb"],
+    });
+    expect(r.irb_assessment.review_tier_us).toBe("expedited");
+    const warnings = r.irb_assessment.advisory_warnings.join(" ");
+    expect(warnings).toMatch(
+      /§46\.104\(d\)\(2\).*second prong|disclosure of responses/i,
+    );
+  });
+});
+
+describe("irb_review — v1.5.1 untested-branch coverage", () => {
+  it("retrospective_chart_review + greater_than_minimal + pseudonymized → full_board", async () => {
+    const r = await review({
+      ...MINIMAL_RETROSPECTIVE,
+      data_handling: "pseudonymized",
+      risk_level: "greater_than_minimal",
+    });
+    expect(r.irb_assessment.review_tier_us).toBe("full_board");
+  });
+
+  it("registry + minimal + pseudonymized → expedited cat 5", async () => {
+    const r = await review({
+      study_design: "registry",
+      intervention: "oncology patient registry",
+      indication: "lung cancer",
+      data_handling: "pseudonymized",
+      risk_level: "minimal",
+      funding_source: "academic",
+      jurisdictions: ["us_irb"],
+    });
+    expect(r.irb_assessment.review_tier_us).toBe("expedited");
+    expect(r.irb_assessment.expedited_categories_us).toContain(5);
+  });
+
+  it("registry + greater_than_minimal + identifiable → full_board", async () => {
+    const r = await review({
+      study_design: "registry",
+      intervention: "oncology patient registry",
+      indication: "lung cancer",
+      data_handling: "pseudonymized",
+      risk_level: "greater_than_minimal",
+      funding_source: "industry",
+      jurisdictions: ["us_irb"],
+    });
+    expect(r.irb_assessment.review_tier_us).toBe("full_board");
+  });
+
+  it("non_interventional_prospective + no hint flags + minimal → expedited cat 4 (default-fallthrough path)", async () => {
+    const r = await review({
+      study_design: "non_interventional_prospective",
+      intervention: "real-world outcomes study",
+      indication: "rheumatoid arthritis",
+      data_handling: "pseudonymized",
+      risk_level: "minimal",
+      funding_source: "academic",
+      jurisdictions: ["us_irb"],
+    });
+    expect(r.irb_assessment.review_tier_us).toBe("expedited");
+    expect(r.irb_assessment.expedited_categories_us).toEqual([4]);
+  });
+
+  it("hint precedence: marketed_drug + noninvasive_collection both true → cat 1 wins", async () => {
+    const r = await review({
+      study_design: "non_interventional_prospective",
+      intervention: "post-marketing saliva biomarker study",
+      indication: "T2D",
+      data_handling: "pseudonymized",
+      risk_level: "minimal",
+      funding_source: "industry",
+      jurisdictions: ["us_irb"],
+      marketed_drug: true,
+      noninvasive_collection: true,
+    });
+    expect(r.irb_assessment.expedited_categories_us).toContain(1);
+    expect(r.irb_assessment.expedited_categories_us).not.toContain(3);
+  });
+
+  it("secondary_data_analysis + fully_identifiable + no broad_consent → full_board", async () => {
+    const r = await review({
+      study_design: "secondary_data_analysis",
+      intervention: "EHR linkage",
+      indication: "CKD outcomes",
+      data_handling: "fully_identifiable",
+      risk_level: "minimal",
+      funding_source: "nih",
+      jurisdictions: ["us_irb"],
+    });
+    expect(r.irb_assessment.review_tier_us).toBe("full_board");
+  });
+
+  it("specimen_repository + fully_identifiable + no broad_consent → full_board", async () => {
+    const r = await review({
+      study_design: "specimen_repository",
+      intervention: "tissue bank for future studies",
+      indication: "colorectal cancer",
+      data_handling: "fully_identifiable",
+      risk_level: "minimal",
+      funding_source: "academic",
+      jurisdictions: ["us_irb"],
+    });
+    expect(r.irb_assessment.review_tier_us).toBe("full_board");
   });
 });

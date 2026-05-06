@@ -93,7 +93,7 @@ export type IcfTier = "basic" | "standard" | "complex";
 
 export type CoiFramework =
   | "phs_42_cfr_50"
-  | "eu_ctr_article_14"
+  | "eu_ctr_annex_i_point_66"
   | "both"
   | "none";
 

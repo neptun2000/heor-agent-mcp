@@ -549,6 +549,132 @@ describe("jca_pico_scope — scope eligibility (Reg 2021/2282)", () => {
   });
 });
 
+// ---- Per-country HFrEF comparator depth (design log #18) ---------------
+// Closes the remaining Slide 7 gap vs Claude.ai: HEORAgent now produces
+// per-country zVT detail for cardiovascular_hfref instead of the generic
+// "country-specific SoC" placeholder.
+
+describe("jca_pico_scope — cardiovascular HFrEF per-country depth", () => {
+  it("classifies HFrEF as cardiovascular_hfref (not generic cardiovascular)", async () => {
+    const r = await scope({
+      drug: "dapagliflozin",
+      indication: "heart failure with reduced ejection fraction",
+      drug_class: "small_molecule",
+      jurisdictions: ["de"],
+    });
+    // Indication category exposed via the matrix
+    const matrix = r.pico_matrix as unknown as {
+      indication_category: string;
+    };
+    expect(matrix.indication_category).toBe("cardiovascular_hfref");
+  });
+
+  it("DE returns 3 zVT-style scenarios (ACEi/ARB GDMT, ARNI GDMT, empagliflozin)", async () => {
+    const r = await scope({
+      drug: "dapagliflozin",
+      indication: "HFrEF",
+      drug_class: "small_molecule",
+      jurisdictions: ["de"],
+    });
+    const de = r.pico_matrix.country_specific.find(
+      (c) => c.jurisdiction === "de",
+    );
+    expect(de).toBeDefined();
+    expect(de!.comparators.length).toBeGreaterThanOrEqual(3);
+    const molecules = de!.comparators.map((c) => c.molecule).join(" | ");
+    expect(molecules).toMatch(/ACEi.ARB-based GDMT/);
+    expect(molecules).toMatch(/ARNI-based GDMT/);
+    expect(molecules.toLowerCase()).toMatch(/empagliflozin/);
+  });
+
+  it("FR distinguishes SMR vs ASMR comparators", async () => {
+    const r = await scope({
+      drug: "dapagliflozin",
+      indication: "heart failure with reduced ejection fraction",
+      drug_class: "small_molecule",
+      jurisdictions: ["fr"],
+    });
+    const fr = r.pico_matrix.country_specific.find(
+      (c) => c.jurisdiction === "fr",
+    );
+    const t = (fr?.comparators ?? [])
+      .map((c) => `${c.molecule} :: ${c.rationale}`)
+      .join("\n");
+    expect(t).toMatch(/SMR/);
+    expect(t).toMatch(/ASMR/);
+  });
+
+  it("NL splits ARNI-eligible vs ARNI-ineligible patients", async () => {
+    const r = await scope({
+      drug: "dapagliflozin",
+      indication: "reduced ejection fraction",
+      drug_class: "small_molecule",
+      jurisdictions: ["nl"],
+    });
+    const nl = r.pico_matrix.country_specific.find(
+      (c) => c.jurisdiction === "nl",
+    );
+    const t = (nl?.comparators ?? []).map((c) => `${c.molecule}`).join(" | ");
+    expect(t.toLowerCase()).toMatch(/arni-eligible/);
+    expect(t.toLowerCase()).toMatch(/arni-ineligible/);
+  });
+
+  it("ES references Spanish IPT 1L/2L stepwise positioning", async () => {
+    const r = await scope({
+      drug: "dapagliflozin",
+      indication: "HFrEF",
+      drug_class: "small_molecule",
+      jurisdictions: ["es"],
+    });
+    const es = r.pico_matrix.country_specific.find(
+      (c) => c.jurisdiction === "es",
+    );
+    const t = (es?.comparators ?? [])
+      .map((c) => `${c.molecule} :: ${c.rationale}`)
+      .join("\n");
+    expect(t).toMatch(/Spanish IPT|IPT/);
+  });
+
+  it("HFrEF outcomes prioritise CV death + HF hospitalization (not generic 'remission')", async () => {
+    const r = await scope({
+      drug: "dapagliflozin",
+      indication: "HFrEF",
+      drug_class: "small_molecule",
+      jurisdictions: ["de"],
+    });
+    const de = r.pico_matrix.country_specific.find(
+      (c) => c.jurisdiction === "de",
+    );
+    const outcomes = (de?.outcome_priorities ?? []).join(",");
+    expect(outcomes).toMatch(/CV_death/);
+    expect(outcomes).toMatch(/HF_hospitalization/);
+  });
+
+  it("does NOT regress the generic cardiovascular branch (e.g., hypertension)", async () => {
+    const r = await scope({
+      drug: "drugX",
+      indication: "hypertension",
+      drug_class: "small_molecule",
+      jurisdictions: ["de"],
+    });
+    const matrix = r.pico_matrix as unknown as {
+      indication_category: string;
+    };
+    expect(matrix.indication_category).toBe("cardiovascular");
+  });
+
+  it("triggers heterogeneity warning when multi-country HFrEF returns ≥3 distinct comparators", async () => {
+    const r = await scope({
+      drug: "dapagliflozin",
+      indication: "HFrEF",
+      drug_class: "small_molecule",
+      jurisdictions: ["de", "fr", "it", "es", "nl"],
+    });
+    expect(r.pico_matrix.heterogeneity_warning).toBe(true);
+    expect(r.pico_matrix.distinct_comparator_count).toBeGreaterThanOrEqual(3);
+  });
+});
+
 // ---- NICE TA precedent surfacing in hta_dossier ------------------------
 // Closes the TA902 vs TA679 prompt-error gap exposed by the management
 // benchmark — see design log #16.

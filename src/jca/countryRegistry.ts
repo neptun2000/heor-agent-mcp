@@ -45,12 +45,30 @@ function chronicOutcomePriority(): OutcomePriority[] {
   return ["HRQoL", "remission", "AE", "other"];
 }
 
+function hfrefOutcomePriority(): OutcomePriority[] {
+  // EuroQol Annex II preference + DAPA-HF / EMPEROR-Reduced primary
+  // composite. CV death and HF hospitalization sit at the top of the
+  // patient-relevant outcomes hierarchy for HFrEF; HRQoL via KCCQ/EQ-5D
+  // is a key secondary.
+  return [
+    "CV_death",
+    "HF_hospitalization",
+    "all_cause_mortality",
+    "HRQoL",
+    "NYHA_progression",
+    "AE",
+  ];
+}
+
 function outcomePriorityFor(category: IndicationCategory): OutcomePriority[] {
   if (category === "oncology_nsclc" || category === "oncology_other") {
     return oncologyOutcomePriority();
   }
   if (category === "ibd_uc" || category === "ibd_cd") {
     return ibdOutcomePriority();
+  }
+  if (category === "cardiovascular_hfref") {
+    return hfrefOutcomePriority();
   }
   return chronicOutcomePriority();
 }
@@ -128,6 +146,120 @@ function genericComparators(
   ];
 }
 
+/**
+ * Per-country comparator universe for HFrEF. Curated against the dapagliflozin
+ * + empagliflozin + sacubitril-valsartan reimbursement landscape (post-TA679,
+ * post-TA773, post-TA388). Closes the per-country-depth gap design log #15
+ * exposed when Claude.ai's HFrEF dossier had country-specific zVT detail
+ * (DE 3 zVT scenarios, FR ASMR vs SMR, NL ARNI-eligible vs ineligible) but
+ * HEORAgent's `jca_pico_scope` returned the generic "country-specific SoC"
+ * placeholder. See design log #18.
+ *
+ * Each country has multiple distinct comparator entries reflecting either
+ * the zVT structure that body uses (Germany's G-BA defines several zVT
+ * scenarios per indication and rates each separately) or the value
+ * framework's distinct comparator universes (HAS evaluates SMR against
+ * placebo-on-GDMT and ASMR against the in-class active comparator).
+ */
+function cardiovascularHfrefComparators(
+  country: Jurisdiction,
+): ComparatorEntry[] {
+  const instruments = instrumentsFor("cardiovascular_hfref");
+
+  // Common in-class active comparator across most jurisdictions
+  const empa: ComparatorEntry = {
+    molecule: "empagliflozin",
+    rationale: `In-class SGLT2 inhibitor active comparator (NICE TA773 / EMPEROR-Reduced). ITC via DAPA-HF + EMPEROR-Reduced or Zannad 2020 IPD pooled meta-analysis (Lancet) is the standard route in ${country.toUpperCase()}.`,
+    outcome_instrument_preferences: instruments,
+  };
+
+  // Common comparator: optimised GDMT placebo (ACEi/ARB + beta-blocker + MRA)
+  const gdmtAceI: ComparatorEntry = {
+    molecule: "ACEi/ARB-based GDMT (no SGLT2i)",
+    rationale: `Optimised standard care: ACE inhibitor or ARB + beta-blocker + MRA, without SGLT2 inhibitor. Represents the trial control arm of DAPA-HF (placebo + GDMT). Used as the SMR / cost-utility anchor.`,
+    outcome_instrument_preferences: instruments,
+  };
+
+  // ARNI-based GDMT (sacubitril-valsartan replacing ACEi/ARB per ESC 2021)
+  const gdmtArni: ComparatorEntry = {
+    molecule:
+      "ARNI-based GDMT (sacubitril-valsartan + beta-blocker + MRA, no SGLT2i)",
+    rationale: `ESC 2021 / NICE TA388-aligned optimised GDMT with ARNI replacing ACEi/ARB. Distinct ${country.toUpperCase()} sub-population: ARNI-eligible patients on optimised therapy without SGLT2i.`,
+    outcome_instrument_preferences: instruments,
+  };
+
+  if (country === "de") {
+    // G-BA / IQWiG: zVT typically defines 2-3 patient-relevant scenarios.
+    // For HFrEF + SGLT2i, the canonical zVT split is by background therapy
+    // (ACEi/ARB-based vs ARNI-based) and by in-class comparator (empa).
+    return [gdmtAceI, gdmtArni, empa];
+  }
+  if (country === "fr") {
+    // HAS: distinguishes SMR (medical service rendered, vs placebo+GDMT)
+    // and ASMR (added benefit, vs in-class active comparator).
+    return [
+      {
+        molecule: "ARNI-based GDMT (no SGLT2i) — for SMR",
+        rationale: `HAS SMR anchor: optimised standard care including sacubitril-valsartan where appropriate. Reflects DAPA-HF placebo arm + ESC-aligned GDMT.`,
+        outcome_instrument_preferences: instruments,
+      },
+      {
+        molecule: "empagliflozin — for ASMR",
+        rationale: `HAS ASMR anchor: in-class active comparator. The added benefit (vs Jardiance) drives ASMR rating. ITC via DAPA-HF + EMPEROR-Reduced.`,
+        outcome_instrument_preferences: instruments,
+      },
+    ];
+  }
+  if (country === "it") {
+    // AIFA: innovativeness criteria consider unmet need + clinical benefit
+    // + quality of evidence. In-class active comparator features prominently
+    // for the "added therapeutic value" assessment.
+    return [gdmtAceI, empa];
+  }
+  if (country === "es") {
+    // AEMPS / RedETS IPT: stepwise positioning. Spanish IPT typically describes
+    // 1L ACEi/ARB + beta-blocker, 2L MRA, then SGLT2i add-on. Regional
+    // (autonomous community) decisions can add restrictions post-IPT.
+    return [
+      {
+        molecule: "ACEi/ARB + beta-blocker + MRA (no SGLT2i, no ARNI)",
+        rationale: `Spanish IPT 1L/2L positioning: standard triple therapy without SGLT2i. Reflects the population for which dapagliflozin add-on is being considered.`,
+        outcome_instrument_preferences: instruments,
+      },
+      empa,
+      {
+        molecule: "sacubitril-valsartan + beta-blocker + MRA",
+        rationale: `Sometimes raised by autonomous communities as an alternative anchor given sacubitril-valsartan's established place in Spanish HFrEF therapy.`,
+        outcome_instrument_preferences: instruments,
+      },
+    ];
+  }
+  if (country === "nl") {
+    // ZIN: ARNI-eligible vs ARNI-ineligible/intolerant is a typical
+    // sub-population split because the cost-utility differs materially.
+    return [
+      {
+        molecule: "ARNI-based GDMT (no SGLT2i) — ARNI-eligible patients",
+        rationale: `ZIN sub-population: patients eligible for and tolerant of sacubitril-valsartan. Anchor uses ARNI in background.`,
+        outcome_instrument_preferences: instruments,
+      },
+      {
+        molecule: "ACEi/ARB-based GDMT (no SGLT2i) — ARNI-ineligible patients",
+        rationale: `ZIN sub-population: patients ineligible for or intolerant of sacubitril-valsartan. Anchor uses ACEi/ARB in background.`,
+        outcome_instrument_preferences: instruments,
+      },
+      empa,
+    ];
+  }
+  if (country === "uk") {
+    // Post-Brexit context only — NICE TA679 already established empagliflozin
+    // as a relevant in-class comparator; SoC includes ARNI per NG106.
+    return [gdmtArni, empa];
+  }
+  // eu_other or unknown — degrade gracefully
+  return [gdmtAceI, empa];
+}
+
 function comparatorsFor(
   country: Jurisdiction,
   category: IndicationCategory,
@@ -139,6 +271,9 @@ function comparatorsFor(
   }
   if (category === "ibd_uc") {
     return ibdUcBiologicComparators(country);
+  }
+  if (category === "cardiovascular_hfref") {
+    return cardiovascularHfrefComparators(country);
   }
   // Drug-class-aware fallback for unknown indications
   if (category === "oncology_other" || category === "oncology_nsclc") {
@@ -262,6 +397,19 @@ export function classifyIndication(indication: string): IndicationCategory {
     return "diabetes_t2";
   }
   if (x.includes("obesity") || x.includes("overweight")) return "obesity";
+  // HFrEF-specific (sub-class of cardiovascular). Detected when any of the
+  // common phrasings appear. Match HFrEF before generic cardiovascular so
+  // the more-specific category wins. Word boundaries prevent "hfref" from
+  // matching "preferred" etc. — but it's also rare enough as a token that
+  // a substring match is fine.
+  if (
+    x.includes("hfref") ||
+    x.includes("heart failure with reduced ejection") ||
+    x.includes("reduced ejection fraction") ||
+    x.includes("heart failure reduced ejection")
+  ) {
+    return "cardiovascular_hfref";
+  }
   if (
     x.includes("cardiovascular") ||
     x.includes("heart failure") ||

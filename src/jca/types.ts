@@ -23,6 +23,10 @@ export type OutcomePriority =
   | "HRQoL"
   | "AE"
   | "remission"
+  | "CV_death"
+  | "HF_hospitalization"
+  | "all_cause_mortality"
+  | "NYHA_progression"
   | "other";
 
 export interface ComparatorEntry {
@@ -53,6 +57,7 @@ export type IndicationCategory =
   | "diabetes_t2"
   | "obesity"
   | "cardiovascular"
+  | "cardiovascular_hfref"
   | "rheumatology"
   | "neurology"
   | "rare_disease"

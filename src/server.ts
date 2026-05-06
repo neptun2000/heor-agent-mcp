@@ -101,6 +101,7 @@ import {
   handlePvSignalWorkflow,
   pvSignalWorkflowToolSchema,
 } from "./tools/pvSignalWorkflow.js";
+import { handleIrbReview, irbReviewToolSchema } from "./tools/irbReview.js";
 import { randomUUID } from "node:crypto";
 import {
   trackToolCall,
@@ -260,6 +261,7 @@ function createMcpServer(
       jcaPicoScopeToolSchema,
       pvSignalWorkflowToolSchema,
       htaWorkflowToolSchema,
+      irbReviewToolSchema,
     ],
   }));
 
@@ -338,6 +340,9 @@ function createMcpServer(
           break;
         case "hta.workflow":
           result = await handleHtaWorkflow(args);
+          break;
+        case "irb.review":
+          result = await handleIrbReview(args);
           break;
         default:
           trackToolCall(

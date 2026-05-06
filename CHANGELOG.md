@@ -2,6 +2,43 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.5.0 (2026-05-06) — `irb_review` tool
+
+New IRB / Ethics Committee submission classifier (design log #21). Pure decision-tree logic, <300ms, no external I/O. Tool count 22 → 23.
+
+### Added — `irb_review` (`irb.review`)
+
+Classifies a planned study under 45 CFR 46 (US Common Rule) + EU CTR 536/2014 to produce an IRB submission scaffold. Inputs: study_design (7-enum), data_handling (5-enum), risk_level, funding_source, jurisdictions (us_irb / eu_cec), 4 vulnerable-population yes/no flags, optional pv_classification, optional expedited_category_claim, plus 9 hint flags that disambiguate exempt/expedited categories.
+
+Outputs:
+- **US tier:** Exempt §46.104 cat 1-8, expedited §46.110 cat 1-7, full-board §46.108. All 8 + all 7 categories reachable.
+- **EU tier:** national-only / ctr_multi_state (with ~60d / ~45d timelines) / non_interventional_only.
+- **Vulnerable populations:** Subpart B (pregnant) / C (prisoners) / D (children, with v2 age-tier-table commitment) / decisionally-impaired obligations.
+- **Data Management Plan:** GDPR Art. 9 special-category trigger (EU + non-anonymous), HIPAA §164.514 PHI flag (US + identifiable), de-identification method (Safe Harbor / Expert Determination / Pseudonymization / must_implement / not_required), cross-border transfer obligations.
+- **SAE reporting:** CTR 536/2014 Annex III (≤7d fatal, ≤15d other), FDA IND Safety (21 CFR 312.32), Post-marketing PSUR. `pv_classification.primary_category="PASS_imposed"` overrides to CTR Annex III regardless of jurisdiction.
+- **ICF complexity tier:** `complex` for full-board OR vulnerable, `basic` for minimal-risk + non-interventional + no vulnerable, `standard` otherwise.
+- **COI framework:** PHS 42 CFR 50 Subpart F (US) and/or EU CTR Article 14 (EU); fires when `funding_source="industry"`.
+- **Cover-letter template:** ready-to-paste 200-300-word block with drug, indication, review tier, COI status, SAE framework, vulnerable-population caveats.
+- **`irb_ruleset: "2026-05"`** stamped on every output for cache-bust correctness.
+
+### Sign-off ambiguities resolved (v1)
+
+- **A1 (multi-jurisdiction shape):** US-only → `review_tier_eu: null`; EU-only → `review_tier_us: null`, `expedited_categories_us: []`. Both populated when both jurisdictions present.
+- **A2 (expedited_category_claim mismatch):** Surface BOTH the investigator's claim and the tool's analysis in `advisory_warnings` — never silently override.
+- **A3 (`risk_level: "unknown"`):** Conservative default — interventional + unknown risk → full-board + warning. Preserves user safety over user convenience.
+- **A4 (ICF complexity tier rule):** complex if full-board OR any vulnerable; basic if minimal + non-interventional + no vulnerable; standard otherwise.
+
+### Tests
+
+57 new tests (683 total). Each Common Rule exempt category 1-8 reachable; each expedited category 1-7 reachable; full-board path; Subpart B/C/D layered correctly; GDPR Art. 9 fires only on EU + non-anon; HIPAA §164.514 fires only on US + identifiable; CTR/FDA/PSUR SAE frameworks; PASS_imposed override; cover-letter content + word count; irb_ruleset stamp; <300ms perf; A1/A2/A3/A4 regression coverage.
+
+### v2 deferrals (committed in design log #21)
+
+- UK HRA/REC IRAS pathway, Japan PMDA + ECRIN, Canada TCPS-2.
+- Full per-jurisdiction pediatric Subpart D age-tier table (US state-by-state assent ages, EU member-state variations).
+- Paired `icf_readability_check` tool — Flesch-Kincaid grading + medical-jargon detection on actual ICF text.
+- IRB cover-letter PDF export via existing DOCX formatter.
+
 ## v1.4.2 (2026-05-06) — code-review fixes for v1.3.2 / v1.4.0 / v1.4.1
 
 Three releases (v1.3.2 NICE TA precedents + JCA scope eligibility, v1.4.0 hta_workflow orchestrator, v1.4.1 HFrEF per-country comparator depth) shipped to production without independent review. Three parallel code reviews surfaced 10 HIGH and 8 MEDIUM findings of regulatory consequence. The headline "CRITICAL" turned out to be a reviewer hallucination (TA773 → TA849 swap that would have introduced a real fabrication; verified via webfetch against nice.org.uk that TA773 is in fact correct for empagliflozin HFrEF). All real findings addressed.

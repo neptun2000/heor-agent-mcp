@@ -27,6 +27,91 @@ Two LLM-input-shape fixes surfaced by a PostHog audit of `project.create` and `e
 
 Canonical lowercase still works exactly as before. New code only adds tolerance for upper/mixed case. No API surface changes; no migration needed.
 
+## v1.6.1 (2026-05-07) — `hta_workflow` GVD routing + Phase 3.5 unmet-need integration
+
+Wires the new `evidence.unmet_need` tool from v1.6.0 into the `hta_workflow` orchestrator as Phase 3.5, between risk-of-bias and cost-effectiveness. Also extends `hta_workflow` to route GVD-specific section generators when `hta_body: "gvd"`.
+
+### Added
+- **`hta_workflow` Phase 3.5** — automatically calls `evidence.unmet_need` and pipes the structured `unmet_need_summary` into the dossier draft. Default-on for any `hta_body` that surfaces unmet-need (NICE STA, EU JCA, GVD); skippable via `skip_unmet_need: true` when running an iteration.
+- **`hta_workflow` GVD routing** — when `hta_body: "gvd"`, the orchestrator routes through the v1.6.0 GVD section generators (Sections 1-13) instead of the generic skeleton, producing per-market subsections (US/UK/EU5/JP) and the `gvd_evidence_pack` pipe interface.
+
+### Fixed
+- **Phase 3.5 unmet-need parsing.** Initial integration assumed the handler wrapped output in `{content: ...}`; in practice `evidence.unmet_need` returns the assessment object directly. Phase 3.5 now reads `result.unmet_need_summary` directly. Caught immediately post-1.6.0; shipped as 1.6.1 patch.
+
+## v1.6.0 (2026-05-07) — `evidence.unmet_need` tool + Global Value Dossier section generators
+
+Two design-log items shipped together. Tool count 25 → 26.
+
+### Added — `evidence.unmet_need` (design log #23)
+
+New tool: structured 4-dimension unmet-need framework. Inputs: indication + jurisdiction + optional `literature_evidence` (output from `literature_search`). Output: markdown report + structured `unmet_need_summary` JSON object that pipes into `hta_dossier({hta_body:"gvd"})` Section 4 and `hta_dossier({hta_body:"nice"})` for the NICE Severity & Inequalities section.
+
+Four dimensions:
+1. **Disease burden** — incidence/prevalence, mortality, morbidity, demographics
+2. **Treatment landscape gap** — current SoC limitations, response rates, AE profiles, off-label patterns
+3. **QoL impact** — EQ-5D / disease-specific instruments, work productivity, caregiver burden
+4. **Economic burden** — direct medical, indirect costs, productivity loss, healthcare utilisation
+
+Per-jurisdiction depth (light v1): adds country-specific epidemiology and SoC where the user supplies a jurisdiction code. Citations carry URL with pre-validation. 12+ tests.
+
+### Added — Global Value Dossier section generators (design log #22)
+
+Existing `hta_dossier({hta_body:"gvd"})` was a 13-section skeleton emitting generic boilerplate. v1.6.0 ships actual section generators that consume `literature_search` / `risk_of_bias` / `evidence_indirect` / `cost_effectiveness_model` / `budget_impact_model` / `evidence.unmet_need` outputs and produce GVD-specific prose:
+
+- **Section 1** — Disease background (consumes `evidence.unmet_need` Dimension 1)
+- **Section 2** — Treatment landscape (consumes `evidence.unmet_need` Dimension 2 + `literature_search` HTA precedent)
+- **Section 3** — Product profile (drug + indication metadata)
+- **Section 4** — Unmet need (full `evidence.unmet_need` output)
+- **Section 5-7** — Clinical evidence (consumes screened literature + RoB + GRADE)
+- **Section 8** — Economic evaluation (consumes `cost_effectiveness_model` results)
+- **Section 9** — Budget impact (consumes `budget_impact_model` results)
+- **Section 10** — Pricing & access (per-market subsections US/UK/EU5/JP)
+- **Section 11** — Reimbursement landscape per market
+- **Section 12** — Pharmacovigilance (consumes `pv_classification` if supplied)
+- **Section 13** — Patient access programs
+
+Plus a `gvd_evidence_pack` pipe interface so GVD output can pre-fill country-specific dossiers (NICE / JCA / AMCP). DOCX table styling. AMCP Format 4.1 deliberately deferred to v1.7. 15+ tests.
+
+## v1.5.2 (2026-05-07) — live-formula XLSX + neurology clinical scales
+
+Two more design-log items in a single release. Both surfaced gaps from the v1.4.x management benchmark vs Claude.ai (slide 6 "❌ today" → ✅).
+
+### Added — `evidence.clinical_scale` (design log #19)
+
+New umbrella tool covering 6 neurology and cognitive scales:
+- **UMSARS** (MSA — orphan, Phase-2-2028 JCA scope)
+- **UPDRS** + **MDS-UPDRS** (Parkinson's)
+- **ADAS-Cog**, **MoCA**, **MMSE** (Alzheimer's / cognitive)
+
+Per-scale total + subscale scoring, MCID-based responder analysis (Krismer 2017 / Horváth 2015 / Andrews 2019 thresholds), trajectory comparison vs natural-history reference cohorts (NNIPPS / EMSA-SG / PPMI / ADNI summary-level v1). Time-to-milestone integration via `survival_fitting`.
+
+Three new JCA indication sub-classes added to `jca_pico_scope`:
+- `neurology_msa` — orphan, Phase 2 (2028) JCA scope
+- `neurology_pd` — Phase 3 (2030) general medicines
+- `neurology_ad` — Phase 3 (2030)
+
+Per-country comparator universes:
+- **MSA**: BSC across all (no DMTs in standard care)
+- **PD**: levodopa / rasagiline / DBS depending on stage
+- **AD**: donepezil / memantine / lecanemab / donanemab depending on stage
+
+17 tests. Tool count 24 → 25.
+
+### Changed — live-formula XLSX upgrade (design log #20)
+
+Refactored `formatters/xlsx.ts` so the XLSX output for `cost_effectiveness_model` and `budget_impact_model` emits **live Excel formulas** instead of pre-computed values:
+
+- **New "Markov Trace" sheet** — `n_cycles` rows × 13 formula columns. Each row references the Inputs sheet so editing a transition probability or cost recomputes the trace in-place.
+- **Transition Matrix** cells reference Inputs sheet directly.
+- **CEAC** uses COUNTIFS formulas referencing the PSA sheet — drag the WTP threshold and the curve recalculates.
+- **Summary** uses SUMPRODUCT referencing Markov Trace — ICER updates as inputs change.
+
+PSA per-iteration values are kept as static numbers (audit reproducibility — re-running PSA stochasticity inside Excel would break determinism).
+
+Same treatment for `budget_impact_model` XLSX (year-by-year SUM formulas referencing the inputs sheet).
+
+15 tests. Closes the v1.4.x management benchmark "partial" rating on Slide 6. Customers can now genuinely edit any input → trace recomputes → ICER updates → CEAC curve shifts.
+
 ## v1.5.1 (2026-05-06) — `irb_review` code-review fixes
 
 Three parallel reviewers (regulatory accuracy with WebFetch verification, decision-tree correctness, test-gap analysis) audited v1.5.0 within hours of ship. **3 HIGH regulatory citation errors + 4 HIGH correctness bugs + 6 untested branches** identified. All real findings verified against primary sources (eCFR via govinfo.gov / Cornell LII; EU CTR 536/2014 via legislation.gov.uk + European Commission) and patched. Total tests 683 → 708.

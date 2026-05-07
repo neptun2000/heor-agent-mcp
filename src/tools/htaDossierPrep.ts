@@ -15,6 +15,7 @@ import {
   extractTaNumber,
   findPrecedents,
 } from "../data/niceTaPrecedents.js";
+import { routeGvdSections } from "./htaDossier/gvdSectionRouter.js";
 
 const DossierSchema = z.object({
   hta_body: z.enum(["nice", "ema", "fda", "iqwig", "has", "jca", "gvd"]),
@@ -999,6 +1000,52 @@ export async function handleHtaDossierPrep(
     }
   }
 
+  // ── GVD: delegate to GvdSectionRouter for section-specific prose generators
+  if (params.hta_body === "gvd") {
+    const {
+      lines: gvdLines,
+      gaps: gvdGaps,
+      gvd_evidence_pack,
+    } = routeGvdSections(params);
+
+    for (const line of gvdLines) {
+      lines.push(line);
+    }
+
+    const gvdGapsList = gvdGaps;
+    if (gvdGapsList.length > 0) {
+      lines.push(`---`);
+      lines.push(`## Gap Analysis`);
+      lines.push(
+        `The following ${gvdGapsList.length} section(s) require additional information:`,
+      );
+      gvdGapsList.forEach((g) => lines.push(`- ⚠️ ${g}`));
+      lines.push("");
+      for (const g of gvdGapsList) {
+        audit = addWarning(
+          audit,
+          `GVD Section "${g}" requires additional input`,
+        );
+      }
+    }
+
+    // Append gvd_evidence_pack as a JSON code block for downstream consumption
+    lines.push(`---`);
+    lines.push(`## GVD Evidence Pack`);
+    lines.push(
+      `The following structured evidence pack (\`gvd_evidence_pack\`) can be piped into country-specific \`hta_dossier\` calls to pre-fill clinical evidence sections:`,
+    );
+    lines.push("");
+    lines.push("```json");
+    lines.push(JSON.stringify(gvd_evidence_pack, null, 2));
+    lines.push("```");
+
+    return {
+      content: lines.join("\n"),
+      audit,
+    };
+  }
+
   const gaps: string[] = [];
   for (const sectionName of sections) {
     const { content, status } = buildSection(
@@ -1008,11 +1055,11 @@ export async function handleHtaDossierPrep(
       params.evidence_summary,
     );
     lines.push(`### ${sectionName}`);
-    // Inject unmet_need_summary into the "Unmet Need" section for NICE and GVD
+    // Inject unmet_need_summary into the "Unmet Need" section for NICE
     if (
       sectionName === "Unmet Need" &&
       params.unmet_need_summary &&
-      (params.hta_body === "nice" || params.hta_body === "gvd")
+      params.hta_body === "nice"
     ) {
       lines.push(params.unmet_need_summary);
       lines.push("");

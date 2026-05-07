@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { caseInsensitiveEnum } from "../util/caseInsensitive.js";
 import type { ToolResult } from "../providers/types.js";
 import {
   createAuditRecord,
@@ -44,15 +45,19 @@ const RiskOfBiasSchema = z.object({
     },
     z.array(StudyInputSchema).min(1, "At least 1 study required"),
   ),
-  instrument: z
-    .enum(["auto", "rob2", "robins_i", "amstar2"])
+  instrument: caseInsensitiveEnum([
+    "auto",
+    "rob2",
+    "robins_i",
+    "amstar2",
+  ] as const)
     .default("auto")
     .describe("Assessment instrument. auto detects from study_type."),
   outcomes: z
     .array(z.string())
     .optional()
     .describe("Outcomes of interest for domain-level context"),
-  output_format: z.enum(["text", "json"]).optional(),
+  output_format: caseInsensitiveEnum(["text", "json"] as const).optional(),
 });
 
 // ── Instrument detection ──────────────────────────────────────────────────────
@@ -813,7 +818,7 @@ export async function handleRiskOfBias(
 export const riskOfBiasToolSchema = {
   name: "evidence.risk_of_bias",
   description:
-    "Assess risk of bias for a set of studies using the appropriate Cochrane instrument: RoB 2 (RCTs), ROBINS-I (observational studies), or AMSTAR-2 (systematic reviews/meta-analyses). Instrument is auto-detected from study_type or can be specified. Judgments are inferred from abstract text — domains without sufficient reporting are marked Unclear. Returns a per-study table and a rob_results object to pass to hta_dossier_prep for evidence-based GRADE assessment.",
+    'Assess risk of bias for a set of studies using the appropriate Cochrane instrument: RoB 2 (RCTs), ROBINS-I (observational studies), or AMSTAR-2 (systematic reviews/meta-analyses). Instrument is auto-detected from study_type or can be specified. Judgments are inferred from abstract text — domains without sufficient reporting are marked Unclear. Returns a per-study table and a rob_results object to pass to hta_dossier_prep for evidence-based GRADE assessment. Accepts `studies` as a single object OR an array; auto-wraps singletons. Enum values are case-insensitive — `"RoB2"`/`"rob2"`, `"AUTO"`/`"auto"` all work.',
   annotations: {
     title: "Risk of Bias Assessment",
     readOnlyHint: true,

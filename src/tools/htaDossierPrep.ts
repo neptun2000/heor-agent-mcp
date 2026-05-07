@@ -97,9 +97,12 @@ const DossierSchema = z.object({
     .object({
       affected_groups: z.array(z.string()).default([]),
       baseline_disparity_evidence: z.string().optional(),
-      intervention_impact: z
-        .enum(["narrows", "neutral", "widens", "unknown"])
-        .default("unknown"),
+      intervention_impact: caseInsensitiveEnum([
+        "narrows",
+        "neutral",
+        "widens",
+        "unknown",
+      ] as const).default("unknown"),
       mitigation_plan: z.string().optional(),
     })
     .optional()
@@ -1194,7 +1197,7 @@ export async function handleHtaDossierPrep(
 export const htaDossierPrepToolSchema = {
   name: "hta.dossier",
   description:
-    "Structure evidence into HTA body-specific submission format (NICE STA, EMA, FDA, IQWiG, HAS, EU JCA, or Global Value Dossier). Produces draft sections with gap analysis and auto-GRADE evidence quality tables. Accepts output from literature.search and models.cost_effectiveness.",
+    'Structure evidence into HTA body-specific submission format (NICE STA, EMA, FDA, IQWiG, HAS, EU JCA, or Global Value Dossier). Produces draft sections with gap analysis and auto-GRADE evidence quality tables. Accepts output from literature.search and models.cost_effectiveness. Enum values are case-insensitive — `"NICE"`/`"nice"`, `"STA"`/`"sta"` etc. all work.',
   annotations: {
     title: "HTA Dossier Preparation",
     readOnlyHint: true,

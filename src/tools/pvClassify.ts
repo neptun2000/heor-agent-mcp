@@ -244,7 +244,7 @@ export async function handlePvClassify(rawInput: unknown): Promise<ToolResult> {
 export const pvClassifyToolSchema = {
   name: "pv.classify",
   description:
-    "Classify a planned study into its EMA pharmacovigilance regulatory category (PASS imposed/voluntary, PAES, RMP Annex 4, DUS, active surveillance registry, pregnancy registry, spontaneous reporting, ICH E2E plan). Returns the matching GVP module + ENCePP study-category label (not a registered protocol ID — consult the ENCePP Code of Conduct checklist for templates) + submission obligations + RMP implications + FDA analogue. Use BEFORE preparing an HTA dossier or before designing a post-authorisation study. Pass the structured `pv_classification` output to `hta_dossier` to populate its Pharmacovigilance Plan section.",
+    'Classify a planned study into its EMA pharmacovigilance regulatory category (PASS imposed/voluntary, PAES, RMP Annex 4, DUS, active surveillance registry, pregnancy registry, spontaneous reporting, ICH E2E plan). Returns the matching GVP module + ENCePP study-category label (not a registered protocol ID — consult the ENCePP Code of Conduct checklist for templates) + submission obligations + RMP implications + FDA analogue. Use BEFORE preparing an HTA dossier or before designing a post-authorisation study. Pass the structured `pv_classification` output to `hta_dossier` to populate its Pharmacovigilance Plan section. Enum values are case-insensitive — `"RCT"`/`"rct"`, `"EU"`/`"eu"` etc. all work.',
   annotations: {
     title: "PV Study Classification",
     readOnlyHint: true,

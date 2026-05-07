@@ -29,6 +29,8 @@ export function caseInsensitiveEnum<T extends readonly [string, ...string[]]>(
   );
   return z.preprocess((val) => {
     if (typeof val !== "string") return val;
-    return lookup.get(val.toLowerCase()) ?? val;
+    // Trim leading/trailing whitespace before normalising — LLM callers
+    // sometimes emit "  NICE  " from concatenated string templates.
+    return lookup.get(val.trim().toLowerCase()) ?? val;
   }, z.enum(values));
 }

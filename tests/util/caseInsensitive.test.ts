@@ -54,6 +54,25 @@ describe("caseInsensitiveEnum — unknown values still fail with Zod issue", () 
   });
 });
 
+describe("caseInsensitiveEnum — whitespace tolerance (v1.6.3)", () => {
+  it("trims leading whitespace: '  NICE'", () => {
+    expect(HTA.parse("  NICE")).toBe("nice");
+  });
+
+  it("trims trailing whitespace: 'icer '", () => {
+    expect(HTA.parse("icer ")).toBe("icer");
+  });
+
+  it("trims both sides + mixed case: '  Ema  '", () => {
+    expect(HTA.parse("  Ema  ")).toBe("ema");
+  });
+
+  it("rejects whitespace-only inputs", () => {
+    const r = HTA.safeParse("   ");
+    expect(r.success).toBe(false);
+  });
+});
+
 describe("caseInsensitiveEnum — non-string inputs", () => {
   it("passes non-string inputs through unchanged so Zod produces a normal type error", () => {
     const r = HTA.safeParse(42);

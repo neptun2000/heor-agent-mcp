@@ -2,6 +2,44 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.6.3 (2026-05-07) — code-review polish for v1.6.2 + Slack-digest hardening
+
+Two parallel reviewers audited v1.6.2 and the new Slack weekly-digest feature within hours of ship. Combined: 0 CRITICAL, 0 HIGH, 6 MEDIUM, 6 LOW. All real findings addressed; cosmetic items deferred. Total tests 833 → 838.
+
+### Fixed (schema, MCP server)
+
+- **Whitespace tolerance in `caseInsensitiveEnum`.** `val.trim().toLowerCase()` before lookup — `"  NICE  "` now normalises to `"nice"` instead of falling through to invalid_enum_value. Test file already comment-promised this; now wired. +4 regression tests.
+- **`risk_of_bias.instrument` + `risk_of_bias.output_format` + `hta_dossier.intervention_impact`** — three enums missed in v1.6.2's class-wide application. LLMs naturally pass `"RoB2"`, `"AUTO"`, `"Narrows"`. Now case-insensitive consistent with the rest of the surface.
+- **Tool description hints** — every case-normalised tool now explicitly advertises case-insensitivity in its top-level description so LLMs reading the JSON Schema (project_create / pv_classify / irb_review / hta_dossier / jca_pico_scope / risk_of_bias) actually learn the schema is permissive.
+
+### Fixed (Slack weekly digest)
+
+- **PostHog 200-with-error-field check** in `hogql()`. PostHog returns HTTP 200 with `{error: "..."}` for query-level failures (bad HogQL, quota exceeded, project ID mismatch). Pre-fix, the digest silently posted "0 events, 0 users" without surfacing why. Now throws a typed error.
+- **`runWeeklyDigest` Promise.all → `Promise.allSettled`** with per-source fallbacks. Single-source failure (esp. anonymous-rate-limited GitHub) no longer kills the whole digest. Failed sources surface as a "⚠️ Degraded sources this run: ..." prepended insight bullet so a missing GitHub-stars row is self-explanatory. PostHog stays load-bearing — both PostHog calls failing still throws.
+- **`AbortSignal.timeout(8000)` on every external fetch** (npm, GitHub, Railway health, npm registry, all 7 PostHog HogQL queries). Pre-fix, a single stalled call could eat the cron route's 60s budget and silently miss the Monday digest.
+- **Optional `GITHUB_TOKEN` env support.** Anonymous GitHub API limit is 60 req/hr per IP; Vercel functions share IP pools, so the limit is hit unexpectedly. A classic PAT (no scopes needed) raises the ceiling to 5,000/hr.
+
+### Added — pinning tests
+
+- `studies: {}` empty-object input — pins the documented degraded-but-non-erroring behavior (singleton-wrap → all-defaults → Unclear-on-all-domains result) so a future schema-strictness change can't silently break it.
+- `risk_of_bias.instrument` case-insensitive regression test.
+
+### Skipped (cosmetic)
+
+- Type inference widening (`z.ZodEffects` → `string` instead of `T[number]`) — only matters if we add discriminated-union switches downstream, which we haven't.
+- Misleading "constant-time" comment in cron route — `!==` is fine for our threat model on a 32-byte hex secret used only by Vercel infrastructure; comment removed.
+- `weekStart` doc-comment off-by-one — code is correct, comment was misleading; deferred.
+- Engagement-gap heuristic n=1 sample noise — wait until we have data showing it actually fires on noise, then tune.
+- Token-in-URL — accepted by design (bookmark UX).
+
+### Tests
+
+833 → 838 MCP tests passing (+4 trim regression + 1 studies:{} pinning + 1 instrument case-insensitive). 154/154 web tests still passing (Slack stats fixes are network-dependent paths; covered by type-check + manual audit, no fetch-mocking integration test added in this patch).
+
+### Non-breaking
+
+All changes are silent failure-mode hardening + LLM ergonomics. No API surface changes; no migration needed.
+
 ## v1.6.2 (2026-05-07) — schema hardening for LLM input shapes
 
 Two LLM-input-shape fixes surfaced by a PostHog audit of `project.create` and `evidence.risk_of_bias` errors.

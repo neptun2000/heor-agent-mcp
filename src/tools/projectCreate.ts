@@ -112,7 +112,7 @@ export async function handleProjectCreate(
 export const projectCreateToolSchema = {
   name: "project.create",
   description:
-    "Initialize a new HEOR project workspace with directory skeleton and project.yaml metadata. Idempotent — returns existing project if already created. Required before using the `project` parameter in other tools.",
+    'Initialize a new HEOR project workspace with directory skeleton and project.yaml metadata. Idempotent — returns existing project if already created. Required before using the `project` parameter in other tools. Enum values are case-insensitive — `"NICE"`, `"Nice"`, and `"nice"` all work for hta_targets.',
   annotations: {
     title: "Create Project Workspace",
     readOnlyHint: false,

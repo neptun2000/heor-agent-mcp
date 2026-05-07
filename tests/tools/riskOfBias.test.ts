@@ -481,5 +481,29 @@ describe("handleRiskOfBias", () => {
         /studies|at least 1/i,
       );
     });
+
+    it("auto-wraps empty object {} into [{defaults}] — emits Unclear-on-all-domains rather than rejecting", async () => {
+      // Documents the intentional behavior surfaced in the v1.6.2 review:
+      // singleton-wrap + StudyInputSchema's all-fields-optional defaults
+      // means studies:{} produces a degraded but non-erroring result.
+      // Pinned so a future schema-strictness change can't silently break it.
+      const r = await handleRiskOfBias({ studies: {} });
+      expect(r).toBeDefined();
+      expect(r.audit.tool).toBe("evidence.risk_of_bias");
+    });
+
+    it("instrument enum is case-insensitive (v1.6.3): 'RoB2' → rob2", async () => {
+      const r = await handleRiskOfBias({
+        studies: [
+          {
+            title: "RCT",
+            abstract: "randomized double-blind",
+            study_type: "rct",
+          },
+        ],
+        instrument: "RoB2" as never,
+      });
+      expect(r).toBeDefined();
+    });
   });
 });

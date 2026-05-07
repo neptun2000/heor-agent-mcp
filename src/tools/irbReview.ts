@@ -20,11 +20,9 @@ import {
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
 import { suggestForEnum } from "../util/didYouMean.js";
+import { caseInsensitiveEnum } from "../util/caseInsensitive.js";
 import { assessIrb } from "../irb/decisionTree.js";
-import {
-  EXEMPT_CATEGORIES,
-  EXPEDITED_CATEGORIES,
-} from "../irb/rulesets.js";
+import { EXEMPT_CATEGORIES, EXPEDITED_CATEGORIES } from "../irb/rulesets.js";
 import { IRB_RULESET, type IrbAssessment } from "../irb/types.js";
 import type { ToolResult } from "../providers/types.js";
 
@@ -63,24 +61,28 @@ const JURISDICTIONS = ["us_irb", "eu_cec", "uk_hra_rec", "other"] as const;
 
 const IrbReviewSchema = z
   .object({
-    study_design: z.enum(STUDY_DESIGNS),
+    study_design: caseInsensitiveEnum(STUDY_DESIGNS),
     intervention: z.string().min(1, "intervention is required"),
     indication: z.string().min(1, "indication is required"),
     population_includes_pediatric: z.boolean().default(false),
     population_includes_pregnant: z.boolean().default(false),
     population_includes_prisoners: z.boolean().default(false),
     population_includes_decisionally_impaired: z.boolean().default(false),
-    jurisdictions: z.array(z.enum(JURISDICTIONS)).default(["us_irb", "eu_cec"]),
-    data_handling: z.enum(DATA_HANDLINGS),
-    risk_level: z.enum(RISK_LEVELS).default("unknown"),
-    funding_source: z.enum(FUNDING_SOURCES),
+    jurisdictions: z
+      .array(caseInsensitiveEnum(JURISDICTIONS))
+      .default(["us_irb", "eu_cec"]),
+    data_handling: caseInsensitiveEnum(DATA_HANDLINGS),
+    risk_level: caseInsensitiveEnum(RISK_LEVELS).default("unknown"),
+    funding_source: caseInsensitiveEnum(FUNDING_SOURCES),
     multi_site: z.boolean().default(false),
     expedited_category_claim: z
       .array(z.number().int().min(1).max(7))
       .optional(),
     pv_classification: z.unknown().optional(),
     // Hint flags (see types.ts for the §46.104 / §46.110 mapping).
-    exempt_category_hint: z.enum(["educational"]).optional(),
+    exempt_category_hint: caseInsensitiveEnum([
+      "educational",
+    ] as const).optional(),
     benign_behavioural: z.boolean().optional(),
     federal_demonstration: z.boolean().optional(),
     taste_test: z.boolean().optional(),
@@ -93,9 +95,7 @@ const IrbReviewSchema = z
   })
   .strict();
 
-export async function handleIrbReview(
-  rawInput: unknown,
-): Promise<ToolResult> {
+export async function handleIrbReview(rawInput: unknown): Promise<ToolResult> {
   const parsed = IrbReviewSchema.safeParse(rawInput);
   if (!parsed.success) {
     const messages: string[] = [];
@@ -162,7 +162,9 @@ export async function handleIrbReview(
 
   // ---- Build markdown ----
   const lines: string[] = [];
-  lines.push(`# IRB / Ethics Committee Review — ${input.intervention} (${input.indication})`);
+  lines.push(
+    `# IRB / Ethics Committee Review — ${input.intervention} (${input.indication})`,
+  );
   lines.push("");
   lines.push("## Review Tier");
   if (assessment.review_tier_us) {
@@ -186,7 +188,9 @@ export async function handleIrbReview(
       lines.push(`**US (45 CFR 46):** Full Board review (45 CFR 46.108)`);
     }
   } else {
-    lines.push("**US (45 CFR 46):** not applicable (no us_irb in jurisdictions)");
+    lines.push(
+      "**US (45 CFR 46):** not applicable (no us_irb in jurisdictions)",
+    );
   }
   if (assessment.review_tier_eu) {
     if (assessment.review_tier_eu === "ctr_multi_state") {
@@ -234,8 +238,7 @@ export async function handleIrbReview(
     `- De-identification method: \`${assessment.data_management_plan.de_identification_method}\``,
   );
   if (
-    assessment.data_management_plan.cross_border_transfer_obligations.length >
-    0
+    assessment.data_management_plan.cross_border_transfer_obligations.length > 0
   ) {
     lines.push(`- Cross-border transfer obligations:`);
     for (const x of assessment.data_management_plan
@@ -295,8 +298,12 @@ export async function handleIrbReview(
   lines.push("- 45 CFR 46 (Common Rule, 2018 revision)");
   lines.push("- 45 CFR 46.104 — Exempt categories");
   lines.push("- 45 CFR 46.110 — Expedited review categories");
-  lines.push("- EU Regulation 536/2014 (Clinical Trials Regulation), Annex III");
-  lines.push("- HIPAA §164.514 — de-identification standards (Safe Harbor + Expert Determination)");
+  lines.push(
+    "- EU Regulation 536/2014 (Clinical Trials Regulation), Annex III",
+  );
+  lines.push(
+    "- HIPAA §164.514 — de-identification standards (Safe Harbor + Expert Determination)",
+  );
   lines.push("- GDPR Art. 9 — special-category health data");
   lines.push("- ICH E6(R3) Good Clinical Practice (2024 revision)");
   lines.push("- ICH E2A — Clinical Safety Data Management");
@@ -332,7 +339,10 @@ export const irbReviewToolSchema = {
       population_includes_pediatric: { type: "boolean", default: false },
       population_includes_pregnant: { type: "boolean", default: false },
       population_includes_prisoners: { type: "boolean", default: false },
-      population_includes_decisionally_impaired: { type: "boolean", default: false },
+      population_includes_decisionally_impaired: {
+        type: "boolean",
+        default: false,
+      },
       jurisdictions: {
         type: "array",
         items: { type: "string", enum: JURISDICTIONS },

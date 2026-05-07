@@ -18,6 +18,7 @@ import {
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
 import { suggestForEnum } from "../util/didYouMean.js";
+import { caseInsensitiveEnum } from "../util/caseInsensitive.js";
 import { classifyPv } from "../pv/decisionTree.js";
 import { GVP_REVISION, gvpFor } from "../pv/gvpModules.js";
 import type { PvClassification } from "../pv/types.js";
@@ -61,14 +62,14 @@ const PvClassifySchema = z
   .object({
     drug: z.string().min(1, "drug is required"),
     indication: z.string().min(1, "indication is required"),
-    study_design: z.enum(STUDY_DESIGNS),
-    primary_objective: z.enum(PRIMARY_OBJECTIVES),
-    regulatory_context: z.enum(REGULATORY_CONTEXTS),
+    study_design: caseInsensitiveEnum(STUDY_DESIGNS),
+    primary_objective: caseInsensitiveEnum(PRIMARY_OBJECTIVES),
+    regulatory_context: caseInsensitiveEnum(REGULATORY_CONTEXTS),
     imposed_by_authority: z.boolean().default(false),
     population_includes_pregnant: z.boolean().default(false),
     population_includes_paediatric: z.boolean().default(false),
     multi_country: z.boolean().default(false),
-    jurisdictions: z.array(z.enum(JURISDICTIONS)).default(["eu"]),
+    jurisdictions: z.array(caseInsensitiveEnum(JURISDICTIONS)).default(["eu"]),
   })
   .strict();
 

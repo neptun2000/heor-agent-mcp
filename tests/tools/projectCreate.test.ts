@@ -94,4 +94,54 @@ describe("handleProjectCreate", () => {
       }
     });
   });
+
+  // ─── Schema-hardening regression tests ────────────────────────────────
+  // PostHog showed 5 production failures with hta_targets: ["NICE", "ICER"].
+  // The case-insensitive enum normaliser fixes that.
+  describe("case-insensitive hta_targets", () => {
+    it("accepts ALL CAPS canonical values: ['NICE', 'ICER']", async () => {
+      const r = await handleProjectCreate({
+        project_id: "pcase-allcaps",
+        drug: "X",
+        indication: "Y",
+        hta_targets: ["NICE", "ICER"],
+      });
+      expect(r.content).toMatch(/HTA targets:.*nice/i);
+      expect(r.content).toMatch(/HTA targets:.*icer/i);
+    });
+
+    it("accepts Title Case: ['Nice', 'Cadth']", async () => {
+      const r = await handleProjectCreate({
+        project_id: "pcase-title",
+        drug: "X",
+        indication: "Y",
+        hta_targets: ["Nice", "Cadth"],
+      });
+      expect(r.content).toMatch(/HTA targets:.*nice/);
+      expect(r.content).toMatch(/HTA targets:.*cadth/);
+    });
+
+    it("accepts mixed case across one array", async () => {
+      const r = await handleProjectCreate({
+        project_id: "pcase-mixed",
+        drug: "X",
+        indication: "Y",
+        hta_targets: ["NICE", "icer", "Cadth"],
+      });
+      expect(r.content).toMatch(/nice/);
+      expect(r.content).toMatch(/icer/);
+      expect(r.content).toMatch(/cadth/);
+    });
+
+    it("still rejects truly unknown values regardless of casing", async () => {
+      await expect(
+        handleProjectCreate({
+          project_id: "pcase-unknown",
+          drug: "X",
+          indication: "Y",
+          hta_targets: ["BFARM"] as never,
+        }),
+      ).rejects.toThrow(/Unknown.*hta_targets/i);
+    });
+  });
 });

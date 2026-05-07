@@ -16,17 +16,26 @@ import {
   findPrecedents,
 } from "../data/niceTaPrecedents.js";
 import { routeGvdSections } from "./htaDossier/gvdSectionRouter.js";
+import { caseInsensitiveEnum } from "../util/caseInsensitive.js";
 
 const DossierSchema = z.object({
-  hta_body: z.enum(["nice", "ema", "fda", "iqwig", "has", "jca", "gvd"]),
-  submission_type: z.enum([
+  hta_body: caseInsensitiveEnum([
+    "nice",
+    "ema",
+    "fda",
+    "iqwig",
+    "has",
+    "jca",
+    "gvd",
+  ] as const),
+  submission_type: caseInsensitiveEnum([
     "sta",
     "mta",
     "early_access",
     "initial",
     "renewal",
     "variation",
-  ]),
+  ] as const),
   drug_name: z.string().min(1),
   indication: z.string().min(1),
   evidence_summary: z
@@ -43,7 +52,11 @@ const DossierSchema = z.object({
       }),
     )
     .optional(),
-  output_format: z.enum(["text", "json", "docx"]).optional(),
+  output_format: caseInsensitiveEnum([
+    "text",
+    "json",
+    "docx",
+  ] as const).optional(),
   project: z.string().optional(),
   rob_results: RobResultsSchema.optional(),
   heterogeneity_per_outcome: z

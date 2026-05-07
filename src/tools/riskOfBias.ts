@@ -29,7 +29,21 @@ const StudyInputSchema = z.object({
 });
 
 const RiskOfBiasSchema = z.object({
-  studies: z.array(StudyInputSchema).min(1, "At least 1 study required"),
+  // 2026-05-07: PostHog showed real-world calls with `studies: {...}`
+  // (singleton object) instead of `studies: [{...}]` (array). LLMs
+  // naturally pass a single study as the bare object. Pre-process to
+  // auto-wrap into an array before the array schema runs — preserves
+  // the min(1) constraint and per-element parsing while accepting the
+  // most common shape mistake.
+  studies: z.preprocess(
+    (val) => {
+      if (val && typeof val === "object" && !Array.isArray(val)) {
+        return [val];
+      }
+      return val;
+    },
+    z.array(StudyInputSchema).min(1, "At least 1 study required"),
+  ),
   instrument: z
     .enum(["auto", "rob2", "robins_i", "amstar2"])
     .default("auto")

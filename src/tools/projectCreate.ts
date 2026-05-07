@@ -3,6 +3,7 @@ import { createProject, listProjects } from "../knowledge/projectStore.js";
 import type { ToolResult } from "../providers/types.js";
 import { createAuditRecord } from "../audit/builder.js";
 import { suggestForEnum } from "../util/didYouMean.js";
+import { caseInsensitiveEnum } from "../util/caseInsensitive.js";
 
 // Expanded list of HTA bodies users actually target. Added: smc (Scotland),
 // awmsg (Wales), tlv (Sweden), aifa (Italy), inesss (Quebec), ispor.
@@ -31,7 +32,12 @@ const ProjectCreateSchema = z.object({
   project_id: z.string().min(1).max(64),
   drug: z.string().min(1),
   indication: z.string().min(1),
-  hta_targets: z.array(z.enum(HTA_TARGETS)).optional(),
+  // 2026-05-07: switched from z.enum to caseInsensitiveEnum after PostHog
+  // showed 5 production failures with hta_targets: ["NICE", "ICER"] —
+  // LLM callers naturally use brand-case, not our internal canonical
+  // lowercase tokens. Inputs are normalised to canonical case before
+  // validation; truly unknown values still fail with did-you-mean hints.
+  hta_targets: z.array(caseInsensitiveEnum(HTA_TARGETS)).optional(),
   notes: z.string().optional(),
 });
 
@@ -131,19 +137,12 @@ export const projectCreateToolSchema = {
         type: "array",
         items: {
           type: "string",
-          enum: [
-            "nice",
-            "ema",
-            "fda",
-            "iqwig",
-            "has",
-            "jca",
-            "cadth",
-            "pbac",
-            "icer",
-          ],
+          // Canonical lowercase tokens, but the Zod schema accepts
+          // case-insensitive matches (NICE, Nice, nice all → nice).
+          enum: [...HTA_TARGETS],
         },
-        description: "HTA bodies to target (optional)",
+        description:
+          'HTA bodies to target (optional). Case-insensitive — "NICE"/"Nice"/"nice" are all accepted.',
       },
       notes: {
         type: "string",

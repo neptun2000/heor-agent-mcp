@@ -446,4 +446,40 @@ describe("handleRiskOfBias", () => {
       );
     });
   });
+
+  // ─── Schema-hardening regression tests ────────────────────────────────
+  // PostHog showed real-world calls with `studies: {...}` (singleton)
+  // instead of `studies: [{...}]` (array). Pre-process auto-wraps.
+  describe("singleton studies auto-wrap", () => {
+    it("auto-wraps a single study object into an array", async () => {
+      const r = await handleRiskOfBias({
+        studies: {
+          title: "Single trial",
+          abstract: "randomized controlled trial of X",
+          study_type: "rct",
+        },
+      });
+      expect(r).toBeDefined();
+      expect(r.content).toMatch(/Single trial|RoB|risk of bias/i);
+    });
+
+    it("still accepts the canonical array form unchanged", async () => {
+      const r = await handleRiskOfBias({
+        studies: [
+          {
+            title: "Two arm RCT",
+            abstract: "randomized controlled trial",
+            study_type: "rct",
+          },
+        ],
+      });
+      expect(r).toBeDefined();
+    });
+
+    it("auto-wrap does NOT bypass min(1) — empty array still rejected", async () => {
+      await expect(handleRiskOfBias({ studies: [] })).rejects.toThrow(
+        /studies|at least 1/i,
+      );
+    });
+  });
 });

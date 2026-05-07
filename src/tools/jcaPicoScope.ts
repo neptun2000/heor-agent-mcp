@@ -15,6 +15,7 @@ import {
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
 import { suggestForEnum } from "../util/didYouMean.js";
+import { caseInsensitiveEnum } from "../util/caseInsensitive.js";
 import { buildScope } from "../jca/scopeBuilder.js";
 import { JCA_REVISION } from "../jca/countryRegistry.js";
 import { checkScopeEligibility } from "../jca/scopeEligibility.js";
@@ -48,15 +49,16 @@ const JcaPicoScopeSchema = z
   .object({
     drug: z.string().min(1, "drug is required"),
     indication: z.string().min(1, "indication is required"),
-    drug_class: z.enum(DRUG_CLASSES),
+    drug_class: caseInsensitiveEnum(DRUG_CLASSES),
     mechanism_of_action: z.string().optional(),
-    line_of_therapy: z.enum(LINES).default("any"),
+    line_of_therapy: caseInsensitiveEnum(LINES).default("any"),
     biomarker_status: z.string().optional(),
     jurisdictions: z
-      .array(z.enum(JURISDICTIONS))
+      .array(caseInsensitiveEnum(JURISDICTIONS))
       .min(1)
       .default(["de", "fr", "it", "es", "nl"]),
-    regulatory_context: z.enum(REG_CONTEXTS).default("post_authorisation"),
+    regulatory_context:
+      caseInsensitiveEnum(REG_CONTEXTS).default("post_authorisation"),
     is_orphan: z
       .boolean()
       .optional()

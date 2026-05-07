@@ -28,6 +28,16 @@ export type OutcomePriority =
   | "HF_hospitalization"
   | "all_cause_mortality"
   | "NYHA_progression"
+  | "UMSARS_I_progression" // MSA: activities of daily living
+  | "UMSARS_II_progression" // MSA: motor function
+  | "UMSARS_IV_global" // MSA: global disability (1-5 scale)
+  | "time_to_UMSARS_IV4" // MSA: time to wheelchair
+  | "MDS_UPDRS_III_progression" // PD: motor subscale
+  | "time_to_levodopa_failure" // PD: need for rescue
+  | "ADAS_Cog_progression" // AD: cognitive decline
+  | "MMSE_decline" // AD: cognitive screening
+  | "time_to_MMSE_below24" // AD: time to clinically meaningful impairment
+  | "time_to_institutionalization" // AD: long-term outcome
   | "other";
 
 export interface ComparatorEntry {
@@ -61,6 +71,9 @@ export type IndicationCategory =
   | "cardiovascular_hfref"
   | "rheumatology"
   | "neurology"
+  | "neurology_msa" // Multiple System Atrophy (orphan, JCA Phase 2 = 2028)
+  | "neurology_pd" // Parkinson's disease (non-orphan, JCA Phase 3 = 2030)
+  | "neurology_ad" // Alzheimer's disease (non-orphan, JCA Phase 3 = 2030)
   | "rare_disease"
   | "infectious_disease"
   | "other";

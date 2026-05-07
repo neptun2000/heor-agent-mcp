@@ -102,6 +102,12 @@ import {
   pvSignalWorkflowToolSchema,
 } from "./tools/pvSignalWorkflow.js";
 import { handleIrbReview, irbReviewToolSchema } from "./tools/irbReview.js";
+import {
+  evidenceClinicalScaleHandler,
+  evidenceClinicalScaleSchema,
+  evidenceClinicalScaleToolSchema,
+  type EvidenceClinicalScaleParams,
+} from "./tools/evidenceClinicalScale.js";
 import { randomUUID } from "node:crypto";
 import {
   trackToolCall,
@@ -262,6 +268,7 @@ function createMcpServer(
       pvSignalWorkflowToolSchema,
       htaWorkflowToolSchema,
       irbReviewToolSchema,
+      evidenceClinicalScaleToolSchema,
     ],
   }));
 
@@ -344,6 +351,25 @@ function createMcpServer(
         case "irb.review":
           result = await handleIrbReview(args);
           break;
+        case "evidence.clinical_scale": {
+          const parsed = evidenceClinicalScaleSchema.safeParse(args);
+          if (!parsed.success) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Validation error: ${parsed.error.issues.map((i) => i.message).join("; ")}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+          const text = await evidenceClinicalScaleHandler(
+            parsed.data as EvidenceClinicalScaleParams,
+          );
+          result = { content: [{ type: "text", text }] };
+          break;
+        }
         default:
           trackToolCall(
             name,

@@ -35,6 +35,15 @@ function instrumentsFor(category: IndicationCategory): string[] {
     // and EMPEROR-Reduced and required by EUnetHTA Annex II for HFrEF.
     return ["KCCQ-12", "EQ-5D-5L"];
   }
+  if (category === "neurology_msa") {
+    return ["UMSARS (Parts I-IV)", "EQ-5D-5L"];
+  }
+  if (category === "neurology_pd") {
+    return ["MDS-UPDRS (Parts I-IV)", "EQ-5D-5L", "PDQ-39"];
+  }
+  if (category === "neurology_ad") {
+    return ["ADAS-Cog-11", "MMSE", "MoCA", "EQ-5D-5L"];
+  }
   return ["EQ-5D-5L"];
 }
 
@@ -80,6 +89,36 @@ function outcomePriorityFor(category: IndicationCategory): OutcomePriority[] {
   }
   if (category === "cardiovascular_hfref") {
     return hfrefOutcomePriority();
+  }
+  if (category === "neurology_msa") {
+    return [
+      "UMSARS_II_progression",
+      "UMSARS_I_progression",
+      "UMSARS_IV_global",
+      "time_to_UMSARS_IV4",
+      "HRQoL",
+      "all_cause_mortality",
+      "AE",
+    ];
+  }
+  if (category === "neurology_pd") {
+    return [
+      "MDS_UPDRS_III_progression",
+      "HRQoL",
+      "time_to_levodopa_failure",
+      "AE",
+      "all_cause_mortality",
+    ];
+  }
+  if (category === "neurology_ad") {
+    return [
+      "ADAS_Cog_progression",
+      "MMSE_decline",
+      "time_to_MMSE_below24",
+      "HRQoL",
+      "time_to_institutionalization",
+      "AE",
+    ];
   }
   return chronicOutcomePriority();
 }
@@ -272,6 +311,75 @@ function cardiovascularHfrefComparators(
   return [gdmtAceI, empa];
 }
 
+function neurologyMsaComparators(_country: Jurisdiction): ComparatorEntry[] {
+  // MSA: no approved disease-modifying therapy as of 2026.
+  // CoQ10/riluzole/rifampicin all failed Phase 3. Best supportive care is the
+  // only appropriate comparator. Listed per EUnetHTA/NICE orphan precedent.
+  return [
+    {
+      molecule: "best supportive care (BSC)",
+      rationale:
+        "No approved disease-modifying therapy for MSA. BSC is the sole appropriate comparator per orphan HEOR precedent (EUnetHTA/NICE). ITC vs placebo arms of NNIPPS, EMSA-SG applicable.",
+      outcome_instrument_preferences: instrumentsFor("neurology_msa"),
+    },
+  ];
+}
+
+function neurologyPdComparators(country: Jurisdiction): ComparatorEntry[] {
+  const instruments = instrumentsFor("neurology_pd");
+  const ldopa: ComparatorEntry = {
+    molecule: "levodopa/carbidopa",
+    rationale: `Standard 1L symptomatic therapy for Parkinson's disease in ${country.toUpperCase()}. Backbone of all comparative trials.`,
+    outcome_instrument_preferences: instruments,
+  };
+  const rasagiline: ComparatorEntry = {
+    molecule: "rasagiline",
+    rationale: `MAO-B inhibitor adjunct to levodopa; relevant comparator in ${country.toUpperCase()} for motor fluctuation management.`,
+    outcome_instrument_preferences: instruments,
+  };
+  const dbs: ComparatorEntry = {
+    molecule: "deep brain stimulation (DBS)",
+    rationale: `Surgical standard for advanced PD with motor fluctuations; HTA bodies may require ITC for device interventions in ${country.toUpperCase()}.`,
+    outcome_instrument_preferences: instruments,
+  };
+  if (country === "de") return [ldopa, rasagiline, dbs];
+  if (country === "fr") return [ldopa, rasagiline];
+  if (country === "it" || country === "es") return [ldopa, rasagiline];
+  if (country === "nl") return [ldopa, dbs];
+  if (country === "uk") return [ldopa, rasagiline, dbs];
+  return [ldopa];
+}
+
+function neurologyAdComparators(country: Jurisdiction): ComparatorEntry[] {
+  const instruments = instrumentsFor("neurology_ad");
+  const donepezil: ComparatorEntry = {
+    molecule: "donepezil",
+    rationale: `Cholinesterase inhibitor — gold-standard 1L symptomatic treatment for mild-to-moderate AD in ${country.toUpperCase()}.`,
+    outcome_instrument_preferences: instruments,
+  };
+  const memantine: ComparatorEntry = {
+    molecule: "memantine",
+    rationale: `NMDA receptor antagonist — standard for moderate-to-severe AD; often combined with donepezil. Active comparator in ${country.toUpperCase()}.`,
+    outcome_instrument_preferences: instruments,
+  };
+  const lecanemab: ComparatorEntry = {
+    molecule: "lecanemab",
+    rationale: `Anti-amyloid monoclonal antibody (Leqembi; FDA-approved 2023; EMA-approved 2024). Relevant active comparator for new anti-amyloid therapies in ${country.toUpperCase()}.`,
+    outcome_instrument_preferences: instruments,
+  };
+  const donanemab: ComparatorEntry = {
+    molecule: "donanemab",
+    rationale: `Anti-amyloid mAb (Kisunla; FDA-approved 2024). Emerging ITC comparator for new AD disease-modifying therapies.`,
+    outcome_instrument_preferences: instruments,
+  };
+  if (country === "de") return [donepezil, memantine, lecanemab];
+  if (country === "fr") return [donepezil, memantine];
+  if (country === "it" || country === "es") return [donepezil, memantine];
+  if (country === "nl") return [donepezil, memantine, lecanemab];
+  if (country === "uk") return [donepezil, memantine];
+  return [donepezil, memantine];
+}
+
 function comparatorsFor(
   country: Jurisdiction,
   category: IndicationCategory,
@@ -287,6 +395,9 @@ function comparatorsFor(
   if (category === "cardiovascular_hfref") {
     return cardiovascularHfrefComparators(country);
   }
+  if (category === "neurology_msa") return neurologyMsaComparators(country);
+  if (category === "neurology_pd") return neurologyPdComparators(country);
+  if (category === "neurology_ad") return neurologyAdComparators(country);
   // Drug-class-aware fallback for unknown indications
   if (category === "oncology_other" || category === "oncology_nsclc") {
     const instruments = instrumentsFor(category);
@@ -339,6 +450,28 @@ function subgroupsFor(category: IndicationCategory): string[] {
       "ARNI eligibility (ESC 2021)",
       "eGFR tier (renal impairment)",
       "diabetes status (T2D yes/no)",
+    ];
+  }
+  if (category === "neurology_msa") {
+    return [
+      "Probable MSA-P (Parkinson-type)",
+      "Probable MSA-C (cerebellar-type)",
+      "Early stage (UMSARS-IV ≤ 3)",
+    ];
+  }
+  if (category === "neurology_pd") {
+    return [
+      "Early Parkinson's (H&Y 1-2)",
+      "Motor fluctuations (H&Y 3-4)",
+      "De novo (no prior levodopa)",
+    ];
+  }
+  if (category === "neurology_ad") {
+    return [
+      "Prodromal/MCI-due-to-AD (MMSE 24-30)",
+      "Mild AD (MMSE 20-26)",
+      "Moderate AD (MMSE 10-19)",
+      "Amyloid-confirmed by PET or CSF",
     ];
   }
   return ["age strata", "comorbidity status"];
@@ -447,12 +580,25 @@ export function classifyIndication(indication: string): IndicationCategory {
   ) {
     return "rheumatology";
   }
+  // Specific neurology subcategories (match before generic neurology)
   if (
-    x.includes("multiple sclerosis") ||
-    x.includes("alzheimer") ||
-    x.includes("parkinson") ||
-    x.includes("epilepsy")
+    x.includes("multiple system atrophy") ||
+    x.includes("msa") ||
+    x.includes("shy-drager")
   ) {
+    return "neurology_msa";
+  }
+  if (
+    x.includes("alzheimer") ||
+    x.includes("alzheimer's") ||
+    x.includes("dementia alzheimer")
+  ) {
+    return "neurology_ad";
+  }
+  if (x.includes("parkinson") || x.includes("parkinson's")) {
+    return "neurology_pd";
+  }
+  if (x.includes("multiple sclerosis") || x.includes("epilepsy")) {
     return "neurology";
   }
   return "other";

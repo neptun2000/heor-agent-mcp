@@ -135,6 +135,12 @@ const DossierSchema = z.object({
     .describe(
       "Optional: structured PV classification from the pv_classify tool. When provided, the dossier output includes a Pharmacovigilance Plan section with the GVP module, ENCePP template, submission obligations, and RMP implications. When omitted, the section is replaced with a one-line note flagging the gap.",
     ),
+  unmet_need_summary: z
+    .string()
+    .optional()
+    .describe(
+      "Optional: 1-paragraph unmet need synthesis from the evidence.unmet_need tool. When provided and hta_body='nice', prepended to the Unmet Need section (NICE STA Section B). When hta_body='gvd', prepended to the 'Unmet Need' section (GVD Section 4). Pipe evidence.unmet_need result.unmet_need_summary here.",
+    ),
 });
 import {
   createAuditRecord,
@@ -1002,6 +1008,15 @@ export async function handleHtaDossierPrep(
       params.evidence_summary,
     );
     lines.push(`### ${sectionName}`);
+    // Inject unmet_need_summary into the "Unmet Need" section for NICE and GVD
+    if (
+      sectionName === "Unmet Need" &&
+      params.unmet_need_summary &&
+      (params.hta_body === "nice" || params.hta_body === "gvd")
+    ) {
+      lines.push(params.unmet_need_summary);
+      lines.push("");
+    }
     lines.push(content);
     lines.push("");
     if (status === "missing") {
@@ -1201,6 +1216,11 @@ export const htaDossierPrepToolSchema = {
       rob_results: {
         description:
           "Output from the evidence.risk_of_bias tool. When provided, the GRADE Risk of Bias domain uses the structured judgment (rob_judgment, downgrade, rationale) instead of a heuristic estimate.",
+      },
+      unmet_need_summary: {
+        type: "string",
+        description:
+          "Optional: 1-paragraph unmet need synthesis from the evidence.unmet_need tool. Pipe evidence.unmet_need result.unmet_need_summary here. Prepended to the Unmet Need section for NICE (Section B) and GVD (Section 4).",
       },
     },
     required: ["hta_body", "submission_type", "drug_name", "indication"],

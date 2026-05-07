@@ -108,6 +108,11 @@ import {
   evidenceClinicalScaleToolSchema,
   type EvidenceClinicalScaleParams,
 } from "./tools/evidenceClinicalScale.js";
+import {
+  evidenceUnmetNeedHandler,
+  evidenceUnmetNeedSchema,
+  evidenceUnmetNeedToolSchema,
+} from "./tools/evidenceUnmetNeed.js";
 import { randomUUID } from "node:crypto";
 import {
   trackToolCall,
@@ -269,6 +274,7 @@ function createMcpServer(
       htaWorkflowToolSchema,
       irbReviewToolSchema,
       evidenceClinicalScaleToolSchema,
+      evidenceUnmetNeedToolSchema,
     ],
   }));
 
@@ -368,6 +374,27 @@ function createMcpServer(
             parsed.data as EvidenceClinicalScaleParams,
           );
           result = { content: [{ type: "text", text }] };
+          break;
+        }
+        case "evidence.unmet_need": {
+          const parsed = evidenceUnmetNeedSchema.safeParse(args);
+          if (!parsed.success) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Validation error: ${parsed.error.issues.map((i) => i.message).join("; ")}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+          const unmetResult = await evidenceUnmetNeedHandler(parsed.data);
+          result = {
+            content: [
+              { type: "text", text: JSON.stringify(unmetResult, null, 2) },
+            ],
+          };
           break;
         }
         default:

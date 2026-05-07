@@ -186,6 +186,8 @@ export interface DossierParams {
     intervention_impact: "narrows" | "neutral" | "widens" | "unknown";
     mitigation_plan?: string;
   };
+  /** Optional 1-paragraph unmet need synthesis from evidence.unmet_need — prepended to Unmet Need section for NICE and GVD. */
+  unmet_need_summary?: string;
 }
 
 export interface ToolResult {

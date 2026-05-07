@@ -117,6 +117,26 @@ const HtaWorkflowSchema = z
       .describe(
         "Skip the cost-effectiveness model phase (e.g., when the dossier is clinical-only).",
       ),
+    unmet_need_inputs: z
+      .object({
+        disease_burden: z
+          .object({
+            incidence_per_100k: z.number().optional(),
+            prevalence_per_100k: z.number().optional(),
+            qualitative_summary: z.string().optional(),
+          })
+          .optional(),
+        treatment_landscape: z
+          .object({
+            current_soc: z.array(z.string()).optional(),
+            qualitative_summary: z.string().optional(),
+          })
+          .optional(),
+      })
+      .optional()
+      .describe(
+        "Optional disease burden + treatment landscape inputs for Phase 3.5 (GVD path only). When provided alongside hta_body='gvd', triggers the evidence.unmet_need phase.",
+      ),
   })
   .strict();
 
@@ -132,6 +152,7 @@ export interface HtaWorkflowDeps {
   htaDossier: Handler;
   validateLinks: Handler;
   jcaPicoScope?: Handler; // optional — only needed when hta_body=jca
+  evidenceUnmetNeed?: Handler; // optional — only used when hta_body=gvd + unmet_need_inputs supplied
 }
 
 function isToolResult(x: unknown): x is { content: unknown } {
@@ -264,6 +285,15 @@ export async function runHtaWorkflow(
     audit = addWarning(
       audit,
       "hta_body='jca' — this orchestrator does NOT run jca_pico_scope, so the JCA scope eligibility check (Reg 2021/2282: oncology+ATMP from 13 Jan 2025; orphans from 13 Jan 2028; all medicines from 13 Jan 2030) is bypassed. Verify the indication is actually in JCA scope before treating this output as submission-grade. To check scope explicitly, call jca_pico_scope first.",
+    );
+  }
+
+  if (input.hta_body === "gvd") {
+    audit = addAssumption(
+      audit,
+      "hta_body='gvd' — pipeline runs all 6 phases and emits a Global Value Dossier (13 sections, ISPOR-aligned). " +
+        "Phase 3.5 runs evidence.unmet_need when disease_burden or treatment_landscape inputs are supplied. " +
+        "The gvd_evidence_pack pipe interface is included in the Phase 5 output for downstream NICE/JCA/AMCP dossiers.",
     );
   }
 
@@ -413,6 +443,55 @@ export async function runHtaWorkflow(
   }
   phaseTimings.risk_of_bias = Date.now() - tRob;
 
+  // ── Phase 3.5: evidence.unmet_need (GVD path only) ───────────────
+  let unmetNeedSummary: string | undefined;
+  if (
+    input.hta_body === "gvd" &&
+    deps.evidenceUnmetNeed &&
+    input.unmet_need_inputs
+  ) {
+    const tUnmet = Date.now();
+    const unmetRes = await safeRun(() =>
+      deps.evidenceUnmetNeed!({
+        drug: input.drug,
+        indication: input.indication,
+        jurisdictions: ["global"],
+        disease_burden: input.unmet_need_inputs?.disease_burden,
+        treatment_landscape: input.unmet_need_inputs?.treatment_landscape
+          ? {
+              current_soc:
+                input.unmet_need_inputs.treatment_landscape.current_soc ?? [],
+              qualitative_summary:
+                input.unmet_need_inputs.treatment_landscape.qualitative_summary,
+            }
+          : undefined,
+      }),
+    );
+    if (unmetRes.ok) {
+      const unmetData = unmetRes.value as { content?: unknown };
+      try {
+        const parsed = JSON.parse(
+          typeof unmetData.content === "string"
+            ? unmetData.content
+            : JSON.stringify(unmetData.content),
+        );
+        unmetNeedSummary = parsed?.unmet_need_summary as string | undefined;
+      } catch {
+        /* ignore parse errors */
+      }
+      audit = addAssumption(
+        audit,
+        `Phase 3.5 (evidence.unmet_need) generated unmet need summary for ${input.indication}.`,
+      );
+    } else {
+      audit = addWarning(
+        audit,
+        `Phase 3.5 (evidence.unmet_need) failed: ${unmetRes.error}. GVD Section 4 will use placeholder.`,
+      );
+    }
+    phaseTimings.evidence_unmet_need = Date.now() - tUnmet;
+  }
+
   // ── Phase 4: cost_effectiveness_model ─────────────────────────────
   const tCe = Date.now();
   let ceResults: unknown = undefined;
@@ -505,6 +584,7 @@ export async function runHtaWorkflow(
         screenedRecords.length > 0 ? screenedRecords : undefined,
       rob_results: robResults,
       model_results: ceResults,
+      unmet_need_summary: unmetNeedSummary,
     }),
   );
   let dossierContent = "";
@@ -600,6 +680,11 @@ export async function runHtaWorkflow(
   lines.push(
     `| 3 | risk_of_bias | ${phaseTimings.risk_of_bias ?? 0} | ${robSummaryText || (robResults ? "assessed" : "skipped")} |`,
   );
+  if (phaseTimings.evidence_unmet_need !== undefined) {
+    lines.push(
+      `| 3.5 | evidence.unmet_need | ${phaseTimings.evidence_unmet_need}ms | ${unmetNeedSummary ? "summary generated" : "skipped"} |`,
+    );
+  }
   if (input.skip_ce_model) {
     lines.push(`| 4 | cost_effectiveness_model | — | skipped |`);
   } else {
@@ -673,6 +758,7 @@ export async function handleHtaWorkflow(
     { handleCostEffectivenessModel },
     { handleHtaDossierPrep },
     { handleValidateLinks },
+    { evidenceUnmetNeedHandler },
   ] = await Promise.all([
     import("./literatureSearch.js"),
     import("./screenAbstracts.js"),
@@ -680,6 +766,7 @@ export async function handleHtaWorkflow(
     import("./costEffectivenessModel.js"),
     import("./htaDossierPrep.js"),
     import("./validateLinks.js"),
+    import("./evidenceUnmetNeed.js"),
   ]);
   return runHtaWorkflow(rawInput, {
     literatureSearch: handleLiteratureSearch as Handler,
@@ -688,6 +775,7 @@ export async function handleHtaWorkflow(
     costEffectivenessModel: handleCostEffectivenessModel as Handler,
     htaDossier: handleHtaDossierPrep as Handler,
     validateLinks: handleValidateLinks as Handler,
+    evidenceUnmetNeed: evidenceUnmetNeedHandler as Handler,
   });
 }
 

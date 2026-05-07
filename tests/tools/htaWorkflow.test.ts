@@ -267,6 +267,152 @@ describe("hta_workflow — performance", () => {
   });
 });
 
+// ---- GVD routing + Phase 3.5 ───────────────────────────────────────────
+
+describe("hta_body='gvd'", () => {
+  it("emits GVD advisory note in audit", async () => {
+    const r = await run({ drug: "X", indication: "Y", hta_body: "gvd" });
+    expect(r.content).toMatch(
+      /gvd.*pipeline|Global Value Dossier|gvd_evidence_pack/i,
+    );
+  });
+
+  it("runs all 6 phases with hta_body='gvd'", async () => {
+    const r = await run({ drug: "X", indication: "Y", hta_body: "gvd" });
+    expect(r.content).toMatch(/Phase 5.*GVD|GVD.*draft|hta_body.*gvd/i);
+  });
+
+  it("Phase 3.5 runs when unmet_need_inputs provided for GVD", async () => {
+    const mockUnmetNeed = jest.fn().mockResolvedValue({
+      content: JSON.stringify({
+        unmet_need_summary: "Unmet need is high for Y.",
+      }),
+    });
+    const customDeps = {
+      ...makeDeps(),
+      evidenceUnmetNeed: mockUnmetNeed,
+    };
+    const r = await run(
+      {
+        drug: "X",
+        indication: "Y",
+        hta_body: "gvd",
+        unmet_need_inputs: {
+          disease_burden: { qualitative_summary: "Serious disease." },
+        },
+      },
+      customDeps as unknown as ReturnType<typeof makeDeps>,
+    );
+    expect(mockUnmetNeed).toHaveBeenCalledTimes(1);
+    expect(r.content).toMatch(/unmet_need|evidence.unmet_need|Phase 3\.5/i);
+  });
+
+  it("Phase 3.5 skipped when no unmet_need_inputs", async () => {
+    const mockUnmetNeed = jest.fn();
+    const customDeps = {
+      ...makeDeps(),
+      evidenceUnmetNeed: mockUnmetNeed,
+    };
+    await run(
+      { drug: "X", indication: "Y", hta_body: "gvd" },
+      customDeps as unknown as ReturnType<typeof makeDeps>,
+    );
+    expect(mockUnmetNeed).not.toHaveBeenCalled();
+  });
+
+  it("Phase 3.5 failure does not abort pipeline", async () => {
+    const mockUnmetNeed = jest.fn().mockRejectedValue(new Error("unmet fail"));
+    const customDeps = {
+      ...makeDeps(),
+      evidenceUnmetNeed: mockUnmetNeed,
+    };
+    const r = await run(
+      {
+        drug: "X",
+        indication: "Y",
+        hta_body: "gvd",
+        unmet_need_inputs: {
+          disease_burden: { qualitative_summary: "Serious." },
+        },
+      },
+      customDeps as unknown as ReturnType<typeof makeDeps>,
+    );
+    // pipeline completes (has Phase 5 output)
+    expect(r.content).toMatch(/Phase 5|hta_dossier/i);
+  });
+
+  it("Phase 3.5 skipped for non-GVD hta_body even when unmet_need_inputs present", async () => {
+    const mockUnmetNeed = jest.fn();
+    const customDeps = {
+      ...makeDeps(),
+      evidenceUnmetNeed: mockUnmetNeed,
+    };
+    await run(
+      {
+        drug: "X",
+        indication: "Y",
+        hta_body: "nice",
+        unmet_need_inputs: {
+          disease_burden: { qualitative_summary: "Serious." },
+        },
+      },
+      customDeps as unknown as ReturnType<typeof makeDeps>,
+    );
+    expect(mockUnmetNeed).not.toHaveBeenCalled();
+  });
+
+  it("Phase 3.5 summary row appears in pipeline table when it ran", async () => {
+    const mockUnmetNeed = jest.fn().mockResolvedValue({
+      content: JSON.stringify({ unmet_need_summary: "High unmet need." }),
+    });
+    const customDeps = {
+      ...makeDeps(),
+      evidenceUnmetNeed: mockUnmetNeed,
+    };
+    const r = await run(
+      {
+        drug: "X",
+        indication: "Y",
+        hta_body: "gvd",
+        unmet_need_inputs: {
+          disease_burden: { qualitative_summary: "Serious." },
+        },
+      },
+      customDeps as unknown as ReturnType<typeof makeDeps>,
+    );
+    expect(r.content).toMatch(
+      /3\.5.*evidence\.unmet_need|evidence_unmet_need/i,
+    );
+  });
+
+  it("workflow_summary includes evidence_unmet_need timing when Phase 3.5 ran", async () => {
+    const mockUnmetNeed = jest.fn().mockResolvedValue({
+      content: JSON.stringify({ unmet_need_summary: "High unmet need." }),
+    });
+    const customDeps = {
+      ...makeDeps(),
+      evidenceUnmetNeed: mockUnmetNeed,
+    };
+    const r = await run(
+      {
+        drug: "X",
+        indication: "Y",
+        hta_body: "gvd",
+        unmet_need_inputs: {
+          disease_burden: { qualitative_summary: "Serious." },
+        },
+      },
+      customDeps as unknown as ReturnType<typeof makeDeps>,
+    );
+    expect(
+      r.workflow_summary?.phase_timings_ms?.evidence_unmet_need,
+    ).toBeDefined();
+    expect(
+      r.workflow_summary?.phase_timings_ms?.evidence_unmet_need,
+    ).toBeGreaterThanOrEqual(0);
+  });
+});
+
 // ---- v1.4.2 code-review regression tests ───────────────────────────────
 
 import { htaWorkflowToolSchema as htaWorkflowSchemaForTests } from "../../src/tools/htaWorkflow.js";

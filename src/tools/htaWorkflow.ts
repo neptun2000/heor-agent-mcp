@@ -468,20 +468,38 @@ export async function runHtaWorkflow(
       }),
     );
     if (unmetRes.ok) {
-      const unmetData = unmetRes.value as { content?: unknown };
-      try {
-        const parsed = JSON.parse(
-          typeof unmetData.content === "string"
-            ? unmetData.content
-            : JSON.stringify(unmetData.content),
-        );
-        unmetNeedSummary = parsed?.unmet_need_summary as string | undefined;
-      } catch {
-        /* ignore parse errors */
+      // evidenceUnmetNeedHandler returns UnmetNeedResult directly
+      // (object shape: { schema_version, drug, indication, ..., unmet_need_summary, ... }).
+      // We also support a {content: string|object} wrapper for safety, in case
+      // the tool is invoked via the MCP envelope (tests, server dispatch).
+      const v = unmetRes.value as
+        | { unmet_need_summary?: string; content?: unknown }
+        | string
+        | undefined;
+      if (
+        v &&
+        typeof v === "object" &&
+        "unmet_need_summary" in v &&
+        typeof v.unmet_need_summary === "string"
+      ) {
+        unmetNeedSummary = v.unmet_need_summary;
+      } else if (v && typeof v === "object" && "content" in v) {
+        try {
+          const parsed = JSON.parse(
+            typeof v.content === "string"
+              ? v.content
+              : JSON.stringify(v.content),
+          );
+          unmetNeedSummary = parsed?.unmet_need_summary as string | undefined;
+        } catch {
+          /* ignore parse errors */
+        }
       }
       audit = addAssumption(
         audit,
-        `Phase 3.5 (evidence.unmet_need) generated unmet need summary for ${input.indication}.`,
+        unmetNeedSummary
+          ? `Phase 3.5 (evidence.unmet_need) generated unmet need summary for ${input.indication}.`
+          : `Phase 3.5 (evidence.unmet_need) ran but produced no parseable summary; Section 4 will use placeholder.`,
       );
     } else {
       audit = addWarning(

@@ -2,6 +2,31 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.6.2 (2026-05-07) — schema hardening for LLM input shapes
+
+Two LLM-input-shape fixes surfaced by a PostHog audit of `project.create` and `evidence.risk_of_bias` errors.
+
+### Fixed
+
+- **Class-wide case-insensitive enums** via shared `src/util/caseInsensitive.ts`. PostHog showed 5 production failures with `hta_targets: ["NICE", "ICER"]` — LLM callers naturally pass brand casing instead of canonical lowercase tokens. Vanilla `z.enum()` rejected; new helper preprocesses to canonical case before validation. Truly unknown values still fail with did-you-mean hints.
+
+  Applied to:
+  - `project_create` — `hta_targets`
+  - `pv_classify` — `study_design`, `primary_objective`, `regulatory_context`, `jurisdictions`
+  - `irb_review` — `study_design`, `data_handling`, `risk_level`, `funding_source`, `jurisdictions`, `exempt_category_hint`
+  - `hta_dossier` — `hta_body`, `submission_type`, `output_format`
+  - `jca_pico_scope` — `drug_class`, `line_of_therapy`, `jurisdictions`, `regulatory_context`
+
+- **`risk_of_bias` singleton studies auto-wrap.** PostHog showed real-world calls with `studies: {...}` (singleton object) instead of `studies: [{...}]` (array). Pre-process auto-wraps before the array schema runs — preserves `min(1)` constraint and per-element parsing.
+
+### Tests
+
++9 helper tests (`tests/util/caseInsensitive.test.ts`) + 7 regression tests across `project_create` and `risk_of_bias`. Total 822 → 829 passing.
+
+### Non-breaking
+
+Canonical lowercase still works exactly as before. New code only adds tolerance for upper/mixed case. No API surface changes; no migration needed.
+
 ## v1.5.1 (2026-05-06) — `irb_review` code-review fixes
 
 Three parallel reviewers (regulatory accuracy with WebFetch verification, decision-tree correctness, test-gap analysis) audited v1.5.0 within hours of ship. **3 HIGH regulatory citation errors + 4 HIGH correctness bugs + 6 untested branches** identified. All real findings verified against primary sources (eCFR via govinfo.gov / Cornell LII; EU CTR 536/2014 via legislation.gov.uk + European Commission) and patched. Total tests 683 → 708.

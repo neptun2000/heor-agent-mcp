@@ -20,7 +20,115 @@ Built for pharmaceutical, biotech, CRO, and medical affairs teams who need rigor
 
 ---
 
-## What's new in v1.1.0
+## First 60 seconds
+
+Verify your install works **before** wiring it into Claude / Cursor / Continue. Open two terminal tabs:
+
+**Tab 1 — start the server in HTTP mode:**
+
+```bash
+MCP_HTTP_PORT=8080 npx heor-agent-mcp@latest
+```
+
+You should see:
+
+```
+HEORAgent MCP server running on HTTP port 8080
+```
+
+**Tab 2 — confirm it responds:**
+
+```bash
+curl -s http://localhost:8080/health
+```
+
+Expected output:
+
+```json
+{"status":"ok","server":"heor-agent-mcp","version":"1.6.3"}
+```
+
+✅ If you see the JSON above, the npm package works on your machine. Any further issues are in your MCP client config (Claude Desktop / Cursor / Continue), not the server.
+
+❌ If you see `command not found`, run `node --version` — you need Node ≥20. If you see a different error, file a quick issue at https://github.com/neptun2000/heor-agent-mcp/issues with the output.
+
+Now stop Tab 1 (`Ctrl+C`) and pick your client below — you don't need the HTTP mode for the actual integration; Claude / Cursor / Continue all use stdio.
+
+---
+
+## Quick Start (per client)
+
+Pick your MCP host:
+
+### Claude Code
+
+```bash
+claude mcp add heor-agent -- npx heor-agent-mcp
+```
+
+Then restart Claude Code.
+
+### Claude Desktop / claude.ai Desktop
+
+Edit your MCP config file (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS) and add:
+
+```json
+{
+  "mcpServers": {
+    "heor-agent": {
+      "command": "npx",
+      "args": ["heor-agent-mcp"]
+    }
+  }
+}
+```
+
+Then restart Claude Desktop.
+
+### Cursor / Continue / Cline
+
+Same config shape as Claude Desktop above; the file path differs by client:
+- **Cursor:** `Settings → MCP → Add new MCP server`
+- **Continue:** `~/.continue/config.json` under the `mcpServers` key
+- **Cline:** `Settings → MCP Servers → Edit MCP Settings`
+
+### Hosted (no install)
+
+- **ChatGPT (Plus / Team):** [HEORAgent on ChatGPT](https://chatgpt.com/g/g-69f651f588f48191b1d69d54409857ec-heoragent) — type `/heor` to use it; works on any conversation.
+- **Web UI (Claude, BYOK):** [web-michael-ns-projects.vercel.app](https://web-michael-ns-projects.vercel.app) — bring your Anthropic API key; runs the full v1.6.3 toolset.
+
+---
+
+## Your first prompt
+
+Once your MCP host is configured, paste any of these to verify end-to-end:
+
+```
+Run a literature search for semaglutide cost-effectiveness in T2D
+using PubMed, NICE TAs, and ICER reports. Set runs=2.
+```
+
+```
+Run irb_review for an industry-funded interventional Phase 2 trial in
+relapsed MM — multi-site US+EU, pseudonymized data, greater-than-minimal
+risk. I need the review tier, GDPR/HIPAA DMP, SAE framework, and the
+ready-to-paste cover letter.
+```
+
+```
+Run jca_pico_scope for osimertinib in EGFR-mutant 2L NSCLC across
+DE/FR/IT/ES/NL. Then prepare an EU JCA dossier draft using the picos.
+```
+
+The first prompt exercises `literature_search` + `validate_links` (free, no API keys needed). The second exercises `irb_review` (pure decision tree, instant). The third exercises `jca_pico_scope` → `hta_dossier` pipeline.
+
+---
+
+## What's new
+
+See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current: **v1.6.3** (26 tools, 44 data sources).
+
+### v1.0.4 highlights (still in v1.6.3)
 
 Pharmacovigilance + workflow orchestration:
 
@@ -37,40 +145,7 @@ See [CHANGELOG.md](./CHANGELOG.md) for the full diff.
 
 ---
 
-## Quick Start
-
-### Claude Code
-
-```bash
-claude mcp add heor-agent -- npx heor-agent-mcp
-```
-
-Then restart Claude Code.
-
-### Claude Desktop / claude.ai
-
-Add to your MCP configuration:
-
-```json
-{
-  "mcpServers": {
-    "heor-agent": {
-      "command": "npx",
-      "args": ["heor-agent-mcp"]
-    }
-  }
-}
-```
-
-### Verify
-
-```
-> Run a literature search for semaglutide cost-effectiveness in T2D using PubMed and NICE TAs
-```
-
----
-
-## Tools (22)
+## Tools (26)
 
 | Tool | Purpose |
 |------|---------|

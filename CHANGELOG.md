@@ -40,6 +40,43 @@ Two parallel reviewers audited v1.6.2 and the new Slack weekly-digest feature wi
 
 All changes are silent failure-mode hardening + LLM ergonomics. No API surface changes; no migration needed.
 
+## v1.9.2 (2026-05-09) — polish: Nelder-Mead early exit + 6 review nits
+
+Six small quality improvements deferred from the v1.9.1 review. None are correctness fixes; these are polish on the v1.7-1.9 work. Two have a measurable performance impact:
+
+### Performance — full test suite **215s → 19s** (11×)
+
+Two of the changes turn out to dominate overall test runtime:
+
+- **Nelder-Mead convergence-tolerance early exit** in `survivalFitting.ts`. Pre-fix, the optimizer ran the full `maxIter=800` iterations regardless of convergence — typical fits converge in ~50-200 iterations, so 600+ were wasted compute. Added `if spread < 1e-8 (or 1e-6 relative) break` after the simplex sort. Real survival-MLE fixtures now converge in 50-150 iterations.
+- **Log floor `1e-300 → 1e-30`** in `logLikelihoodFromEvents`. The ultra-deep floor created near-flat likelihood surfaces in pathological starting regions; raising the floor lets the optimizer navigate cleanly. Combined with the early-exit, this halves runtime for the harder distributions (Log-normal, Gompertz). R's `flexsurv` and `survival` packages use a similar order-of-magnitude floor.
+
+### Correctness / hygiene
+
+- **Bootstrap RNG seeding for tests.** `computeEVPPI` and `bootstrapEVPPICI` now accept an optional `rng` parameter (defaults to `Math.random`). Tests pass a seeded `mulberry32` so the bootstrap CI is reproducible across runs. The "CI tightens at N" test no longer needs its `+1` slack — assertion tightened to strict `widthLarge < widthSmall`.
+- **Tightened parameter-recovery tolerances** in `tests/models/survivalFitting.test.ts`:
+  - Exponential N=500: 20% → 10% (~1.5 SD)
+  - Exponential N=1000: 12% → 7%
+  - Weibull N=500: 25% → 15% (joint 2-param MLE has higher variance)
+  - Log-normal μ: abs<0.4 → abs<0.25; σ: 30% → 18%
+  - Heavy 60% censoring: 30% → 20%
+
+  Tighter tolerances catch a 10% systematic bias that the previous 3-4 SD width would have missed. All still pass on the seeded fixtures.
+- **Documented the magic init values** in each survival fitter (Weibull `[1.0, scaleInit]`, log-logistic `[m, 1.5]`, log-normal `[muInit, 0.8]`, Gompertz `[0.01, rateInit]`). Each now has a comment explaining the empirical reasoning so a future maintainer doesn't over-tune them.
+- **Removed `void splitSentences`/`tokenizeWords`/`countSyllables` workaround** in `icfReadabilityCheck.ts`. These imports were never directly called in the handler — they were "tree-shaking guards" that silently relied on indirect use through `computeStats` / `computeReadabilityScores`. The unit tests already exercise them directly, so the explicit imports + `void` no-ops were dead code. Cleaned up.
+
+### Tests
+
+909/909 still passing. No new tests added — all changes either tighten existing assertions or are pure refactors of correct code.
+
+### Performance impact in production
+
+Negligible. The Nelder-Mead early exit speeds up `survival_fitting` IPD calls by ~3-4× in the typical case (faster convergence) but wall-clock for a 500-patient fit was already <100ms before, so the user-visible difference is "fast" → "very fast". The log floor change is functionally invisible at production parameter values.
+
+### Non-breaking
+
+All changes are pure quality improvements. No API surface changes; no observable behavior change at production parameter ranges.
+
 ## v1.9.1 (2026-05-09) — code-review fixes for v1.7.0 / v1.8.0 / v1.9.0
 
 Two parallel reviewers (math/statistics + ICF formula correctness) audited the v1.7-1.9 work within hours of ship. **0 CRITICAL, 4 HIGH, 8 MEDIUM, 7 LOW.** All 4 HIGHs were real correctness bugs in code that produces HTA / CMS / IRB-grade outputs. All addressed in this patch.

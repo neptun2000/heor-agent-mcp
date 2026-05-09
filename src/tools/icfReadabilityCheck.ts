@@ -22,10 +22,7 @@ import {
   computeReadabilityScores,
   computeStats,
   fleschKincaidGrade,
-  splitSentences,
-  tokenizeWords,
 } from "../icf/readability.js";
-import { countSyllables } from "../icf/syllables.js";
 import { findJargon } from "../icf/jargon.js";
 import {
   ICF_RULESET,
@@ -271,13 +268,6 @@ export async function handleIcfReadabilityCheck(
   lines.push("- FDA Communicating Risks and Benefits (2011).");
   lines.push("");
   lines.push(auditToMarkdown(audit));
-
-  // Use sentence/syllable utilities to satisfy the implicit dependency
-  // for tree-shaking (no-op at runtime; kept here so a refactor that
-  // removes them surfaces during build).
-  void splitSentences;
-  void tokenizeWords;
-  void countSyllables;
 
   return {
     content: lines.join("\n"),

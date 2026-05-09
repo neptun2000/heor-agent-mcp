@@ -179,6 +179,7 @@ function bootstrapEVPPICI(
   lambda: number,
   paramName: string,
   totalEVPI: number,
+  rng: () => number = Math.random,
 ): { lower: number; upper: number; se: number } {
   const B = BOOTSTRAP_RESAMPLES;
   const N = iterations.length;
@@ -187,7 +188,7 @@ function bootstrapEVPPICI(
   for (let b = 0; b < B; b++) {
     const resample: PSAIterationData[] = new Array(N);
     for (let i = 0; i < N; i++) {
-      resample[i] = iterations[Math.floor(Math.random() * N)]!;
+      resample[i] = iterations[Math.floor(rng() * N)]!;
     }
     // v1.9.1 fix: do NOT cap at the original totalEVPI here. Capping
     // inside the bootstrap loop truncates the upper tail of the
@@ -209,6 +210,13 @@ export function computeEVPPI(
   iterations: PSAIterationData[],
   lambda: number,
   parameterNames: string[],
+  /**
+   * Optional RNG. Defaults to `Math.random` for production. Tests pass
+   * a seeded mulberry32 so the bootstrap CI is reproducible. v1.9.2:
+   * pre-fix all bootstrap calls used `Math.random` unconditionally,
+   * which made tests like "CI tightens at N" theoretically flaky.
+   */
+  rng: () => number = Math.random,
 ): EVPPIResult[] {
   const N = iterations.length;
   if (N < 20) return [];
@@ -258,7 +266,13 @@ export function computeEVPPI(
 
     // Bootstrap CI when sample is large enough to be meaningful.
     if (N >= MIN_N_FOR_BOOTSTRAP) {
-      const ci = bootstrapEVPPICI(iterations, lambda, paramName, totalEVPI);
+      const ci = bootstrapEVPPICI(
+        iterations,
+        lambda,
+        paramName,
+        totalEVPI,
+        rng,
+      );
       result.evppi_ci_lower = ci.lower;
       result.evppi_ci_upper = ci.upper;
       result.evppi_se = ci.se;

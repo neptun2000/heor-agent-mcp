@@ -152,16 +152,19 @@ describe("MLE parameter recovery — Exponential", () => {
     const lambdaHat = exp.params.lambda!;
     // Within 20% of the true λ — generous tolerance for finite-sample
     // variance + censoring loss.
-    expect(Math.abs(lambdaHat - 0.05) / 0.05).toBeLessThan(0.2);
+    // v1.9.2: tightened from 20% to 10% (~1.5 SD for exp MLE at N=500
+    // with ~30% censoring — asymptotic SE = λ/√events ≈ 0.0027).
+    expect(Math.abs(lambdaHat - 0.05) / 0.05).toBeLessThan(0.1);
   });
 
-  it("recovery is tight at N=1000 (within 12% of true λ)", () => {
+  it("recovery is tight at N=1000 (within 7% of true λ)", () => {
     const r = fitSurvivalCurvesFromEventData(
       generateExponential(1000, 0.1, 0.3, 13),
     );
     const lambdaHat = r.fits.find((f) => f.name === "exponential")!.params
       .lambda!;
-    expect(Math.abs(lambdaHat - 0.1) / 0.1).toBeLessThan(0.12);
+    // v1.9.2: tightened from 12% → 7% (~1.5 SD at N=1000, 700 events).
+    expect(Math.abs(lambdaHat - 0.1) / 0.1).toBeLessThan(0.07);
   });
 });
 
@@ -174,8 +177,11 @@ describe("MLE parameter recovery — Weibull", () => {
     const wb = r.fits.find((f) => f.name === "weibull")!;
     const shapeHat = wb.params.shape!;
     const scaleHat = wb.params.scale!;
-    expect(Math.abs(shapeHat - 1.5) / 1.5).toBeLessThan(0.25);
-    expect(Math.abs(scaleHat - 20) / 20).toBeLessThan(0.25);
+    // v1.9.2: tightened from 25% → 15% on both. Weibull MLE has higher
+    // variance than exponential at the same N because it estimates 2
+    // params jointly; 15% is still ~2 SD wide, catches real bugs.
+    expect(Math.abs(shapeHat - 1.5) / 1.5).toBeLessThan(0.15);
+    expect(Math.abs(scaleHat - 20) / 20).toBeLessThan(0.15);
   });
 });
 
@@ -188,8 +194,9 @@ describe("MLE parameter recovery — Log-normal", () => {
     const ln = r.fits.find((f) => f.name === "log_normal")!;
     const muHat = ln.params.mu!;
     const sigmaHat = ln.params.sigma!;
-    expect(Math.abs(muHat - 2.5)).toBeLessThan(0.4);
-    expect(Math.abs(sigmaHat - 0.6) / 0.6).toBeLessThan(0.3);
+    // v1.9.2: tightened from abs<0.4 → abs<0.25 on μ; sigma 30% → 18%.
+    expect(Math.abs(muHat - 2.5)).toBeLessThan(0.25);
+    expect(Math.abs(sigmaHat - 0.6) / 0.6).toBeLessThan(0.18);
   });
 });
 
@@ -270,7 +277,10 @@ describe("right-censoring handling", () => {
     const lambdaHat = r.fits.find((f) => f.name === "exponential")!.params
       .lambda!;
     // Heavier censoring widens the CI; allow ~30% tolerance.
-    expect(Math.abs(lambdaHat - 0.1) / 0.1).toBeLessThan(0.3);
+    // v1.9.2: tightened from 30% → 20% (heavy censoring widens the SE
+    // but 800 patients × 40% events = 320 events still gives reasonable
+    // precision).
+    expect(Math.abs(lambdaHat - 0.1) / 0.1).toBeLessThan(0.2);
   });
 
   it("handles all-events (zero censoring)", () => {

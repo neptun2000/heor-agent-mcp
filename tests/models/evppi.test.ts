@@ -23,6 +23,18 @@
  */
 import { computeEVPPI, type PSAIterationData } from "../../src/models/evppi.js";
 
+/** Deterministic PRNG for reproducible bootstrap tests (v1.9.2). */
+function mulberry32(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) | 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 // ─── Fixture builders ─────────────────────────────────────────────────────
 
 /**
@@ -189,15 +201,20 @@ describe("computeEVPPI — bootstrap 95% CI (v1.7 fix)", () => {
   it("CI tightens as N grows (sanity check on bootstrap quality)", () => {
     const small = highEvppiFixture(100);
     const large = highEvppiFixture(800);
-    const rSmall = computeEVPPI(small, 30000, ["efficacy"]);
-    const rLarge = computeEVPPI(large, 30000, ["efficacy"]);
+    // v1.9.2: seeded RNG so bootstrap variance is reproducible. Pre-fix
+    // this test relied on Math.random and was theoretically flaky —
+    // the 1-unit slack on the assertion was a band-aid for that.
+    const rngSmall = mulberry32(0xc1a5ce0a);
+    const rngLarge = mulberry32(0xc1a5ce0a);
+    const rSmall = computeEVPPI(small, 30000, ["efficacy"], rngSmall);
+    const rLarge = computeEVPPI(large, 30000, ["efficacy"], rngLarge);
     const widthSmall =
       (rSmall[0]?.evppi_ci_upper ?? 0) - (rSmall[0]?.evppi_ci_lower ?? 0);
     const widthLarge =
       (rLarge[0]?.evppi_ci_upper ?? 0) - (rLarge[0]?.evppi_ci_lower ?? 0);
-    // Larger N should produce narrower CI in expectation. Allow some
-    // jitter — smoothing not a strict guarantee but should hold here.
-    expect(widthLarge).toBeLessThanOrEqual(widthSmall + 1);
+    // With the same RNG seed, the only source of width difference is
+    // the underlying signal — larger N = narrower bootstrap distribution.
+    expect(widthLarge).toBeLessThan(widthSmall);
   });
 
   it("does NOT compute CI when below noise floor (no point in CIs on noise)", () => {

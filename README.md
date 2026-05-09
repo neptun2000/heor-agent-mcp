@@ -45,7 +45,7 @@ curl -s http://localhost:8080/health
 Expected output:
 
 ```json
-{"status":"ok","server":"heor-agent-mcp","version":"1.9.1"}
+{"status":"ok","server":"heor-agent-mcp","version":"1.9.2"}
 ```
 
 ✅ If you see the JSON above, the npm package works on your machine. Any further issues are in your MCP client config (Claude Desktop / Cursor / Continue), not the server.
@@ -126,7 +126,7 @@ The first prompt exercises `literature_search` + `validate_links` (free, no API 
 
 ## What's new
 
-See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current: **v1.9.1** (27 tools, 44 data sources).
+See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current: **v1.9.2** (27 tools, 44 data sources).
 
 ### v1.0.4 highlights (still in v1.6.3)
 

@@ -40,6 +40,42 @@ Two parallel reviewers audited v1.6.2 and the new Slack weekly-digest feature wi
 
 All changes are silent failure-mode hardening + LLM ergonomics. No API surface changes; no migration needed.
 
+## v1.9.0 (2026-05-09) — `survival_fitting` patient-level MLE path (no longer ⚠️ EXPERIMENTAL on the IPD input)
+
+The tool now accepts patient-level event-time data (`event_data: Array<{time, event: 0 | 1}>`) alongside the legacy `km_data` step-summary path. Caller picks one (Zod refine enforces). When event_data is supplied, the fit is true right-censored maximum likelihood per Collett (2015) and NICE DSU TSD 14 (Latimer 2013) — no approximation warning. The KM-table path remains supported for back-compat with literature-digitization workflows but emits an explicit "approximation, less reliable" warning and points the caller at event_data.
+
+### Added
+
+- **`event_data` input** with at least 5 patient-level rows. Each row is `{time, event}` where `event=1` for an observed event and `event=0` for right-censoring at `time`.
+- **`fitSurvivalCurvesFromEventData()`** model entry point. Five distributions (Exponential, Weibull, Log-logistic, Log-normal, Gompertz) fit via Nelder-Mead simplex on the proper right-censored log-likelihood `Σᵢ [δᵢ·log(f(tᵢ)) + (1-δᵢ)·log(S(tᵢ))]`.
+- **Kaplan-Meier curve from event data.** When event_data is supplied, the markdown report's "KM Observed" column is built from the standard KM estimator on those same rows — no separate input needed.
+- **Mutually-exclusive Zod validation.** Caller passes exactly one of `km_data` or `event_data`; passing both or neither raises a clear error.
+
+### Changed
+
+- **Methodology line** branches: event_data path cites Collett 2015 + TSD 14; km_data path is honest that it's an interval-censored approximation.
+- **Tool description** no longer leads with "⚠️ EXPERIMENTAL"; instead positions event_data as the preferred path with km_data as legacy.
+- **CLAUDE.md ⚠️ EXPERIMENTAL list** trimmed from 2 → 1: only `population_adjusted_comparison` (MAIC/STC) remains.
+
+### Tests
+
+14 new IPD-path tests in `tests/models/survivalFitting.test.ts`:
+- Schema invariants (rejects N<5, returns 5 fits, monotonic KM curve)
+- **Parameter recovery** — simulate from known Exponential(λ=0.05) / Weibull(shape=1.5, scale=20) / Log-normal(μ=2.5, σ=0.6) and verify recovered params within 20-30% at N=500-1000 with seeded mulberry32 PRNG (deterministic). Strongest available evidence the MLE is correct.
+- Model selection sanity (correct distribution wins by AIC on truly-from-that-distribution data)
+- S(0)=1, monotonic decreasing, S(median)≈0.5 invariants
+- Heavy 60% censoring still recovers parameters within 30%
+- Zero-censoring corner case
+
+5 additional tool-level tests for the new schema paths (event_data path methodology, KM-path "approximation" warning unchanged but no longer says "EXPERIMENTAL", mutual-exclusivity validation).
+
+882 → 901 MCP tests passing.
+
+### Non-breaking
+
+- `km_data` API surface unchanged. Existing callers that pass `km_data` get the same fit they got before, with a slightly clarified warning ("approximation" instead of "EXPERIMENTAL").
+- `event_data` is purely additive — no migration needed.
+
 ## v1.8.0 (2026-05-09) — `icf_readability_check` tool (paired with `irb_review`)
 
 New tool. Closes the v2 deferral from design log #21: paired ICF

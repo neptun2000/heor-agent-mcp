@@ -25,7 +25,10 @@ describe("handleSurvivalFitting", () => {
   it("rejects fewer than 3 data points", async () => {
     await expect(
       handleSurvivalFitting({
-        km_data: [{ time: 0, survival: 1.0 }, { time: 6, survival: 0.8 }],
+        km_data: [
+          { time: 0, survival: 1.0 },
+          { time: 6, survival: 0.8 },
+        ],
       }),
     ).rejects.toThrow();
   });
@@ -53,9 +56,13 @@ describe("handleSurvivalFitting", () => {
       best_bic: string;
     };
     expect(content.fits).toHaveLength(5);
-    expect(["exponential", "weibull", "log_logistic", "log_normal", "gompertz"]).toContain(
-      content.best_aic,
-    );
+    expect([
+      "exponential",
+      "weibull",
+      "log_logistic",
+      "log_normal",
+      "gompertz",
+    ]).toContain(content.best_aic);
   });
 
   it("warns when n_at_risk missing", async () => {
@@ -66,9 +73,55 @@ describe("handleSurvivalFitting", () => {
     expect(warnings.toLowerCase()).toContain("n_at_risk");
   });
 
-  it("includes experimental warning in audit", async () => {
+  it("KM-table path warns that fits are an approximation (v1.9.0: no longer 'EXPERIMENTAL', but still flagged)", async () => {
     const result = await handleSurvivalFitting({ km_data: kmData });
     const warnings = result.audit.warnings?.join(" ") ?? "";
-    expect(warnings.toLowerCase()).toContain("experimental");
+    expect(warnings.toLowerCase()).toMatch(
+      /approximation|less reliable|use event_data/i,
+    );
+  });
+
+  it("event_data path emits NO approximation warning (true MLE)", async () => {
+    // 12 alternating event/censored rows with reasonable spread
+    const eventData = [
+      { time: 1.5, event: 1 as const },
+      { time: 3.0, event: 1 as const },
+      { time: 4.2, event: 0 as const },
+      { time: 5.8, event: 1 as const },
+      { time: 7.1, event: 1 as const },
+      { time: 8.5, event: 0 as const },
+      { time: 10.2, event: 1 as const },
+      { time: 12.4, event: 1 as const },
+      { time: 14.8, event: 0 as const },
+      { time: 17.0, event: 1 as const },
+      { time: 19.5, event: 0 as const },
+      { time: 22.0, event: 1 as const },
+    ];
+    const result = await handleSurvivalFitting({ event_data: eventData });
+    const warnings = result.audit.warnings?.join(" ") ?? "";
+    expect(warnings.toLowerCase()).not.toMatch(/approximation/i);
+    // Methodology line should reference patient-level / TSD 14
+    expect(result.audit.methodology?.toLowerCase()).toMatch(
+      /patient-level|tsd 14|mle/i,
+    );
+  });
+
+  it("rejects passing both km_data and event_data simultaneously", async () => {
+    await expect(
+      handleSurvivalFitting({
+        km_data: kmData,
+        event_data: [
+          { time: 1, event: 1 as const },
+          { time: 2, event: 1 as const },
+          { time: 3, event: 0 as const },
+          { time: 4, event: 1 as const },
+          { time: 5, event: 0 as const },
+        ],
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("rejects passing neither km_data nor event_data", async () => {
+    await expect(handleSurvivalFitting({})).rejects.toThrow();
   });
 });

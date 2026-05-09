@@ -1,13 +1,27 @@
 /**
- * Survival Curve Fitting — fit parametric distributions to Kaplan-Meier data.
+ * Survival Curve Fitting — fit parametric distributions.
+ *
+ * Two input paths:
+ *   1. **Patient-level event data** (the canonical path; v1.9.0+): array of
+ *      `{time, event}` rows where `event=1` for an observed event and
+ *      `event=0` for right-censoring. Standard right-censored MLE per
+ *      Collett (2015) — log-likelihood is `Σᵢ [δᵢ·log(f(tᵢ)) + (1-δᵢ)·log(S(tᵢ))]`.
+ *      This is the proper TSD-14 method and what NICE expects. No longer
+ *      ⚠️ EXPERIMENTAL.
+ *   2. **KM step-summary data** (legacy path, kept for back-compat): array
+ *      of `{time, survival, n_at_risk?}` from a published KM curve. Treated
+ *      as interval-censored — back out events/censored from the survival
+ *      drops between consecutive points. Approximation, not true MLE on
+ *      the underlying patient times. Output flags this clearly.
  *
  * Supports: Exponential, Weibull, Log-logistic, Log-normal, Gompertz.
- * Uses maximum likelihood estimation via Newton-Raphson optimization.
- * Model selection via AIC/BIC.
+ * Optimization: Nelder-Mead simplex (no derivatives needed).
+ * Model selection via AIC / BIC.
  *
  * References:
  * - Latimer NR. NICE DSU TSD 14: Survival analysis (2013)
  * - Collett D. Modelling Survival Data in Medical Research (2015)
+ * - Klein JP, Moeschberger ML. Survival Analysis (2003) — MLE chapter
  */
 
 export interface KMDataPoint {
@@ -15,6 +29,16 @@ export interface KMDataPoint {
   survival: number; // proportion surviving (0-1)
   n_at_risk?: number; // optional: patients at risk
   n_events?: number; // optional: events in interval
+}
+
+/**
+ * Patient-level event data row. The canonical TSD-14 input shape.
+ * `event = 1` → event observed at time `t`; `event = 0` → right-censored
+ * (last seen alive at time `t`, status unknown after).
+ */
+export interface EventDataPoint {
+  time: number;
+  event: 0 | 1;
 }
 
 export type DistributionName =
@@ -128,7 +152,8 @@ function normalCDF(z: number): number {
   const sign = z < 0 ? -1 : 1;
   const x = Math.abs(z) / Math.sqrt(2);
   const t = 1 / (1 + p * x);
-  const y = 1 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+  const y =
+    1 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
 
   return 0.5 * (1 + sign * y);
 }
@@ -147,13 +172,19 @@ function logLikelihood(
   let ll = 0;
   for (let i = 0; i < data.length; i++) {
     const observed = data[i]!.survival;
-    const predicted = Math.max(1e-15, Math.min(1 - 1e-15, survFn(data[i]!.time)));
+    const predicted = Math.max(
+      1e-15,
+      Math.min(1 - 1e-15, survFn(data[i]!.time)),
+    );
 
     // Events in this interval
     const nAtRisk = data[i]!.n_at_risk ?? 100;
     const prevSurv = i === 0 ? 1 : data[i - 1]!.survival;
     const events = Math.round((prevSurv - observed) * nAtRisk);
-    const censored = Math.max(0, (i === 0 ? nAtRisk : (data[i]!.n_at_risk ?? nAtRisk)) - events);
+    const censored = Math.max(
+      0,
+      (i === 0 ? nAtRisk : (data[i]!.n_at_risk ?? nAtRisk)) - events,
+    );
 
     // Contribution: events contribute log(f(t)), censored contribute log(S(t))
     if (events > 0) {
@@ -217,9 +248,10 @@ function nelderMead(
       // Expansion
       const expanded = centroid.map((c, j) => c + gamma * (reflected[j]! - c));
       const fExpanded = fn(expanded);
-      simplex[n] = fExpanded < fReflected
-        ? { point: expanded, value: fExpanded }
-        : { point: reflected, value: fReflected };
+      simplex[n] =
+        fExpanded < fReflected
+          ? { point: expanded, value: fExpanded }
+          : { point: reflected, value: fReflected };
       continue;
     }
 
@@ -251,7 +283,8 @@ function nelderMead(
 function fitExponential(data: KMDataPoint[]): FittedDistribution {
   // MLE for exponential: lambda = events / total_time
   // Use optimization for consistency with interval-censored data
-  const medianTime = data.find((d) => d.survival <= 0.5)?.time ?? data[data.length - 1]!.time;
+  const medianTime =
+    data.find((d) => d.survival <= 0.5)?.time ?? data[data.length - 1]!.time;
   const lambdaInit = Math.log(2) / medianTime;
 
   const opt = nelderMead(
@@ -273,12 +306,15 @@ function fitExponential(data: KMDataPoint[]): FittedDistribution {
     survival_at: (t) => expSurvival(t, lambda),
     hazard_at: (t) => expHazard(t, lambda),
     median_survival: Math.log(2) / lambda,
-    mean_survival_restricted: restrictedMean(data, (t) => expSurvival(t, lambda)),
+    mean_survival_restricted: restrictedMean(data, (t) =>
+      expSurvival(t, lambda),
+    ),
   };
 }
 
 function fitWeibull(data: KMDataPoint[]): FittedDistribution {
-  const medianTime = data.find((d) => d.survival <= 0.5)?.time ?? data[data.length - 1]!.time;
+  const medianTime =
+    data.find((d) => d.survival <= 0.5)?.time ?? data[data.length - 1]!.time;
   const scaleInit = medianTime / Math.pow(Math.log(2), 1);
 
   const opt = nelderMead(
@@ -305,12 +341,15 @@ function fitWeibull(data: KMDataPoint[]): FittedDistribution {
     survival_at: (t) => weibullSurvival(t, shape, scale),
     hazard_at: (t) => weibullHazard(t, shape, scale),
     median_survival: median,
-    mean_survival_restricted: restrictedMean(data, (t) => weibullSurvival(t, shape, scale)),
+    mean_survival_restricted: restrictedMean(data, (t) =>
+      weibullSurvival(t, shape, scale),
+    ),
   };
 }
 
 function fitLogLogistic(data: KMDataPoint[]): FittedDistribution {
-  const medianTime = data.find((d) => d.survival <= 0.5)?.time ?? data[data.length - 1]!.time;
+  const medianTime =
+    data.find((d) => d.survival <= 0.5)?.time ?? data[data.length - 1]!.time;
 
   const opt = nelderMead(
     (p) =>
@@ -335,12 +374,15 @@ function fitLogLogistic(data: KMDataPoint[]): FittedDistribution {
     survival_at: (t) => logLogisticSurvival(t, alpha, beta),
     hazard_at: (t) => logLogisticHazard(t, alpha, beta),
     median_survival: alpha,
-    mean_survival_restricted: restrictedMean(data, (t) => logLogisticSurvival(t, alpha, beta)),
+    mean_survival_restricted: restrictedMean(data, (t) =>
+      logLogisticSurvival(t, alpha, beta),
+    ),
   };
 }
 
 function fitLogNormal(data: KMDataPoint[]): FittedDistribution {
-  const medianTime = data.find((d) => d.survival <= 0.5)?.time ?? data[data.length - 1]!.time;
+  const medianTime =
+    data.find((d) => d.survival <= 0.5)?.time ?? data[data.length - 1]!.time;
   const muInit = Math.log(Math.max(0.1, medianTime));
 
   const opt = nelderMead(
@@ -366,12 +408,15 @@ function fitLogNormal(data: KMDataPoint[]): FittedDistribution {
     survival_at: (t) => logNormalSurvival(t, mu, sigma),
     hazard_at: (t) => logNormalHazard(t, mu, sigma),
     median_survival: Math.exp(mu),
-    mean_survival_restricted: restrictedMean(data, (t) => logNormalSurvival(t, mu, sigma)),
+    mean_survival_restricted: restrictedMean(data, (t) =>
+      logNormalSurvival(t, mu, sigma),
+    ),
   };
 }
 
 function fitGompertz(data: KMDataPoint[]): FittedDistribution {
-  const medianTime = data.find((d) => d.survival <= 0.5)?.time ?? data[data.length - 1]!.time;
+  const medianTime =
+    data.find((d) => d.survival <= 0.5)?.time ?? data[data.length - 1]!.time;
   const rateInit = Math.log(2) / medianTime;
 
   const opt = nelderMead(
@@ -406,8 +451,370 @@ function fitGompertz(data: KMDataPoint[]): FittedDistribution {
     survival_at: (t) => gompertzSurvival(t, shape, rate),
     hazard_at: (t) => gompertzHazard(t, shape, rate),
     median_survival: median,
-    mean_survival_restricted: restrictedMean(data, (t) => gompertzSurvival(t, shape, rate)),
+    mean_survival_restricted: restrictedMean(data, (t) =>
+      gompertzSurvival(t, shape, rate),
+    ),
   };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Patient-level event-time MLE (v1.9.0).
+//
+// True right-censored maximum likelihood: for each (t_i, δ_i) row,
+//   contribution = δ_i · log(f(t_i)) + (1 - δ_i) · log(S(t_i))
+// where f(t) = h(t) · S(t) is the density.
+//
+// This is what NICE DSU TSD 14 expects for parametric survival modeling.
+// The KM-table path remains supported (for back-compat with literature
+// digitization workflows) but is documented as an approximation.
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Right-censored MLE log-likelihood given parametric survival + hazard.
+ * Uses f(t) = h(t)·S(t). Numerically guarded against log(0).
+ */
+function logLikelihoodFromEvents(
+  events: EventDataPoint[],
+  survFn: (t: number) => number,
+  hazardFn: (t: number) => number,
+): number {
+  let ll = 0;
+  for (const row of events) {
+    const t = row.time;
+    const s = Math.max(1e-300, survFn(t));
+    if (row.event === 1) {
+      // log f(t) = log h(t) + log S(t)
+      const h = Math.max(1e-300, hazardFn(t));
+      ll += Math.log(h) + Math.log(s);
+    } else {
+      ll += Math.log(s);
+    }
+  }
+  return ll;
+}
+
+/**
+ * Median initialiser: empirical median of observed event times (falls
+ * back to median of all times when the event rate is very low).
+ */
+function initialMedian(events: EventDataPoint[]): number {
+  const observed = events.filter((e) => e.event === 1).map((e) => e.time);
+  const pool = observed.length >= 5 ? observed : events.map((e) => e.time);
+  const sorted = [...pool].sort((a, b) => a - b);
+  if (sorted.length === 0) return 1;
+  return sorted[Math.floor(sorted.length / 2)]!;
+}
+
+function fitExponentialFromEvents(
+  events: EventDataPoint[],
+): FittedDistribution {
+  const m = initialMedian(events);
+  const lambdaInit = Math.max(1e-6, Math.log(2) / m);
+
+  const opt = nelderMead(
+    (p) =>
+      -logLikelihoodFromEvents(
+        events,
+        (t) => expSurvival(t, Math.max(1e-9, p[0]!)),
+        (_t) => Math.max(1e-9, p[0]!),
+      ),
+    [lambdaInit],
+  );
+  const lambda = Math.max(1e-9, opt[0]!);
+  const ll = logLikelihoodFromEvents(
+    events,
+    (t) => expSurvival(t, lambda),
+    () => lambda,
+  );
+  const k = 1;
+  const n = events.length;
+  return {
+    name: "exponential",
+    params: { lambda },
+    aic: -2 * ll + 2 * k,
+    bic: -2 * ll + k * Math.log(n),
+    log_likelihood: ll,
+    survival_at: (t) => expSurvival(t, lambda),
+    hazard_at: () => lambda,
+    median_survival: Math.log(2) / lambda,
+    mean_survival_restricted: 1 / lambda,
+  };
+}
+
+function fitWeibullFromEvents(events: EventDataPoint[]): FittedDistribution {
+  const m = initialMedian(events);
+  const scaleInit = Math.max(0.01, m / Math.pow(Math.log(2), 1));
+  const opt = nelderMead(
+    (p) =>
+      -logLikelihoodFromEvents(
+        events,
+        (t) => weibullSurvival(t, Math.max(0.05, p[0]!), Math.max(0.01, p[1]!)),
+        (t) => weibullHazard(t, Math.max(0.05, p[0]!), Math.max(0.01, p[1]!)),
+      ),
+    [1.0, scaleInit],
+    800,
+  );
+  const shape = Math.max(0.05, opt[0]!);
+  const scale = Math.max(0.01, opt[1]!);
+  const ll = logLikelihoodFromEvents(
+    events,
+    (t) => weibullSurvival(t, shape, scale),
+    (t) => weibullHazard(t, shape, scale),
+  );
+  const k = 2;
+  const n = events.length;
+  return {
+    name: "weibull",
+    params: { shape, scale },
+    aic: -2 * ll + 2 * k,
+    bic: -2 * ll + k * Math.log(n),
+    log_likelihood: ll,
+    survival_at: (t) => weibullSurvival(t, shape, scale),
+    hazard_at: (t) => weibullHazard(t, shape, scale),
+    median_survival: scale * Math.pow(Math.log(2), 1 / shape),
+    mean_survival_restricted: scale * gammaApprox(1 + 1 / shape),
+  };
+}
+
+function fitLogLogisticFromEvents(
+  events: EventDataPoint[],
+): FittedDistribution {
+  const m = initialMedian(events);
+  const opt = nelderMead(
+    (p) =>
+      -logLikelihoodFromEvents(
+        events,
+        (t) =>
+          logLogisticSurvival(t, Math.max(0.01, p[0]!), Math.max(0.1, p[1]!)),
+        (t) =>
+          logLogisticHazard(t, Math.max(0.01, p[0]!), Math.max(0.1, p[1]!)),
+      ),
+    [m, 1.5],
+    800,
+  );
+  const alpha = Math.max(0.01, opt[0]!);
+  const beta = Math.max(0.1, opt[1]!);
+  const ll = logLikelihoodFromEvents(
+    events,
+    (t) => logLogisticSurvival(t, alpha, beta),
+    (t) => logLogisticHazard(t, alpha, beta),
+  );
+  const k = 2;
+  const n = events.length;
+  return {
+    name: "log_logistic",
+    params: { alpha, beta },
+    aic: -2 * ll + 2 * k,
+    bic: -2 * ll + k * Math.log(n),
+    log_likelihood: ll,
+    survival_at: (t) => logLogisticSurvival(t, alpha, beta),
+    hazard_at: (t) => logLogisticHazard(t, alpha, beta),
+    median_survival: alpha,
+    mean_survival_restricted: alpha, // restricted mean is finite only if beta > 1; simple fallback
+  };
+}
+
+function fitLogNormalFromEvents(events: EventDataPoint[]): FittedDistribution {
+  const m = initialMedian(events);
+  const muInit = Math.log(Math.max(0.01, m));
+  const opt = nelderMead(
+    (p) =>
+      -logLikelihoodFromEvents(
+        events,
+        (t) => logNormalSurvival(t, p[0]!, Math.max(0.01, p[1]!)),
+        (t) => logNormalHazard(t, p[0]!, Math.max(0.01, p[1]!)),
+      ),
+    [muInit, 0.8],
+    800,
+  );
+  const mu = opt[0]!;
+  const sigma = Math.max(0.01, opt[1]!);
+  const ll = logLikelihoodFromEvents(
+    events,
+    (t) => logNormalSurvival(t, mu, sigma),
+    (t) => logNormalHazard(t, mu, sigma),
+  );
+  const k = 2;
+  const n = events.length;
+  return {
+    name: "log_normal",
+    params: { mu, sigma },
+    aic: -2 * ll + 2 * k,
+    bic: -2 * ll + k * Math.log(n),
+    log_likelihood: ll,
+    survival_at: (t) => logNormalSurvival(t, mu, sigma),
+    hazard_at: (t) => logNormalHazard(t, mu, sigma),
+    median_survival: Math.exp(mu),
+    mean_survival_restricted: Math.exp(mu + (sigma * sigma) / 2),
+  };
+}
+
+function fitGompertzFromEvents(events: EventDataPoint[]): FittedDistribution {
+  const m = initialMedian(events);
+  const rateInit = Math.max(1e-6, Math.log(2) / m);
+  const opt = nelderMead(
+    (p) =>
+      -logLikelihoodFromEvents(
+        events,
+        (t) => gompertzSurvival(t, p[0]!, Math.max(1e-6, p[1]!)),
+        (t) => gompertzHazard(t, p[0]!, Math.max(1e-6, p[1]!)),
+      ),
+    [0.01, rateInit],
+    800,
+  );
+  const shape = opt[0]!;
+  const rate = Math.max(1e-6, opt[1]!);
+  const ll = logLikelihoodFromEvents(
+    events,
+    (t) => gompertzSurvival(t, shape, rate),
+    (t) => gompertzHazard(t, shape, rate),
+  );
+  const k = 2;
+  const n = events.length;
+  // Median: solve S(t) = 0.5 numerically.
+  let median = m;
+  for (let t = 0.01; t < m * 10; t += 0.01) {
+    if (gompertzSurvival(t, shape, rate) <= 0.5) {
+      median = t;
+      break;
+    }
+  }
+  return {
+    name: "gompertz",
+    params: { shape, rate },
+    aic: -2 * ll + 2 * k,
+    bic: -2 * ll + k * Math.log(n),
+    log_likelihood: ll,
+    survival_at: (t) => gompertzSurvival(t, shape, rate),
+    hazard_at: (t) => gompertzHazard(t, shape, rate),
+    median_survival: median,
+    mean_survival_restricted: median * 1.4427, // crude RMST stand-in
+  };
+}
+
+/**
+ * Stirling's approximation for Γ(x). Used for Weibull RMST. Accurate
+ * to ~0.1% for x ≥ 1; we don't need higher precision for restricted
+ * mean reporting.
+ */
+function gammaApprox(x: number): number {
+  if (x <= 0) return Number.POSITIVE_INFINITY;
+  // Use Lanczos for x > 0.5
+  const g = 7;
+  const c = [
+    0.99999999999980993, 676.5203681218851, -1259.1392167224028,
+    771.32342877765313, -176.61502916214059, 12.507343278686905,
+    -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7,
+  ];
+  if (x < 0.5) {
+    return Math.PI / (Math.sin(Math.PI * x) * gammaApprox(1 - x));
+  }
+  let xx = x - 1;
+  let a = c[0]!;
+  for (let i = 1; i < g + 2; i++) a += c[i]! / (xx + i);
+  const t = xx + g + 0.5;
+  return Math.sqrt(2 * Math.PI) * Math.pow(t, xx + 0.5) * Math.exp(-t) * a;
+}
+
+/**
+ * IPD entry point: fit all 5 distributions to right-censored event-time data.
+ */
+export function fitSurvivalCurvesFromEventData(
+  events: EventDataPoint[],
+  timeUnit: string = "months",
+): SurvivalFitResult {
+  if (events.length < 5) {
+    throw new Error(
+      "At least 5 patient-level event-data rows required for parametric fitting",
+    );
+  }
+  const sorted = [...events].sort((a, b) => a.time - b.time);
+
+  const fits: FittedDistribution[] = [
+    fitExponentialFromEvents(sorted),
+    fitWeibullFromEvents(sorted),
+    fitLogLogisticFromEvents(sorted),
+    fitLogNormalFromEvents(sorted),
+    fitGompertzFromEvents(sorted),
+  ];
+  const byAIC = [...fits].sort((a, b) => a.aic - b.aic);
+  const byBIC = [...fits].sort((a, b) => a.bic - b.bic);
+
+  // Build a synthetic KM table from the event data for the markdown
+  // extrapolation comparison column. Standard Kaplan-Meier estimator.
+  const kmTable = computeKaplanMeier(sorted);
+
+  // Extrapolations 0..2× max observed time.
+  const maxObserved = sorted[sorted.length - 1]!.time;
+  const extrapolationTimes: number[] = [];
+  for (let t = 0; t <= maxObserved * 2; t += maxObserved / 10) {
+    extrapolationTimes.push(Math.round(t * 10) / 10);
+  }
+  const extrapolations = extrapolationTimes.map((t) => {
+    const kmPoint = kmTable.find(
+      (d) => Math.abs(d.time - t) < maxObserved / 20,
+    );
+    return {
+      time: t,
+      km_observed: kmPoint?.survival,
+      exponential: fits[0]!.survival_at(t),
+      weibull: fits[1]!.survival_at(t),
+      log_logistic: fits[2]!.survival_at(t),
+      log_normal: fits[3]!.survival_at(t),
+      gompertz: fits[4]!.survival_at(t),
+    };
+  });
+
+  return {
+    fits,
+    best_aic: byAIC[0]!,
+    best_bic: byBIC[0]!,
+    km_data: kmTable,
+    time_unit: timeUnit,
+    extrapolations,
+  };
+}
+
+/**
+ * Standard Kaplan-Meier estimator from right-censored event data.
+ * Used to surface a "KM observed" column alongside extrapolations so
+ * the markdown report can show the empirical curve next to each
+ * parametric fit.
+ */
+function computeKaplanMeier(events: EventDataPoint[]): KMDataPoint[] {
+  const sorted = [...events].sort((a, b) => a.time - b.time);
+  const out: KMDataPoint[] = [];
+  let nAtRisk = sorted.length;
+  let s = 1.0;
+  let prevTime = -1;
+  let eventsAtTime = 0;
+  let censoredAtTime = 0;
+
+  const flushAt = (t: number) => {
+    if (eventsAtTime > 0 && nAtRisk > 0) {
+      s = s * (1 - eventsAtTime / nAtRisk);
+    }
+    out.push({
+      time: t,
+      survival: s,
+      n_at_risk: nAtRisk,
+      n_events: eventsAtTime,
+    });
+    nAtRisk -= eventsAtTime + censoredAtTime;
+    eventsAtTime = 0;
+    censoredAtTime = 0;
+  };
+
+  for (const row of sorted) {
+    if (prevTime >= 0 && row.time !== prevTime) {
+      flushAt(prevTime);
+    }
+    if (row.event === 1) eventsAtTime++;
+    else censoredAtTime++;
+    prevTime = row.time;
+  }
+  if (prevTime >= 0) flushAt(prevTime);
+  return out;
 }
 
 function restrictedMean(

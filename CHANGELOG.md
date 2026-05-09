@@ -40,6 +40,40 @@ Two parallel reviewers audited v1.6.2 and the new Slack weekly-digest feature wi
 
 All changes are silent failure-mode hardening + LLM ergonomics. No API surface changes; no migration needed.
 
+## v1.7.0 (2026-05-09) — EVPPI promoted out of ⚠️ EXPERIMENTAL
+
+Three quality fixes to the Strong-2014 binning estimator in `cost_effectiveness_model`'s EVPPI path. Removes the long-standing CLAUDE.md caveat ("non-parametric binning, noisy when total EVPI ~0").
+
+### Fixed
+
+- **Mathematical cap.** EVPPI ≤ totalEVPI by definition (per-parameter information value can't exceed full-uncertainty resolution). Pre-fix the binning estimator could overshoot due to sample noise, producing `evppi_proportion > 1.0` in rare cases. Now `Math.min(raw, totalEVPI)` per parameter.
+- **Noise-floor guard.** When the decision is robust to uncertainty (totalEVPI ~ 0), per-parameter binning still produced fake positive signals from sample noise — leading to a misleading "top 5 parameters worth researching" table built from pure noise. We now compute a noise-floor threshold relative to NMB stddev (`0.5% × stddev(NMB)`); if totalEVPI falls below it, all per-parameter EVPPIs are suppressed to `0` with `below_noise_floor: true`. The markdown report surfaces a clear "Decision is robust to all uncertainty" message instead of the empty/noisy table.
+- **Adaptive bin width** via Freedman-Diaconis (`h = 2·IQR·N^(-1/3)`) replacing Sturges' rule. F-D adapts to actual data spread and handles non-normal distributions better — important for cost / utility parameters which are typically right-skewed. Falls back to Sturges' for constant or tied parameters.
+- **Constant-parameter short-circuit.** When a parameter has zero variance, EVPPI is now hard-coded to 0 (rather than picking up unrelated NMB variance from the sort being arbitrary on equal keys). Fixes a fake-positive that the binning estimator alone couldn't avoid.
+
+### Added
+
+- **Bootstrap 95% confidence interval** per parameter (200 resamples with replacement). Each EVPPIResult now carries `evppi_ci_lower`, `evppi_ci_upper`, and `evppi_se`. Skipped for parameters below the noise floor (no point in CI on noise) and for tiny samples (`N < 50`). Markdown report shows the CI alongside the point estimate: `| Parameter | EVPPI | 95% CI | % of EVPI |`.
+
+### Tests
+
+13 new EVPPI tests across 6 describe blocks:
+- Basic invariants (small-N skip, missing-param skip, sort order, non-negativity)
+- Mathematical cap (EVPPI ≤ totalEVPI; proportion ∈ [0,1])
+- Noise-floor guard (suppression on robust-decision fixture; doesn't fire on high-uncertainty fixture)
+- Bootstrap CI (CI brackets point; CI ≥ 0; CI tightens as N grows; CI omitted below noise floor)
+- Constant-parameter handling
+
+848/848 tests passing (was 835).
+
+### Non-breaking
+
+`EVPPIResult` adds 4 optional fields (`evppi_ci_lower`, `evppi_ci_upper`, `evppi_se`, `below_noise_floor`). The pre-existing `evppi`, `evppi_proportion`, `parameter` fields are unchanged. No migration needed.
+
+### Open methodology gaps (deferred)
+
+The binning estimator still doesn't match the gold-standard methods (GAM regression per Strong 2014, Gaussian-process regression per Heath-Manolopoulou-Baio 2018) for accuracy in challenging cases. Adding a real GAM smoother is ~2 weeks of work and is candidate for a future v1.x patch when there's appetite. v1.7.0 makes the binning estimator HONEST (no fake positives, proper uncertainty quantification, mathematical bounds) — appropriate for the current default use case where EVPPI is one of many sensitivity outputs, not the primary model output.
+
 ## v1.6.2 (2026-05-07) — schema hardening for LLM input shapes
 
 Two LLM-input-shape fixes surfaced by a PostHog audit of `project.create` and `evidence.risk_of_bias` errors.

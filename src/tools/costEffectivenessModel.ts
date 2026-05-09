@@ -435,6 +435,10 @@ export async function handleCostEffectivenessModel(
         parameter: e.parameter,
         evppi: e.evppi,
         evppi_proportion: e.evppi_proportion,
+        evppi_ci_lower: e.evppi_ci_lower,
+        evppi_ci_upper: e.evppi_ci_upper,
+        evppi_se: e.evppi_se,
+        below_noise_floor: e.below_noise_floor,
       })),
       scatter: psaResult.scatter_sample.map((it) => ({
         delta_cost: it.delta_cost,
@@ -546,13 +550,31 @@ export async function handleCostEffectivenessModel(
     // EVPPI section
     if (psaSummary.evppi && psaSummary.evppi.length > 0) {
       psaSection.push(`#### EVPPI (Partial Value of Information)`);
-      psaSection.push(`Which parameters are worth further research:`);
-      psaSection.push(`| Parameter | EVPPI | % of EVPI |`);
-      psaSection.push(`|-----------|-------|-----------|`);
-      for (const ev of psaSummary.evppi.slice(0, 5)) {
+      // v1.7.0: noise-floor guard. When totalEVPI is below ~0.5% of NMB
+      // standard deviation, every per-parameter EVPPI is binning noise.
+      // Suppress the table entirely and surface the explanation rather
+      // than print a misleading "top parameters" list of fake signals.
+      const allBelow = psaSummary.evppi.every(
+        (ev) => ev.below_noise_floor === true,
+      );
+      if (allBelow) {
         psaSection.push(
-          `| ${ev.parameter} | ${symbol}${Math.round(ev.evppi).toLocaleString()} | ${(ev.evppi_proportion * 100).toFixed(1)}% |`,
+          `Decision is robust to all uncertainty (totalEVPI below noise floor relative to NMB standard deviation). No per-parameter EVPPI ranking is meaningful — additional research on any individual parameter would not change the cost-effectiveness verdict at this WTP threshold.`,
         );
+      } else {
+        psaSection.push(`Which parameters are worth further research:`);
+        psaSection.push(`| Parameter | EVPPI | 95% CI | % of EVPI |`);
+        psaSection.push(`|-----------|-------|--------|-----------|`);
+        for (const ev of psaSummary.evppi.slice(0, 5)) {
+          if (ev.below_noise_floor) continue;
+          const ci =
+            ev.evppi_ci_lower !== undefined && ev.evppi_ci_upper !== undefined
+              ? `${symbol}${Math.round(ev.evppi_ci_lower).toLocaleString()}–${symbol}${Math.round(ev.evppi_ci_upper).toLocaleString()}`
+              : "—";
+          psaSection.push(
+            `| ${ev.parameter} | ${symbol}${Math.round(ev.evppi).toLocaleString()} | ${ci} | ${(ev.evppi_proportion * 100).toFixed(1)}% |`,
+          );
+        }
       }
       psaSection.push(``);
     }

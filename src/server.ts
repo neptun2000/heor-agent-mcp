@@ -103,6 +103,10 @@ import {
 } from "./tools/pvSignalWorkflow.js";
 import { handleIrbReview, irbReviewToolSchema } from "./tools/irbReview.js";
 import {
+  handleIcfReadabilityCheck,
+  icfReadabilityCheckToolSchema,
+} from "./tools/icfReadabilityCheck.js";
+import {
   evidenceClinicalScaleHandler,
   evidenceClinicalScaleSchema,
   evidenceClinicalScaleToolSchema,
@@ -273,6 +277,7 @@ function createMcpServer(
       pvSignalWorkflowToolSchema,
       htaWorkflowToolSchema,
       irbReviewToolSchema,
+      icfReadabilityCheckToolSchema,
       evidenceClinicalScaleToolSchema,
       evidenceUnmetNeedToolSchema,
     ],
@@ -356,6 +361,9 @@ function createMcpServer(
           break;
         case "irb.review":
           result = await handleIrbReview(args);
+          break;
+        case "icf.readability_check":
+          result = await handleIcfReadabilityCheck(args);
           break;
         case "evidence.clinical_scale": {
           const parsed = evidenceClinicalScaleSchema.safeParse(args);

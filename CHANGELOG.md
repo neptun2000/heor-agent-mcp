@@ -40,6 +40,41 @@ Two parallel reviewers audited v1.6.2 and the new Slack weekly-digest feature wi
 
 All changes are silent failure-mode hardening + LLM ergonomics. No API surface changes; no migration needed.
 
+## v1.8.0 (2026-05-09) — `icf_readability_check` tool (paired with `irb_review`)
+
+New tool. Closes the v2 deferral from design log #21: paired ICF
+readability analyzer that was promised when irb_review v1 shipped.
+
+### Added — `icf_readability_check` (`icf.readability_check`)
+
+Takes ICF text, returns:
+- **Readability scores** — Flesch-Kincaid Grade Level, Flesch Reading Ease, Gunning Fog Index, SMOG Grade.
+- **Per-sentence breakdown** with worst-5 sentences (FKGL desc) flagged so investigators see exactly which sentences exceed the target grade level.
+- **Medical-jargon detection** — curated dictionary of ~80 high-frequency clinical-trial-consent terms (placebo, randomized, adverse event, pharmacokinetics, comorbidity, etc.) with plain-language alternatives. Case-insensitive whole-word matching with optional plural matching (`adverse event` → also catches `adverse events`).
+- **Pass / borderline / fail verdict** vs target grade level (default 8 per FDA/NIH guidance; configurable 4-12).
+- **Concrete rewrite recommendations** when verdict is not pass — targeted at worst sentences + jargon hits + sentence-length / syllables-per-word patterns.
+
+Pure logic, no external API. <300ms on a 50-sentence ICF.
+
+### References baked into the methodology
+
+- Kincaid JP et al. (1975) — FKGL formula
+- Flesch R. (1948) — Reading Ease
+- Gunning R. (1952) — Fog Index
+- McLaughlin GH. (1969) — SMOG
+- NIH Plain Language Guidelines (clinical-trial consent)
+- FDA Communicating Risks and Benefits (2011)
+
+### Tests
+
+34 new tests across schema validation, syllable counting (heuristic ±1 of CMU dict), sentence splitting (handles abbreviations: Dr. / Mr. / e.g. / i.e.), word tokenization, FKGL/FRE formula correctness on known reference texts, per-sentence breakdown, jargon detection (case-insensitive, whole-word, capped at 5 occurrences), verdict logic, output structure, performance.
+
+848 → 882 MCP tests passing. Web tool count assertions bumped 26 → 27 across 4 test files.
+
+### Tool count
+
+26 → 27. Full tool list: `literature.search`, `literature.screen`, `evidence.network`, `evidence.indirect`, `evidence.population_adjusted`, `evidence.survival`, `evidence.risk_of_bias`, `evidence.itc`, `evidence.clinical_scale`, `evidence.unmet_need`, `models.cost_effectiveness`, `models.budget_impact`, `hta.dossier`, `hta.utility`, `hta.workflow`, `utils.validate_links`, `project.create`, `knowledge.search`, `knowledge.read`, `knowledge.write`, `examples`, `workflow.maic`, `pv.classify`, `pv.signal_workflow`, `jca.pico_scope`, `irb.review`, **`icf.readability_check`** ← new.
+
 ## v1.7.0 (2026-05-09) — EVPPI promoted out of ⚠️ EXPERIMENTAL
 
 Three quality fixes to the Strong-2014 binning estimator in `cost_effectiveness_model`'s EVPPI path. Removes the long-standing CLAUDE.md caveat ("non-parametric binning, noisy when total EVPI ~0").

@@ -99,7 +99,14 @@ export async function handleIcfReadabilityCheck(
   const exceedingFraction =
     sentences.length > 0 ? exceedingCount / sentences.length : 0;
 
+  // v1.9.1 fix: pre-fix `worstSentences` was top-5 by FKGL regardless
+  // of whether they exceeded target — programmatic consumers reading
+  // this field could see "worst" sentences that were actually within
+  // target. Now: only sentences that exceed target. Markdown rendering
+  // already conditionally hid the section; this aligns the JSON output
+  // semantics with the markdown.
   const worstSentences = [...sentences]
+    .filter((s) => s.exceeds_target)
     .sort((a, b) => b.flesch_kincaid_grade - a.flesch_kincaid_grade)
     .slice(0, 5);
 
@@ -113,17 +120,9 @@ export async function handleIcfReadabilityCheck(
 
   const recommendations: string[] = [];
   if (verdict !== "pass") {
-    if (worstSentences.length > 0 && worstSentences[0].exceeds_target) {
+    if (worstSentences.length > 0) {
       recommendations.push(
         `Rewrite the ${worstSentences.length} highest-grade sentences (FKGL ${worstSentences[0].flesch_kincaid_grade.toFixed(1)} down to ${worstSentences[worstSentences.length - 1].flesch_kincaid_grade.toFixed(1)}). Targeting these alone usually pulls the document into the target band.`,
-      );
-    }
-    if (jargon.length >= 3) {
-      recommendations.push(
-        `Replace medical jargon: ${jargon
-          .slice(0, 5)
-          .map((j) => `"${j.term}" → "${j.plain_language}"`)
-          .join("; ")}.`,
       );
     }
     if (stats.avg_sentence_length > 20) {
@@ -136,6 +135,20 @@ export async function handleIcfReadabilityCheck(
         `Words average ${stats.avg_syllables_per_word.toFixed(2)} syllables — favor short Anglo-Saxon roots over Latinate technical terms (e.g., "use" not "utilise", "show" not "demonstrate").`,
       );
     }
+  }
+  // v1.9.1 fix: jargon rec previously only fired at jargon.length≥3
+  // AND verdict≠pass. Both gates removed: 1-2 jargon hits are exactly
+  // the high-frequency, high-impact terms patients struggle with most;
+  // a passing FKGL with 5 jargon terms still needs those rewrites.
+  if (jargon.length >= 1) {
+    recommendations.push(
+      `Replace medical jargon: ${jargon
+        .slice(0, 5)
+        .map((j) => `"${j.term}" → "${j.plain_language}"`)
+        .join(
+          "; ",
+        )}${jargon.length > 5 ? ` (+${jargon.length - 5} more)` : ""}.`,
+    );
   }
 
   const assessment: IcfReadabilityAssessment = {
@@ -217,7 +230,9 @@ export async function handleIcfReadabilityCheck(
       if (!s.exceeds_target) break;
       const truncated =
         s.text.length > 220 ? s.text.slice(0, 217) + "..." : s.text;
-      lines.push(`- **FKGL ${s.flesch_kincaid_grade.toFixed(1)}** — ${truncated}`);
+      lines.push(
+        `- **FKGL ${s.flesch_kincaid_grade.toFixed(1)}** — ${truncated}`,
+      );
     }
     lines.push("");
   }

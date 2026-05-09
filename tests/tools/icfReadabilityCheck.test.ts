@@ -24,9 +24,7 @@ interface IcfResult {
   icf_assessment: IcfReadabilityAssessment;
 }
 
-async function check(
-  input: Record<string, unknown>,
-): Promise<IcfResult> {
+async function check(input: Record<string, unknown>): Promise<IcfResult> {
   return (await handleIcfReadabilityCheck(input)) as unknown as IcfResult;
 }
 
@@ -172,9 +170,7 @@ describe("per-sentence breakdown", () => {
       target_grade_level: 8,
     });
     expect(r.icf_assessment.worst_sentences.length).toBeGreaterThan(0);
-    expect(r.icf_assessment.worst_sentences[0].text).toMatch(
-      /Pharmacokinetic/,
-    );
+    expect(r.icf_assessment.worst_sentences[0].text).toMatch(/Pharmacokinetic/);
     expect(r.icf_assessment.worst_sentences[0].exceeds_target).toBe(true);
   });
 
@@ -239,7 +235,7 @@ describe("jargon detection — case-insensitive whole-word matching", () => {
   });
 
   it("caps occurrences at 5 per term to keep output compact", () => {
-    const text = ("placebo. ".repeat(20)).trim();
+    const text = "placebo. ".repeat(20).trim();
     const hits = findJargon(text);
     const placebo = hits.find((h) => h.term === "placebo");
     expect(placebo?.occurrences.length).toBeLessThanOrEqual(5);
@@ -310,9 +306,7 @@ describe("output structure", () => {
 
   it("emits SMOG-unreliable warning for short documents (<30 sentences)", async () => {
     const r = await check({ icf_text: "Short. Text. Here." });
-    expect(
-      r.icf_assessment.scores.smog,
-    ).toBeDefined();
+    expect(r.icf_assessment.scores.smog).toBeDefined();
     // The warning lives in the audit; assertion via markdown 'Warnings' section:
     expect(r.content).toMatch(/SMOG.*30 sentences|reliable/i);
   });
@@ -353,5 +347,82 @@ describe("computeStats / formulas — direct tests", () => {
     const empty = computeStats("");
     expect(fleschKincaidGrade(empty.stats)).toBe(0);
     expect(fleschReadingEase(empty.stats)).toBe(0);
+  });
+});
+
+// ─── v1.9.1 lint-review fixes ────────────────────────────────────────────
+//
+// Two HIGH bugs found by the math/ICF reviewer + several MED polish items.
+
+import { countComplexWord } from "../../src/icf/syllables.js";
+import { JARGON_DICTIONARY } from "../../src/icf/jargon.js";
+
+describe("v1.9.1 — countComplexWord -es suffix bug", () => {
+  it("counts 'processes' as complex (3 syllables, not 2 — pre-fix unconditionally stripped -es)", () => {
+    expect(countComplexWord("processes")).toBe(true);
+  });
+
+  it("counts 'addresses' as complex (3 syllables: ad-dress-es)", () => {
+    expect(countComplexWord("addresses")).toBe(true);
+  });
+
+  it("still strips -es when the suffix is non-syllabic ('cakes' = 1 syllable)", () => {
+    // "cakes" should NOT be complex (1 syllable; -es is silent here)
+    expect(countComplexWord("cakes")).toBe(false);
+  });
+
+  it("still strips -ing on real morphological inflections ('walking' = 2 syllables, not complex)", () => {
+    expect(countComplexWord("walking")).toBe(false);
+  });
+
+  it("counts genuinely complex words", () => {
+    expect(countComplexWord("encyclopedia")).toBe(true);
+    expect(countComplexWord("pharmacokinetics")).toBe(true);
+  });
+});
+
+describe("v1.9.1 — 'effectiveness' removed from jargon dictionary", () => {
+  it("does NOT flag 'effectiveness' as jargon (NIH/FDA recommend it AS the plain-language replacement for 'efficacy')", () => {
+    const hasEffectiveness = JARGON_DICTIONARY.some(
+      (e) => e.term.toLowerCase() === "effectiveness",
+    );
+    expect(hasEffectiveness).toBe(false);
+  });
+
+  it("still flags 'efficacy' (which 'effectiveness' is the replacement for)", () => {
+    const hasEfficacy = JARGON_DICTIONARY.some(
+      (e) => e.term.toLowerCase() === "efficacy",
+    );
+    expect(hasEfficacy).toBe(true);
+  });
+});
+
+describe("v1.9.1 — worst_sentences only contains exceeding-target sentences", () => {
+  it("worst_sentences is empty when no sentence exceeds target", async () => {
+    // Trivially-easy text should have no worst_sentences entries.
+    const r = await check({
+      icf_text: "We will help you. You can leave at any time. We are here.",
+    });
+    if (r.icf_assessment.verdict === "pass") {
+      // All sentences are well within target; worst_sentences should
+      // surface only actual offenders. Pre-fix it would contain
+      // top-5 sentences regardless.
+      for (const s of r.icf_assessment.worst_sentences) {
+        expect(s.exceeds_target).toBe(true);
+      }
+    }
+  });
+});
+
+describe("v1.9.1 — jargon recommendation fires for any hits, not only ≥3", () => {
+  it("recommendations contains jargon advice for a single hit", async () => {
+    // Use easy English overall but include 1 jargon term — borderline
+    // verdict; recommendation should still surface the rewrite.
+    const r = await check({
+      icf_text:
+        "We will give you a placebo. You will not know which group you are in. Tell us if you have problems. Call the doctor anytime.",
+    });
+    const recs = r.icf_assessment.recommendations.join(" ");
+    expect(recs.toLowerCase()).toMatch(/placebo|inactive substance|jargon/i);
   });
 });

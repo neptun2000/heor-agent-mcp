@@ -64,15 +64,35 @@ export function countSyllables(rawWord: string): number {
 export function countComplexWord(word: string): boolean {
   // Gunning's "complex" = 3+ syllables, excluding proper nouns,
   // compound words, and common suffix-only inflections (-es, -ed,
-  // -ing). Approximated here by stripping common suffixes before
-  // syllable counting.
+  // -ing). Approximated here by stripping common inflectional
+  // suffixes that DON'T contribute a syllable; we leave alone the
+  // ones that do.
+  //
+  // v1.9.1 fix: pre-fix unconditionally stripped "-es", which made
+  // `processes` (3 syllables: pro-ces-ses) look like 2-syllable
+  // `process`, leading Gunning Fog and SMOG to UNDER-count complex
+  // words and report falsely low grade levels — the unsafe direction
+  // for an ICF readability tool. Now we strip only when the suffix
+  // is non-syllabic: compare the syllable count before and after, and
+  // strip only if it's unchanged.
   if (!word) return false;
   let base = word.toLowerCase().replace(/[^a-z]/g, "");
-  // Strip common inflectional suffixes that don't inherently make a
-  // word "complex" by Gunning's definition.
-  if (base.endsWith("es")) base = base.slice(0, -2);
-  else if (base.endsWith("ed") && !base.endsWith("ied"))
-    base = base.slice(0, -2);
-  else if (base.endsWith("ing")) base = base.slice(0, -3);
+  if (base.length === 0) return false;
+
+  const tryStrip = (suffix: string, minLen: number): string | null => {
+    if (!base.endsWith(suffix)) return null;
+    if (base.length <= minLen) return null;
+    const stripped = base.slice(0, -suffix.length);
+    if (stripped.length === 0) return null;
+    if (countSyllables(stripped) === countSyllables(base)) {
+      return stripped;
+    }
+    return null;
+  };
+
+  const after = tryStrip("ing", 4) ?? tryStrip("es", 3) ?? tryStrip("ed", 3);
+  if (after !== null) base = after;
+  // "ied" (carried, married) keeps the syllable from the consonant+ied;
+  // covered above by the syllable-count check for "ed".
   return countSyllables(base) >= 3;
 }

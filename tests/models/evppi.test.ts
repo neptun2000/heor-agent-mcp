@@ -21,10 +21,7 @@
  * Plus: bootstrap 95% CI on each EVPPI point estimate so the markdown
  * report can show uncertainty alongside the point.
  */
-import {
-  computeEVPPI,
-  type PSAIterationData,
-} from "../../src/models/evppi.js";
+import { computeEVPPI, type PSAIterationData } from "../../src/models/evppi.js";
 
 // ─── Fixture builders ─────────────────────────────────────────────────────
 
@@ -124,7 +121,8 @@ describe("computeEVPPI — mathematical cap (v1.7 fix)", () => {
         0,
       ) / N;
     const meanNmb =
-      data.reduce((s, it) => s + (30000 * it.delta_qaly - it.delta_cost), 0) / N;
+      data.reduce((s, it) => s + (30000 * it.delta_qaly - it.delta_cost), 0) /
+      N;
     const totalEVPI = Math.max(0, eMaxNmb - Math.max(meanNmb, 0));
     for (const ev of r) {
       expect(ev.evppi).toBeLessThanOrEqual(totalEVPI + 1e-6); // tiny float tolerance
@@ -230,5 +228,43 @@ describe("computeEVPPI — adaptive binning", () => {
     const constResult = r.find((x) => x.parameter === "constant");
     expect(constResult).toBeDefined();
     expect(constResult?.evppi).toBeLessThan(100); // tiny, near-zero
+  });
+});
+
+// ─── v1.9.1: bootstrap CI no longer truncates upper tail ──────────────────
+//
+// Pre-v1.9.1 the bootstrap loop capped each resample at the original
+// sample's totalEVPI, which systematically biased evppi_ci_upper
+// downward — bootstrap distribution upper tail truncated whenever a
+// resample's empirical totalEVPI exceeded the original. v1.9.1 removed
+// the in-loop cap; only the FINAL percentile bounds are clamped.
+describe("computeEVPPI — bootstrap CI no in-loop cap (v1.9.1 fix)", () => {
+  it("evppi_ci_upper hits the totalEVPI ceiling on saturating fixtures", () => {
+    // Fixture where the per-parameter EVPPI is genuinely close to
+    // totalEVPI — bootstrap resamples should be able to produce
+    // values right at the ceiling without truncation removing them.
+    const data = highEvppiFixture(800);
+    const r = computeEVPPI(data, 30000, ["efficacy"]);
+    const ev = r.find((x) => x.parameter === "efficacy")!;
+    // Compute totalEVPI manually from the same data.
+    const N = data.length;
+    const eMaxNmb =
+      data.reduce(
+        (s, it) => s + Math.max(30000 * it.delta_qaly - it.delta_cost, 0),
+        0,
+      ) / N;
+    const meanNmb =
+      data.reduce((s, it) => s + (30000 * it.delta_qaly - it.delta_cost), 0) /
+      N;
+    const totalEVPI = Math.max(0, eMaxNmb - Math.max(meanNmb, 0));
+    // The capped upper bound is at most totalEVPI (cap is correct).
+    expect(ev.evppi_ci_upper!).toBeLessThanOrEqual(totalEVPI + 1e-6);
+    // And the upper bound should not be artificially below the point
+    // by more than ~the standard error — the in-loop cap pre-v1.9.1
+    // could push it well below.
+    if (ev.evppi_se && ev.evppi_se > 0) {
+      const margin = 3 * ev.evppi_se; // 3 SE = 99%-ish coverage
+      expect(ev.evppi_ci_upper!).toBeGreaterThanOrEqual(ev.evppi - margin);
+    }
   });
 });

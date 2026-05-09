@@ -147,10 +147,11 @@ export const JARGON_DICTIONARY: ReadonlyArray<JargonEntry> = [
     term: "efficacy",
     plain_language: "how well the treatment works under controlled conditions",
   },
-  {
-    term: "effectiveness",
-    plain_language: "how well the treatment works in everyday use",
-  },
+  // v1.9.1 fix: removed an "effectiveness" entry here. NIH Plain Language
+  // ICF guidance and FDA Communicating Risks and Benefits recommend
+  // "effectiveness" AS the plain-language replacement for "efficacy" —
+  // flagging it as jargon contradicts the cited authority and would tell
+  // investigators who did the right thing to undo it.
   { term: "incidence", plain_language: "how often new cases occur" },
   {
     term: "prevalence",

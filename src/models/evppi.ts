@@ -189,12 +189,18 @@ function bootstrapEVPPICI(
     for (let i = 0; i < N; i++) {
       resample[i] = iterations[Math.floor(Math.random() * N)]!;
     }
-    const raw = rawEVPPIPoint(resample, lambda, paramName);
-    samples.push(Math.min(raw, totalEVPI));
+    // v1.9.1 fix: do NOT cap at the original totalEVPI here. Capping
+    // inside the bootstrap loop truncates the upper tail of the
+    // bootstrap distribution whenever a resample produces a higher raw
+    // EVPPI than the original — that's a systematic downward bias on
+    // evppi_ci_upper. Each bootstrap resample has its own empirical
+    // totalEVPI; let the distribution range freely. We only cap the
+    // FINAL reported percentile bounds at totalEVPI below.
+    samples.push(Math.max(0, rawEVPPIPoint(resample, lambda, paramName)));
   }
   samples.sort((a, b) => a - b);
-  const lower = Math.max(0, quantile(samples, 0.025));
-  const upper = Math.max(0, quantile(samples, 0.975));
+  const lower = Math.max(0, Math.min(quantile(samples, 0.025), totalEVPI));
+  const upper = Math.max(0, Math.min(quantile(samples, 0.975), totalEVPI));
   const se = stddev(samples);
   return { lower, upper, se };
 }

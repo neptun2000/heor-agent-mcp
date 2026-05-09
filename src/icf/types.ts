@@ -75,10 +75,14 @@ export interface IcfReadabilityAssessment {
   /** User-supplied or default target grade level (e.g., 8). */
   target_grade_level: number;
   /**
-   * Overall verdict:
+   * Overall verdict (v1.9.1: aligned to actual code which uses AND):
    *   pass       — FKGL ≤ target AND <20% sentences exceed target
-   *   borderline — FKGL within 1.5 grades of target OR 20-40% exceed
-   *   fail       — FKGL > target+1.5 OR >40% sentences exceed
+   *   borderline — FKGL ≤ target+1.5 AND <40% sentences exceed target
+   *                (and not already pass)
+   *   fail       — anything else (FKGL > target+1.5 OR ≥40% exceed)
+   * The AND semantics are stricter than an OR alternative; a passing
+   * FKGL with many bad sentences (or vice versa) drops to fail. This
+   * is the patient-safety direction.
    */
   verdict: Verdict;
   /**

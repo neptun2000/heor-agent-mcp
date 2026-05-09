@@ -40,6 +40,54 @@ Two parallel reviewers audited v1.6.2 and the new Slack weekly-digest feature wi
 
 All changes are silent failure-mode hardening + LLM ergonomics. No API surface changes; no migration needed.
 
+## v1.9.1 (2026-05-09) — code-review fixes for v1.7.0 / v1.8.0 / v1.9.0
+
+Two parallel reviewers (math/statistics + ICF formula correctness) audited the v1.7-1.9 work within hours of ship. **0 CRITICAL, 4 HIGH, 8 MEDIUM, 7 LOW.** All 4 HIGHs were real correctness bugs in code that produces HTA / CMS / IRB-grade outputs. All addressed in this patch.
+
+### Fixed (HIGH)
+
+- **EVPPI bootstrap CI upper-bound was systematically downward-biased** (`src/models/evppi.ts:bootstrapEVPPICI`). Pre-fix the bootstrap loop capped each resample at the original sample's `totalEVPI`, truncating the upper tail of the bootstrap distribution whenever a resample's empirical totalEVPI exceeded the original. The fix removes the in-loop cap; only the FINAL reported percentile bounds are clamped. Decision-makers reading "EVPPI = $1,200 (95% CI $400–$2,800)" now see honest tails — narrower CIs no longer underestimate research value.
+
+- **Survival IPD `mean_survival_restricted` was mislabeled across all 5 distributions** (`src/models/survivalFitting.ts:fitXFromEvents`). Pre-fix the IPD path returned unrestricted means (Exp: `1/λ`, Weibull: `scale·Γ(1+1/shape)`, Log-normal: `exp(μ+σ²/2)`), the median (Log-logistic: `α`), or — most egregiously — the EXPONENTIAL DISTRIBUTION's mean/median ratio applied to a Gompertz median (`median × 1/ln(2) = median × 1.4427`). All five fitters now call the existing `restrictedMean(kmTable, survFn)` helper for proper numerical integration of S(t) over [0, max_observed]. Wrong RMST → wrong QALY → wrong ICER → wrong reimbursement decision. The KM-table path was unaffected (already used `restrictedMean()` correctly).
+
+- **`countComplexWord` `-es` suffix stripping under-counted complex words** (`src/icf/syllables.ts`). Pre-fix unconditionally stripped trailing "-es", so 3-syllable plurals like `processes` (pro-ces-ses) or `addresses` (ad-dress-es) became 2-syllable `process`/`address` and missed Gunning's complexity threshold. Result: Gunning Fog and SMOG scores under-reported ICF difficulty — investigators received better scores than reality and didn't rewrite sentences they should. Fix: only strip `-es`/`-ed`/`-ing` when the syllable count is unchanged after stripping (a non-syllabic morphological inflection).
+
+- **`"effectiveness"` removed from medical-jargon dictionary** (`src/icf/jargon.ts`). The previous entry directly contradicted FDA's "Communicating Risks and Benefits" (2011) and NIH Plain Language guidance, both of which recommend `"effectiveness"` AS the plain-language replacement for `"efficacy"`. An investigator who had already done the right thing would see it flagged and revert to the harder term. The matching `"efficacy"` entry remains.
+
+### Fixed (MEDIUM)
+
+- **Verdict logic OR/AND mismatch documented as AND** (`src/icf/types.ts`). The runtime code uses AND semantics ("FKGL ≤ target+1.5 AND <40% exceed → borderline"); the type comment said OR. Aligned the comment to the code; AND is the patient-safety direction.
+
+- **Jargon recommendation now fires for any hits, not only ≥3** (`src/tools/icfReadabilityCheck.ts`). Pre-fix a passing FKGL with 2 jargon terms would emit no jargon-rewrite recommendation. Threshold dropped to ≥1; output cap remains at 5 terms with a "+N more" suffix.
+
+- **`worst_sentences` filtered to only target-exceeding sentences**. Pre-fix the field was top-5-by-FKGL regardless; programmatic consumers could see "worst" sentences within target. Now matches the markdown rendering (which already filtered).
+
+- **Pass-with-jargon messaging implicitly fixed** by the jargon-threshold drop above. A passing FKGL with jargon hits now correctly emits the jargon recommendation rather than the misleading "✅ No rewrite recommendations" line.
+
+### Skipped (cosmetic)
+
+- Bootstrap RNG seeding for the "CI tightens at N" test (theoretically flaky but hasn't bit yet)
+- `1e-300` log floor in survival MLE tightening to `1e-30` (hasn't caused convergence issues empirically)
+- Nelder-Mead convergence-tolerance early exit (test suite is slow but acceptable)
+- Initial-parameter documentation for log-logistic / log-normal / Gompertz fitters
+- Tightening parameter-recovery test tolerances (current 3-4 SD width is loose but catches the 50% bugs we care about)
+- Hidden-import `void` workaround in icfReadabilityCheck.ts handler (cosmetic)
+
+### Tests
+
+10 new regression tests:
+- 1 EVPPI bootstrap CI bound check (no longer artificially capped)
+- 5 ICF `countComplexWord` cases (`processes`, `addresses`, `cakes`, `walking`, `encyclopedia`)
+- 2 ICF dictionary integrity (`effectiveness` removed, `efficacy` retained)
+- 1 ICF `worst_sentences` only-exceeding invariant
+- 1 ICF jargon recommendation fires for any hits
+
+899 → 909 MCP tests passing. Web tests still 177/177.
+
+### Non-breaking
+
+All changes are bug fixes. No API surface changes. The `mean_survival_restricted` field semantics are now correct (RMST instead of unrestricted mean) — callers that already used it as RMST per its documented meaning get more accurate values; callers that were treating it as unrestricted mean were getting the wrong field anyway.
+
 ## v1.9.0 (2026-05-09) — `survival_fitting` patient-level MLE path (no longer ⚠️ EXPERIMENTAL on the IPD input)
 
 The tool now accepts patient-level event-time data (`event_data: Array<{time, event: 0 | 1}>`) alongside the legacy `km_data` step-summary path. Caller picks one (Zod refine enforces). When event_data is supplied, the fit is true right-censored maximum likelihood per Collett (2015) and NICE DSU TSD 14 (Latimer 2013) — no approximation warning. The KM-table path remains supported for back-compat with literature-digitization workflows but emits an explicit "approximation, less reliable" warning and points the caller at event_data.

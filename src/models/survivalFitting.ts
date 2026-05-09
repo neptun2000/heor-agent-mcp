@@ -507,6 +507,7 @@ function initialMedian(events: EventDataPoint[]): number {
 
 function fitExponentialFromEvents(
   events: EventDataPoint[],
+  kmTable: KMDataPoint[],
 ): FittedDistribution {
   const m = initialMedian(events);
   const lambdaInit = Math.max(1e-6, Math.log(2) / m);
@@ -528,20 +529,27 @@ function fitExponentialFromEvents(
   );
   const k = 1;
   const n = events.length;
+  const survFn = (t: number) => expSurvival(t, lambda);
   return {
     name: "exponential",
     params: { lambda },
     aic: -2 * ll + 2 * k,
     bic: -2 * ll + k * Math.log(n),
     log_likelihood: ll,
-    survival_at: (t) => expSurvival(t, lambda),
+    survival_at: survFn,
     hazard_at: () => lambda,
     median_survival: Math.log(2) / lambda,
-    mean_survival_restricted: 1 / lambda,
+    // True restricted mean ∫₀ᵀ S(t)dt up to max observed time, via the
+    // KM table built from the same event data. Pre-v1.9.1 returned
+    // 1/lambda (the unrestricted mean) — wrong field semantics.
+    mean_survival_restricted: restrictedMean(kmTable, survFn),
   };
 }
 
-function fitWeibullFromEvents(events: EventDataPoint[]): FittedDistribution {
+function fitWeibullFromEvents(
+  events: EventDataPoint[],
+  kmTable: KMDataPoint[],
+): FittedDistribution {
   const m = initialMedian(events);
   const scaleInit = Math.max(0.01, m / Math.pow(Math.log(2), 1));
   const opt = nelderMead(
@@ -563,21 +571,25 @@ function fitWeibullFromEvents(events: EventDataPoint[]): FittedDistribution {
   );
   const k = 2;
   const n = events.length;
+  const survFn = (t: number) => weibullSurvival(t, shape, scale);
   return {
     name: "weibull",
     params: { shape, scale },
     aic: -2 * ll + 2 * k,
     bic: -2 * ll + k * Math.log(n),
     log_likelihood: ll,
-    survival_at: (t) => weibullSurvival(t, shape, scale),
+    survival_at: survFn,
     hazard_at: (t) => weibullHazard(t, shape, scale),
     median_survival: scale * Math.pow(Math.log(2), 1 / shape),
-    mean_survival_restricted: scale * gammaApprox(1 + 1 / shape),
+    // True RMST via numerical integration of S(t) over [0, max_observed].
+    // Pre-v1.9.1 returned scale·Γ(1+1/shape) = unrestricted mean.
+    mean_survival_restricted: restrictedMean(kmTable, survFn),
   };
 }
 
 function fitLogLogisticFromEvents(
   events: EventDataPoint[],
+  kmTable: KMDataPoint[],
 ): FittedDistribution {
   const m = initialMedian(events);
   const opt = nelderMead(
@@ -601,20 +613,28 @@ function fitLogLogisticFromEvents(
   );
   const k = 2;
   const n = events.length;
+  const survFn = (t: number) => logLogisticSurvival(t, alpha, beta);
   return {
     name: "log_logistic",
     params: { alpha, beta },
     aic: -2 * ll + 2 * k,
     bic: -2 * ll + k * Math.log(n),
     log_likelihood: ll,
-    survival_at: (t) => logLogisticSurvival(t, alpha, beta),
+    survival_at: survFn,
     hazard_at: (t) => logLogisticHazard(t, alpha, beta),
     median_survival: alpha,
-    mean_survival_restricted: alpha, // restricted mean is finite only if beta > 1; simple fallback
+    // True RMST via numerical integration. Pre-v1.9.1 returned alpha
+    // (the median, not the mean) as a fallback because the unrestricted
+    // mean is undefined for β ≤ 1; restricted mean over [0, T] is
+    // always finite and is the correct field semantics.
+    mean_survival_restricted: restrictedMean(kmTable, survFn),
   };
 }
 
-function fitLogNormalFromEvents(events: EventDataPoint[]): FittedDistribution {
+function fitLogNormalFromEvents(
+  events: EventDataPoint[],
+  kmTable: KMDataPoint[],
+): FittedDistribution {
   const m = initialMedian(events);
   const muInit = Math.log(Math.max(0.01, m));
   const opt = nelderMead(
@@ -636,20 +656,25 @@ function fitLogNormalFromEvents(events: EventDataPoint[]): FittedDistribution {
   );
   const k = 2;
   const n = events.length;
+  const survFn = (t: number) => logNormalSurvival(t, mu, sigma);
   return {
     name: "log_normal",
     params: { mu, sigma },
     aic: -2 * ll + 2 * k,
     bic: -2 * ll + k * Math.log(n),
     log_likelihood: ll,
-    survival_at: (t) => logNormalSurvival(t, mu, sigma),
+    survival_at: survFn,
     hazard_at: (t) => logNormalHazard(t, mu, sigma),
     median_survival: Math.exp(mu),
-    mean_survival_restricted: Math.exp(mu + (sigma * sigma) / 2),
+    // True RMST. Pre-v1.9.1 returned exp(μ + σ²/2) = unrestricted mean.
+    mean_survival_restricted: restrictedMean(kmTable, survFn),
   };
 }
 
-function fitGompertzFromEvents(events: EventDataPoint[]): FittedDistribution {
+function fitGompertzFromEvents(
+  events: EventDataPoint[],
+  kmTable: KMDataPoint[],
+): FittedDistribution {
   const m = initialMedian(events);
   const rateInit = Math.max(1e-6, Math.log(2) / m);
   const opt = nelderMead(
@@ -679,16 +704,21 @@ function fitGompertzFromEvents(events: EventDataPoint[]): FittedDistribution {
       break;
     }
   }
+  const survFn = (t: number) => gompertzSurvival(t, shape, rate);
   return {
     name: "gompertz",
     params: { shape, rate },
     aic: -2 * ll + 2 * k,
     bic: -2 * ll + k * Math.log(n),
     log_likelihood: ll,
-    survival_at: (t) => gompertzSurvival(t, shape, rate),
+    survival_at: survFn,
     hazard_at: (t) => gompertzHazard(t, shape, rate),
     median_survival: median,
-    mean_survival_restricted: median * 1.4427, // crude RMST stand-in
+    // True RMST via numerical integration. Pre-v1.9.1 returned
+    // `median × 1.4427` — that's `1/ln(2)`, the *exponential
+    // distribution's* mean/median ratio, applied to a Gompertz median.
+    // Reviewer caught this: wrong distribution entirely.
+    mean_survival_restricted: restrictedMean(kmTable, survFn),
   };
 }
 
@@ -730,19 +760,24 @@ export function fitSurvivalCurvesFromEventData(
   }
   const sorted = [...events].sort((a, b) => a.time - b.time);
 
+  // Build the KM table FIRST so each fitter can use it for the
+  // restricted-mean integration (numerical ∫₀ᵀ S(t)dt up to max
+  // observed time, where T = sorted[-1].time). v1.9.1 fix: pre-fix the
+  // IPD fitters returned unrestricted means (or in Gompertz's case
+  // median × 1/ln(2), an exponential-distribution constant!) labeled
+  // as "restricted mean", which propagated wrong RMST → wrong QALY in
+  // downstream cost-effectiveness models.
+  const kmTable = computeKaplanMeier(sorted);
+
   const fits: FittedDistribution[] = [
-    fitExponentialFromEvents(sorted),
-    fitWeibullFromEvents(sorted),
-    fitLogLogisticFromEvents(sorted),
-    fitLogNormalFromEvents(sorted),
-    fitGompertzFromEvents(sorted),
+    fitExponentialFromEvents(sorted, kmTable),
+    fitWeibullFromEvents(sorted, kmTable),
+    fitLogLogisticFromEvents(sorted, kmTable),
+    fitLogNormalFromEvents(sorted, kmTable),
+    fitGompertzFromEvents(sorted, kmTable),
   ];
   const byAIC = [...fits].sort((a, b) => a.aic - b.aic);
   const byBIC = [...fits].sort((a, b) => a.bic - b.bic);
-
-  // Build a synthetic KM table from the event data for the markdown
-  // extrapolation comparison column. Standard Kaplan-Meier estimator.
-  const kmTable = computeKaplanMeier(sorted);
 
   // Extrapolations 0..2× max observed time.
   const maxObserved = sorted[sorted.length - 1]!.time;

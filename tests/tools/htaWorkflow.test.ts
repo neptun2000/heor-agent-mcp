@@ -507,6 +507,195 @@ describe("hta_workflow — v1.4.2 fixes", () => {
   });
 });
 
+// ── Design log #26: Phase 3.6 regulatory_landscape tests ─────────────────
+
+// Mock autoCheckRegulatory at the module level for htaWorkflow Phase 3.6 tests.
+// htaWorkflow imports autoCheckRegulatory lazily inside runHtaWorkflow, so we
+// mock the module here.
+const mockAutoCheckRegulatoryHta = jest.fn();
+
+jest.mock("../../src/providers/regulatory/autoCheck.js", () => ({
+  autoCheckRegulatory: mockAutoCheckRegulatoryHta,
+}));
+
+function makeApprovedAutoCheckResult(drug: string, region: string) {
+  return {
+    drug,
+    region,
+    result: {
+      schema_version: "1.0",
+      drug,
+      drug_normalised_inn: drug.toLowerCase(),
+      drug_brand_names: [],
+      region,
+      current_status: "approved",
+      approved_indications: [
+        {
+          indication_text_verbatim: `${drug} is approved for the preventive treatment of migraine.`,
+          population: "adults",
+          population_parsed: null,
+          approval_date: "2020-01",
+          label_revision: null,
+          region_specific: false,
+        },
+      ],
+      black_box_warnings: [],
+      rems_required: false,
+      contraindications: [],
+      recent_label_changes: {
+        count_12_months: 0,
+        last_revision_date: null,
+        last_revision_summary: null,
+      },
+      source_urls: [
+        {
+          source: "OpenFDA",
+          url: "https://api.fda.gov/drug/label.json",
+          fetched_at: "2026-05-10T00:00:00Z",
+        },
+      ],
+      data_fetched_at: "2026-05-10T00:00:00Z",
+      data_age_hours: 0,
+      cache_hit: false,
+    },
+  };
+}
+
+// Deps factory that includes regulatory mock + comparator in pico
+function makeDepsWithRegulatory(opts: Parameters<typeof makeDeps>[0] = {}) {
+  return {
+    ...makeDeps(opts),
+    // evidenceUnmetNeed returns a result with unmet_need_summary
+    evidenceUnmetNeed: jest.fn().mockResolvedValue({
+      unmet_need_summary: "High unmet need.",
+      regulatory_context: [],
+    }),
+  };
+}
+
+describe("hta_workflow — design log #26: Phase 3.6 regulatory_landscape", () => {
+  beforeEach(() => {
+    mockAutoCheckRegulatoryHta.mockReset();
+    mockAutoCheckRegulatoryHta.mockResolvedValue([]);
+  });
+
+  // ── Test #26-HTA-1: Phase 3.6 fires by default when comparator provided ──
+
+  it("#26-HTA-1: Phase 3.6 fires by default and regulatory.status_check appears in pipeline table", async () => {
+    mockAutoCheckRegulatoryHta.mockResolvedValueOnce([
+      makeApprovedAutoCheckResult("erenumab", "us"),
+    ]);
+
+    const r = await run(
+      {
+        drug: "drugX",
+        indication: "migraine",
+        pico: { comparator: "erenumab" },
+        jurisdictions: [],
+      },
+      makeDepsWithRegulatory(),
+    );
+
+    expect(r.content).toMatch(/3\.6|regulatory.*status|regulatory_landscape/i);
+  });
+
+  // ── Test #26-HTA-2: Phase 3.6 skipped when auto_check_regulatory=false ───
+
+  it("#26-HTA-2: Phase 3.6 skipped when auto_check_regulatory=false", async () => {
+    const r = await run(
+      {
+        drug: "drugX",
+        indication: "migraine",
+        pico: { comparator: "erenumab" },
+        auto_check_regulatory: false,
+      },
+      makeDepsWithRegulatory(),
+    );
+
+    // autoCheckRegulatory must NOT be called from the workflow
+    expect(mockAutoCheckRegulatoryHta).not.toHaveBeenCalled();
+    // Phase 3.6 row should NOT appear
+    expect(r.content).not.toMatch(/\| 3\.6 \|/);
+  });
+
+  // ── Test #26-HTA-3: Phase 3.6 failure does not abort pipeline ────────────
+
+  it("#26-HTA-3: Phase 3.6 failure does not abort pipeline (Phase 5 still produces dossier)", async () => {
+    // Make autoCheckRegulatory throw
+    mockAutoCheckRegulatoryHta.mockRejectedValueOnce(
+      new Error("rate limit exceeded"),
+    );
+
+    const r = await run(
+      {
+        drug: "drugX",
+        indication: "migraine",
+        pico: { comparator: "erenumab" },
+      },
+      makeDepsWithRegulatory(),
+    );
+
+    // Pipeline still completes with dossier output
+    expect(r.content).toMatch(/HTA Submission Workflow/);
+    expect(r.content).toMatch(/hta_dossier|Phase 5/i);
+    // workflow_summary still defined
+    expect(r.workflow_summary?.total_ms).toBeGreaterThanOrEqual(0);
+  });
+
+  // ── Test #26-HTA-4: phase_timings_ms.regulatory_status_check defined ─────
+
+  it("#26-HTA-4: phase_timings_ms.regulatory_status_check is defined and non-negative when Phase 3.6 runs", async () => {
+    mockAutoCheckRegulatoryHta.mockResolvedValueOnce([
+      makeApprovedAutoCheckResult("erenumab", "us"),
+    ]);
+
+    const r = await run(
+      {
+        drug: "drugX",
+        indication: "migraine",
+        pico: { comparator: "erenumab" },
+      },
+      makeDepsWithRegulatory(),
+    );
+
+    expect(
+      r.workflow_summary?.phase_timings_ms?.regulatory_status_check,
+    ).toBeDefined();
+    expect(
+      r.workflow_summary?.phase_timings_ms?.regulatory_status_check,
+    ).toBeGreaterThanOrEqual(0);
+  });
+
+  // ── Test #26-HTA-5: no comparators → Phase 3.6 is a fast no-op ───────────
+
+  it("#26-HTA-5: no pico.comparator and no unmet_need_inputs → Phase 3.6 is no-op (no regulatory calls)", async () => {
+    const r = await run(
+      {
+        drug: "drugX",
+        indication: "migraine",
+        // no pico.comparator, no unmet_need_inputs
+      },
+      makeDepsWithRegulatory(),
+    );
+
+    // autoCheckRegulatory should not be called (nothing to check)
+    expect(mockAutoCheckRegulatoryHta).not.toHaveBeenCalled();
+    // Pipeline still completes
+    expect(r.content).toMatch(/HTA Submission Workflow/);
+  });
+
+  // ── Test #26-HTA-6: auto_check_regulatory schema default is true ──────────
+
+  it("#26-HTA-6: htaWorkflowToolSchema has auto_check_regulatory with default true", () => {
+    const schema = htaWorkflowSchemaForTests.inputSchema as {
+      properties: Record<string, { type: string; default?: unknown }>;
+    };
+    expect(schema.properties["auto_check_regulatory"]).toBeDefined();
+    expect(schema.properties["auto_check_regulatory"].type).toBe("boolean");
+    expect(schema.properties["auto_check_regulatory"].default).toBe(true);
+  });
+});
+
 // ---- Codex review (2026-05-07) -----------------------------------------
 
 describe("hta_workflow — Codex P2: utility partial-input must not break CE", () => {

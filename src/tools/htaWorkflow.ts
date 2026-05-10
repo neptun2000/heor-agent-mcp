@@ -137,6 +137,14 @@ const HtaWorkflowSchema = z
       .describe(
         "Optional disease burden + treatment landscape inputs for Phase 3.5 (GVD path only). When provided alongside hta_body='gvd', triggers the evidence.unmet_need phase.",
       ),
+
+    // Design log #26: auto-wire regulatory.status_check (default-on, opt-out with false)
+    auto_check_regulatory: z
+      .boolean()
+      .default(true)
+      .describe(
+        "When true (default), Phase 3.6 fans out regulatory.status_check across comparators surfaced by Phases 1–3.5. Results are piped into hta_dossier as regulatory_landscape. Degrades gracefully on API errors — never blocks dossier. Set false to skip. Design log #26.",
+      ),
   })
   .strict();
 
@@ -510,6 +518,89 @@ export async function runHtaWorkflow(
     phaseTimings.evidence_unmet_need = Date.now() - tUnmet;
   }
 
+  // ── Phase 3.6: regulatory_landscape (design log #26) ─────────────────
+  // Fires by default when auto_check_regulatory=true AND comparators exist.
+  // Comparators sourced from: pico.comparator + unmet_need treatment_landscape.
+  // Never blocks the pipeline — any failure degrades gracefully.
+  let regulatoryLandscape: unknown[] = [];
+  if (input.auto_check_regulatory) {
+    const tReg = Date.now();
+
+    // Collect comparators from all available sources
+    const comparatorSet = new Set<string>();
+    if (input.pico?.comparator) {
+      // Split comma-separated comparators (e.g. "erenumab, galcanezumab")
+      for (const c of input.pico.comparator
+        .split(/[,;]+/)
+        .map((s) => s.trim())
+        .filter(Boolean)) {
+        comparatorSet.add(c);
+      }
+    }
+    if (input.unmet_need_inputs?.treatment_landscape?.current_soc) {
+      for (const drug of input.unmet_need_inputs.treatment_landscape
+        .current_soc) {
+        comparatorSet.add(drug);
+      }
+    }
+
+    const comparators = Array.from(comparatorSet);
+
+    if (comparators.length > 0) {
+      // Map hta_workflow jurisdictions → regulatory regions
+      // hta_workflow's jurisdictions enum: de, fr, it, es, nl, uk, eu_other
+      // Always include "us" as baseline; add "eu" for EU jurisdictions
+      const regions = new Set<"us" | "eu" | "uk">();
+      regions.add("us"); // always include US
+      for (const j of input.jurisdictions) {
+        if (j === "uk") regions.add("uk");
+        else if (["de", "fr", "it", "es", "nl", "eu_other"].includes(j))
+          regions.add("eu");
+      }
+      const regionList = Array.from(regions);
+
+      try {
+        const { autoCheckRegulatory } =
+          await import("../providers/regulatory/autoCheck.js");
+        const requests = comparators.flatMap((drug) =>
+          regionList.map((region) => ({
+            drug,
+            region,
+            indication: input.indication,
+          })),
+        );
+
+        const regResults = await autoCheckRegulatory(requests);
+        regulatoryLandscape = regResults.map((r) => r.result);
+
+        const nApproved = regResults.filter(
+          (r) => r.result.current_status === "approved",
+        ).length;
+        const nUnknown = regResults.filter(
+          (r) => r.result.current_status === "unknown",
+        ).length;
+        const nError = regResults.filter(
+          (r) => r.result.current_status === "api_error",
+        ).length;
+
+        audit = addAssumption(
+          audit,
+          `Phase 3.6 (regulatory.status_check) checked ${comparators.length} comparator(s) × ${regionList.length} region(s): ${nApproved} approved / ${nUnknown} unknown / ${nError} api_error.`,
+        );
+      } catch (e) {
+        audit = addWarning(
+          audit,
+          `Phase 3.6 (regulatory.status_check) failed: ${e instanceof Error ? e.message : String(e)}. Dossier will proceed without regulatory landscape section.`,
+        );
+      }
+
+      phaseTimings.regulatory_status_check = Date.now() - tReg;
+    } else {
+      // No comparators surfaced — Phase 3.6 is a no-op (fast)
+      phaseTimings.regulatory_status_check = Date.now() - tReg;
+    }
+  }
+
   // ── Phase 4: cost_effectiveness_model ─────────────────────────────
   const tCe = Date.now();
   let ceResults: unknown = undefined;
@@ -606,6 +697,10 @@ export async function runHtaWorkflow(
       rob_results: robResults,
       model_results: ceResults,
       unmet_need_summary: unmetNeedSummary,
+      // Design log #26: pipe regulatory landscape into dossier
+      ...(regulatoryLandscape.length > 0
+        ? { regulatory_landscape: regulatoryLandscape }
+        : {}),
     }),
   );
   let dossierContent = "";
@@ -704,6 +799,30 @@ export async function runHtaWorkflow(
   if (phaseTimings.evidence_unmet_need !== undefined) {
     lines.push(
       `| 3.5 | evidence.unmet_need | ${phaseTimings.evidence_unmet_need}ms | ${unmetNeedSummary ? "summary generated" : "skipped"} |`,
+    );
+  }
+  if (phaseTimings.regulatory_status_check !== undefined) {
+    const nApproved = regulatoryLandscape.filter(
+      (r) =>
+        isRecord(r) &&
+        (r as { current_status?: string }).current_status === "approved",
+    ).length;
+    const nUnknown = regulatoryLandscape.filter(
+      (r) =>
+        isRecord(r) &&
+        (r as { current_status?: string }).current_status === "unknown",
+    ).length;
+    const nError = regulatoryLandscape.filter(
+      (r) =>
+        isRecord(r) &&
+        (r as { current_status?: string }).current_status === "api_error",
+    ).length;
+    const regSummary =
+      regulatoryLandscape.length > 0
+        ? `${regulatoryLandscape.length} result(s): ${nApproved} approved / ${nUnknown} unknown / ${nError} api_error`
+        : "no comparators — skipped";
+    lines.push(
+      `| 3.6 | regulatory.status_check | ${phaseTimings.regulatory_status_check}ms | ${regSummary} |`,
     );
   }
   if (input.skip_ce_model) {
@@ -909,6 +1028,12 @@ export const htaWorkflowToolSchema = {
         default: false,
         description:
           "Skip the cost-effectiveness model phase (e.g., for clinical-only dossiers).",
+      },
+      auto_check_regulatory: {
+        type: "boolean",
+        default: true,
+        description:
+          "When true (default), Phase 3.6 fans out regulatory.status_check across comparators from pico.comparator and unmet_need_inputs.treatment_landscape.current_soc. Results piped into hta_dossier as regulatory_landscape (renders 'Regulatory Landscape' section for nice/jca/gvd/amcp). Degrades gracefully on API errors. Set false to skip. Design log #26.",
       },
       unmet_need_inputs: {
         type: "object",

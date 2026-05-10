@@ -188,6 +188,9 @@ export interface DossierParams {
   };
   /** Optional 1-paragraph unmet need synthesis from evidence.unmet_need — prepended to Unmet Need section for NICE and GVD. */
   unmet_need_summary?: string;
+  /** Design log #26: array of RegulatoryStatusResult objects from hta_workflow Phase 3.6. Renders "Regulatory Landscape" section for nice/jca/gvd/amcp. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  regulatory_landscape?: any[];
 }
 
 export interface ToolResult {

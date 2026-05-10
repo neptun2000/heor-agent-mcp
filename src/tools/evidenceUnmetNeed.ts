@@ -6,10 +6,12 @@
  * standardised markdown section + structured JSON pack for HTA dossiers.
  *
  * Design log #23 | HEORAgent v1.6.0
+ * Design log #26 | HEORAgent v1.10.1 — auto-wire regulatory.status_check
  * Pipes into hta_dossier via unmet_need_summary parameter.
  */
 
 import { z } from "zod";
+import type { AutoCheckResult } from "../providers/regulatory/autoCheck.js";
 
 // ── Zod schemas ────────────────────────────────────────────────────────────
 
@@ -70,6 +72,9 @@ export const evidenceUnmetNeedSchema = z.object({
     .optional(),
 
   literature_evidence: z.array(z.any()).optional(),
+
+  // Design log #26: auto-wire regulatory.status_check (default-on, opt-out with false)
+  auto_check_regulatory: z.boolean().default(true),
 });
 
 // INPUT type (before Zod transforms — what callers supply, with optionals omittable)
@@ -91,6 +96,30 @@ export interface DimensionResult {
   gaps: string[];
 }
 
+/** Design log #26: structured regulatory status for one drug×region pair */
+export interface RegulatoryContext {
+  drug: string;
+  region: string;
+  status: string; // "approved" | "unknown" | "api_error" | etc.
+  approved_indications: {
+    indication_text_verbatim: string;
+    population: string;
+    population_parsed: {
+      age_min_years: number | null;
+      age_max_years: number | null;
+      weight_constraint_kg: number | null;
+      sex_constraint: string | null;
+    } | null;
+    approval_date: string | null;
+    label_revision: string | null;
+    region_specific: boolean;
+  }[];
+  black_box_warnings: { heading: string; text_verbatim: string }[];
+  source_urls: Citation[];
+  data_fetched_at: string;
+  graceful_degradation_reason?: string;
+}
+
 export interface UnmetNeedResult {
   schema_version: "1.0";
   drug: string;
@@ -104,6 +133,8 @@ export interface UnmetNeedResult {
   unmet_need_summary: string;
   total_citations: Citation[];
   gaps: string[];
+  /** Design log #26: populated when auto_check_regulatory=true (default) */
+  regulatory_context?: RegulatoryContext[];
 }
 
 // ── Citation numbering state ───────────────────────────────────────────────
@@ -239,7 +270,6 @@ function renderTreatmentLandscape(
   let hasQuantitative = false;
 
   if (data.current_soc.length > 0) {
-    hasQuantitative = true;
     lines.push(
       `Standard of care for ${indication} includes: ${data.current_soc.join(", ")}.`,
     );
@@ -306,6 +336,12 @@ function renderTreatmentLandscape(
 
   if (data.qualitative_summary) {
     lines.push(data.qualitative_summary);
+  }
+
+  if (data.current_soc.length > 0 && dimCitations.length === 0) {
+    gaps.push(
+      "treatment_landscape current_soc/regulatory status needs citation support",
+    );
   }
 
   if (!hasQuantitative && dimCitations.length === 0) {
@@ -490,14 +526,35 @@ function buildSummary(
     const tl_d = params.treatment_landscape;
     const soc =
       tl_d.current_soc.length > 0 ? tl_d.current_soc.join(", ") : null;
-    const failRate =
-      tl_d.treatment_failure_rate_pct !== undefined
-        ? ` with a treatment failure rate of ${tl_d.treatment_failure_rate_pct}%`
-        : "";
     if (soc) {
-      parts.push(
-        `Current standard of care (${soc}) provides limited benefit${failRate}, representing a significant unmet need for ${drug}.`,
-      );
+      if (tl_d.treatment_failure_rate_pct !== undefined) {
+        parts.push(
+          `Current standard of care (${soc}) has a treatment failure rate of ${tl_d.treatment_failure_rate_pct}%, representing a significant unmet need for ${drug}.`,
+        );
+      } else if (tl_d.response_rate_pct !== undefined) {
+        parts.push(
+          `Current standard of care (${soc}) has a reported response rate of ${tl_d.response_rate_pct}%, leaving residual unmet need for ${drug}.`,
+        );
+      } else if (tl_d.discontinuation_rate_pct !== undefined) {
+        parts.push(
+          `Current standard of care (${soc}) has a discontinuation rate of ${tl_d.discontinuation_rate_pct}%, leaving residual unmet need for ${drug}.`,
+        );
+      } else if (
+        tl_d.qualitative_summary &&
+        (tl_d.citations?.length ?? 0) > 0
+      ) {
+        parts.push(
+          `Current standard of care (${soc}) has documented limitations, leaving residual unmet need for ${drug}.`,
+        );
+      } else if (tl_d.qualitative_summary) {
+        parts.push(
+          `Current standard of care (${soc}) has stated limitations that require citation support before use in a submission-grade unmet need claim for ${drug}.`,
+        );
+      } else {
+        parts.push(
+          `Current standard of care includes ${soc}; residual unmet need should be confirmed with cited efficacy, tolerability, access, or regulatory evidence for ${drug}.`,
+        );
+      }
     }
   }
 
@@ -592,16 +649,166 @@ function buildMarkdown(
   return lines.join("\n");
 }
 
+// ── Design log #26: region inference from jurisdictions ───────────────────
+
+/**
+ * Map jurisdiction codes to regulatory regions for auto-wire fan-out.
+ * Returns unique regions (deduped).
+ */
+function inferRegions(jurisdictions: string[]): Array<"us" | "eu" | "uk"> {
+  const regions = new Set<"us" | "eu" | "uk">();
+  for (const j of jurisdictions) {
+    if (j === "us") regions.add("us");
+    else if (j === "uk") regions.add("uk");
+    else if (["de", "fr", "it", "es", "nl"].includes(j)) regions.add("eu");
+    else if (j === "global") {
+      regions.add("us");
+      regions.add("eu");
+    }
+    // "jp" → skip (no JP data in v1.10.1)
+  }
+  return Array.from(regions);
+}
+
+/**
+ * Strip the "1 INDICATIONS AND USAGE" header that OpenFDA prefixes,
+ * then extract the first 60–200 chars ending at a sentence boundary.
+ */
+function extractVerbatimSnippet(text: string): string {
+  // Strip leading header like "1 INDICATIONS AND USAGE\n" or "INDICATIONS AND USAGE\n"
+  const stripped = text
+    .replace(/^\d+\s+INDICATIONS AND USAGE\s*/i, "")
+    .replace(/^INDICATIONS AND USAGE\s*/i, "")
+    .trim();
+
+  if (stripped.length <= 200) return stripped;
+
+  // Find sentence boundary between 60 and 200 chars
+  const slice = stripped.slice(0, 200);
+  const lastPeriod = slice.lastIndexOf(".");
+  if (lastPeriod >= 60) return stripped.slice(0, lastPeriod + 1);
+
+  return stripped.slice(0, 200) + "…";
+}
+
+/** Build gap message for unknown status (include did_you_mean) */
+function buildUnknownGap(
+  drug: string,
+  region: string,
+  didYouMean?: string[],
+): string {
+  const suggestions =
+    didYouMean && didYouMean.length > 0
+      ? ` (did_you_mean: ${didYouMean.slice(0, 3).join(", ")})`
+      : "";
+  return `${drug} not found in ${region} regulatory database — primary-source verification needed${suggestions}`;
+}
+
+/** Build gap message for api_error status */
+function buildApiErrorGap(drug: string, region: string): string {
+  return `regulatory_status check failed for ${drug} (${region}) — verify label manually before submission`;
+}
+
 // ── Main handler ───────────────────────────────────────────────────────────
 
 export async function evidenceUnmetNeedHandler(
   rawParams: EvidenceUnmetNeedInput,
 ): Promise<UnmetNeedResult> {
-  // Parse through schema to apply defaults (e.g. currency: "USD")
+  // Parse through schema to apply defaults (e.g. currency: "USD", auto_check_regulatory: true)
   const params = evidenceUnmetNeedSchema.parse(rawParams);
   const registry = createRegistry();
 
-  // Render each dimension
+  // ── Design log #26: auto-wire regulatory.status_check ─────────────────
+  // Must run BEFORE rendering treatment_landscape so we can inject verbatim
+  // label quotes into the rendered text and register citations.
+  let regulatoryContext: RegulatoryContext[] | undefined;
+  const regulatoryGaps: string[] = [];
+
+  if (
+    params.auto_check_regulatory &&
+    params.treatment_landscape &&
+    params.treatment_landscape.current_soc.length > 0
+  ) {
+    // Lazy import to maintain cycle-safety (autoCheck → regulatoryStatusCheck only)
+    const { autoCheckRegulatory } =
+      await import("../providers/regulatory/autoCheck.js");
+
+    const regions = inferRegions(params.jurisdictions);
+    const requests = params.treatment_landscape.current_soc.flatMap((drug) =>
+      regions.map((region) => ({
+        drug,
+        region,
+        indication: params.indication,
+      })),
+    );
+
+    let autoResults: AutoCheckResult[] = [];
+    try {
+      autoResults = await autoCheckRegulatory(requests);
+    } catch {
+      // Never block — if autoCheckRegulatory itself throws (shouldn't), skip silently
+    }
+
+    regulatoryContext = [];
+
+    for (const ar of autoResults) {
+      const r = ar.result;
+      const ctx: RegulatoryContext = {
+        drug: ar.drug,
+        region: ar.region,
+        status: r.current_status,
+        approved_indications: r.approved_indications,
+        black_box_warnings: r.black_box_warnings,
+        source_urls: r.source_urls.map((s) => ({
+          claim_anchor: `regulatory_${ar.drug}_${ar.region}`,
+          citation: `${s.source} — ${ar.drug} (${ar.region.toUpperCase()}) label, retrieved ${s.fetched_at.slice(0, 10)}`,
+          url: s.url,
+        })),
+        data_fetched_at: r.data_fetched_at,
+      };
+
+      if (
+        r.current_status === "approved" &&
+        r.approved_indications.length > 0
+      ) {
+        // Auto-register source URL as citation (deduplicated by url via citation text)
+        const firstIndication = r.approved_indications[0];
+        const snippet = extractVerbatimSnippet(
+          firstIndication.indication_text_verbatim,
+        );
+        const dateStr = r.data_fetched_at.slice(0, 10);
+        const sourceLabel = ar.region === "eu" ? "EMA/OpenEPI" : "FDA/OpenFDA";
+
+        if (r.source_urls.length > 0) {
+          const srcCitation: Citation = {
+            claim_anchor: `regulatory_${ar.drug}_${ar.region}`,
+            citation: `${sourceLabel} — ${ar.drug} (${ar.region.toUpperCase()}) approved label, retrieved ${dateStr}`,
+            url: r.source_urls[0].url,
+          };
+          const citNum = registerCitation(registry, srcCitation);
+          // Inject verbatim label line into treatment_landscape rendered text
+          // (stored for post-render injection — we attach to ctx)
+          ctx.graceful_degradation_reason = undefined;
+          // We store the rendered line as a property on ctx for injection below
+          (ctx as RegulatoryContext & { _renderLine?: string })._renderLine =
+            `Per ${sourceLabel} label retrieved ${dateStr}: ${ar.drug} is approved for ${snippet}${anchor(citNum)}`;
+        }
+      } else if (r.current_status === "unknown") {
+        regulatoryGaps.push(
+          buildUnknownGap(ar.drug, ar.region, r.did_you_mean),
+        );
+        ctx.graceful_degradation_reason = `${ar.drug} not found in ${ar.region} regulatory database`;
+      } else if (r.current_status === "api_error") {
+        regulatoryGaps.push(buildApiErrorGap(ar.drug, ar.region));
+        ctx.graceful_degradation_reason =
+          r.api_error?.message ?? "regulatory API error";
+      }
+
+      regulatoryContext.push(ctx);
+    }
+  }
+
+  // ── Render each dimension ──────────────────────────────────────────────
   const dbResult = params.disease_burden
     ? renderDiseaseBurden(params.disease_burden, params.indication, registry)
     : missingDimension("disease_burden");
@@ -614,6 +821,24 @@ export async function evidenceUnmetNeedHandler(
       )
     : missingDimension("treatment_landscape");
 
+  // ── Design log #26: inject verbatim label lines into treatment_landscape ─
+  if (regulatoryContext && regulatoryContext.length > 0) {
+    const renderLines: string[] = [];
+    for (const ctx of regulatoryContext) {
+      const line = (ctx as RegulatoryContext & { _renderLine?: string })
+        ._renderLine;
+      if (line) {
+        renderLines.push(line);
+        // Clean up the internal property
+        delete (ctx as RegulatoryContext & { _renderLine?: string })
+          ._renderLine;
+      }
+    }
+    if (renderLines.length > 0) {
+      tlResult.rendered = tlResult.rendered + "\n" + renderLines.join("\n");
+    }
+  }
+
   const qolResult = params.qol_impact
     ? renderQolImpact(params.qol_impact, params.indication, registry)
     : missingDimension("qol_impact");
@@ -622,12 +847,13 @@ export async function evidenceUnmetNeedHandler(
     ? renderEconomicBurden(params.economic_burden, params.indication, registry)
     : missingDimension("economic_burden");
 
-  // Aggregate gaps
+  // Aggregate gaps (including regulatory gaps from auto-wire)
   const allGaps = [
     ...dbResult.gaps,
     ...tlResult.gaps,
     ...qolResult.gaps,
     ...ebResult.gaps,
+    ...regulatoryGaps,
   ];
 
   // All citations (deduplicated by registry)
@@ -669,6 +895,9 @@ export async function evidenceUnmetNeedHandler(
     unmet_need_summary: summary,
     total_citations: allCitations,
     gaps: allGaps,
+    ...(regulatoryContext !== undefined
+      ? { regulatory_context: regulatoryContext }
+      : {}),
   };
 }
 
@@ -677,7 +906,7 @@ export async function evidenceUnmetNeedHandler(
 export const evidenceUnmetNeedToolSchema = {
   name: "evidence.unmet_need",
   description:
-    "Generate a structured unmet need section for HTA dossiers (NICE STA, EMA, FDA, IQWiG, HAS, JCA, GVD, AMCP). Takes structured inputs across 4 HEOR dimensions — disease burden, treatment landscape, QoL impact, economic burden — and produces a standardised markdown section with inline citations plus a 1-paragraph unmet_need_summary for downstream tools. Pipe unmet_need_summary into hta_dossier(unmet_need_summary:...) to pre-fill NICE Section B (unmet need) or GVD Section 4. Optionally pass literature_search results as literature_evidence. v1: consume-only; auto_search deferred to v1.6.1+. Design log #23.",
+    "Generate a structured unmet need section for HTA dossiers (NICE STA, EMA, FDA, IQWiG, HAS, JCA, GVD, AMCP). Consume-only: first retrieve evidence with literature_search, then pass only cited facts across 4 HEOR dimensions — disease burden, treatment landscape, QoL impact, economic burden. By default (auto_check_regulatory=true), automatically checks current regulatory status of comparators in treatment_landscape.current_soc via primary-source databases (OpenFDA/EMA EPI) and injects verbatim label quotes with auto-numbered citations. Degrades gracefully on API errors — never blocks dossier output. Set auto_check_regulatory:false to skip. Produces a standardised markdown section plus a 1-paragraph unmet_need_summary for downstream tools. Pipe unmet_need_summary into hta_dossier(unmet_need_summary:...) to pre-fill NICE Section B (unmet need) or GVD Section 4. Design log #23 + #26.",
   annotations: {
     title: "Unmet Need Section Generator",
     readOnlyHint: true,
@@ -735,18 +964,24 @@ export const evidenceUnmetNeedToolSchema = {
       },
       treatment_landscape: {
         type: "object",
-        description: "Current standard of care and its limitations",
+        description:
+          "Current standard of care and its limitations. Use only evidence retrieved by literature_search or other audited sources. Regulatory/approval claims require current label/regulatory citation support; if not confirmed, leave out rather than infer.",
         properties: {
           current_soc: {
             type: "array",
             items: { type: "string" },
-            description: "Molecule names for current standard of care",
+            description:
+              "Molecule names for current standard of care, supported by cited guideline/label/HTA evidence where possible.",
           },
           response_rate_pct: { type: "number" },
           median_pfs_months: { type: "number" },
           treatment_failure_rate_pct: { type: "number" },
           discontinuation_rate_pct: { type: "number" },
-          qualitative_summary: { type: "string" },
+          qualitative_summary: {
+            type: "string",
+            description:
+              "Cited narrative summary only. Do not assert off-label/no pediatric approval/no approved options unless current regulatory sources confirmed it.",
+          },
           citations: {
             type: "array",
             items: {
@@ -819,6 +1054,12 @@ export const evidenceUnmetNeedToolSchema = {
         description:
           "Optional: pass literature_search results here to include as supporting evidence",
         items: { type: "object" },
+      },
+      auto_check_regulatory: {
+        type: "boolean",
+        default: true,
+        description:
+          "When true (default), automatically fans out regulatory.status_check for each drug in treatment_landscape.current_soc × inferred regions. Injects verbatim label quotes inline with auto-numbered citations. Set false to skip (pre-v1.10.1 behaviour). Design log #26.",
       },
     },
     required: ["drug", "indication", "jurisdictions"],

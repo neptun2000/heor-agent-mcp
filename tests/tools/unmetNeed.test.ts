@@ -1,9 +1,17 @@
 /**
- * Tests for evidence.unmet_need tool — design log #23
+ * Tests for evidence.unmet_need tool — design log #23 + #26
  *
  * TDD: tests written BEFORE implementation.
  * Run: npm test -- --testPathPattern=unmetNeed
  */
+
+// ── Mock autoCheckRegulatory for design log #26 tests ─────────────────────
+
+const mockAutoCheckRegulatory = jest.fn();
+
+jest.mock("../../src/providers/regulatory/autoCheck.js", () => ({
+  autoCheckRegulatory: mockAutoCheckRegulatory,
+}));
 
 import {
   evidenceUnmetNeedHandler,
@@ -86,6 +94,13 @@ const fullParams: EvidenceUnmetNeedInput = {
 };
 
 // ─── Test suite ───────────────────────────────────────────────────────────────
+
+// Reset mock before each test so auto-wire tests don't bleed into other tests
+beforeEach(() => {
+  mockAutoCheckRegulatory.mockReset();
+  // Default: return empty (no auto-wire calls) — individual tests override as needed
+  mockAutoCheckRegulatory.mockResolvedValue([]);
+});
 
 describe("evidenceUnmetNeedHandler", () => {
   // Test 1: Basic call with all 4 dimensions — returns UnmetNeedResult with all fields
@@ -315,6 +330,28 @@ describe("evidenceUnmetNeedHandler", () => {
     expect(result.treatment_landscape.rendered).toContain("18");
   });
 
+  it("flags uncited treatment landscape/regulatory status claims as gaps", async () => {
+    const params: EvidenceUnmetNeedInput = {
+      drug: "fremanezumab",
+      indication: "pediatric episodic migraine",
+      jurisdictions: ["us"],
+      treatment_landscape: {
+        current_soc: ["topiramate", "amitriptyline", "CGRP mAbs"],
+        qualitative_summary: "CGRP mAbs have no approved pediatric indication.",
+      },
+    };
+
+    const result = await evidenceUnmetNeedHandler(params);
+
+    expect(result.treatment_landscape.gaps).toContain(
+      "treatment_landscape current_soc/regulatory status needs citation support",
+    );
+    expect(result.unmet_need_summary).toContain("require citation support");
+    expect(result.unmet_need_summary).not.toContain(
+      "has documented limitations",
+    );
+  });
+
   // Additional: all 4 missing dimensions → 4 gap entries
   it("produces 4 gap entries when all dimensions are undefined", async () => {
     const params: EvidenceUnmetNeedInput = {
@@ -416,5 +453,354 @@ describe("evidenceUnmetNeedToolSchema", () => {
     expect(schema.required).toContain("drug");
     expect(schema.required).toContain("indication");
     expect(schema.required).toContain("jurisdictions");
+  });
+
+  it("#26: inputSchema has auto_check_regulatory boolean property", () => {
+    const schema = evidenceUnmetNeedToolSchema.inputSchema as {
+      properties: Record<string, { type: string; default?: unknown }>;
+    };
+    expect(schema.properties["auto_check_regulatory"]).toBeDefined();
+    expect(schema.properties["auto_check_regulatory"].type).toBe("boolean");
+  });
+});
+
+// ─── Design log #26: auto-wire regulatory.status_check tests ─────────────────
+
+describe("evidenceUnmetNeedHandler — design log #26 auto-wire regulatory", () => {
+  // Shared approved result for fremanezumab
+  const fremAutoCheckResult = {
+    drug: "fremanezumab",
+    region: "us",
+    result: {
+      schema_version: "1.0" as const,
+      drug: "fremanezumab",
+      drug_normalised_inn: "fremanezumab",
+      drug_brand_names: ["Ajovy"],
+      region: "us",
+      current_status: "approved" as const,
+      approved_indications: [
+        {
+          indication_text_verbatim:
+            "1 INDICATIONS AND USAGE\nFREMANEZUMAB-VFRM is indicated for the preventive treatment of episodic migraine in pediatric patients 6 to 17 years of age who weigh 45 kg or more.",
+          indication_parsed:
+            "preventive treatment of episodic migraine (pediatric 6-17y)",
+          population:
+            "pediatric patients 6 to 17 years of age who weigh 45 kg or more",
+          population_parsed: {
+            age_min_years: 6,
+            age_max_years: 17,
+            weight_constraint_kg: 45,
+            sex_constraint: null,
+          },
+          approval_date: "2025-08-05",
+          label_revision: null,
+          region_specific: false,
+        },
+      ],
+      black_box_warnings: [],
+      rems_required: false,
+      contraindications: [],
+      recent_label_changes: {
+        count_12_months: 1,
+        last_revision_date: "2025-08-05",
+        last_revision_summary: "Pediatric sBLA approval",
+      },
+      source_urls: [
+        {
+          source: "OpenFDA",
+          url: "https://api.fda.gov/drug/label.json?search=openfda.generic_name%3A%22fremanezumab%22&limit=5",
+          fetched_at: "2026-05-10T00:00:00Z",
+        },
+      ],
+      data_fetched_at: "2026-05-10T00:00:00Z",
+      data_age_hours: 0,
+      cache_hit: false,
+    },
+  };
+
+  // ── Test #26-1: default call → regulatory_context populated ──────────────
+
+  it("#26-1: default call with fremanezumab in current_soc populates regulatory_context", async () => {
+    mockAutoCheckRegulatory.mockResolvedValueOnce([fremAutoCheckResult]);
+
+    const result = await evidenceUnmetNeedHandler({
+      drug: "alternative-cgrp-x",
+      indication: "pediatric migraine",
+      jurisdictions: ["us"],
+      treatment_landscape: {
+        current_soc: ["fremanezumab"],
+        qualitative_summary: "CGRP mAbs are emerging SoC.",
+      },
+    });
+
+    expect(result.regulatory_context).toBeDefined();
+    expect(result.regulatory_context!.length).toBe(1);
+    expect(result.regulatory_context![0].drug).toBe("fremanezumab");
+    expect(result.regulatory_context![0].region).toBe("us");
+    expect(result.regulatory_context![0].status).toBe("approved");
+  });
+
+  // ── Test #26-2: auto_check_regulatory:false → pre-v1.10.1 output ─────────
+
+  it("#26-2: auto_check_regulatory:false returns output without regulatory_context", async () => {
+    const result = await evidenceUnmetNeedHandler({
+      drug: "alternative-cgrp-x",
+      indication: "pediatric migraine",
+      jurisdictions: ["us"],
+      treatment_landscape: {
+        current_soc: ["fremanezumab"],
+        qualitative_summary: "CGRP mAbs are emerging SoC.",
+      },
+      auto_check_regulatory: false,
+    });
+
+    // autoCheckRegulatory must NOT have been called
+    expect(mockAutoCheckRegulatory).not.toHaveBeenCalled();
+    // No regulatory_context field
+    expect(result.regulatory_context).toBeUndefined();
+    // No "Per FDA/OpenFDA" text injected
+    expect(result.treatment_landscape.rendered).not.toContain(
+      "Per FDA/OpenFDA",
+    );
+  });
+
+  // ── Test #26-3: api_error → graceful degradation ──────────────────────────
+
+  it("#26-3: api_error → gap entry added, dossier proceeds, regulatory_context has status=api_error", async () => {
+    const apiErrorResult = {
+      drug: "topiramate",
+      region: "uk",
+      result: {
+        schema_version: "1.0" as const,
+        drug: "topiramate",
+        drug_normalised_inn: "topiramate",
+        drug_brand_names: [],
+        region: "uk",
+        current_status: "api_error" as const,
+        approved_indications: [],
+        black_box_warnings: [],
+        rems_required: false,
+        contraindications: [],
+        recent_label_changes: {
+          count_12_months: 0,
+          last_revision_date: null,
+          last_revision_summary: null,
+        },
+        source_urls: [],
+        data_fetched_at: "2026-05-10T00:00:00Z",
+        data_age_hours: 0,
+        cache_hit: false,
+        api_error: {
+          source: "UK eMC",
+          message: "UK eMC API not available",
+          retry_after_seconds: 0,
+        },
+      },
+    };
+
+    mockAutoCheckRegulatory.mockResolvedValueOnce([apiErrorResult]);
+
+    const result = await evidenceUnmetNeedHandler({
+      drug: "drug-x",
+      indication: "headache",
+      jurisdictions: ["uk"],
+      treatment_landscape: {
+        current_soc: ["topiramate"],
+        qualitative_summary: "Topiramate is first-line.",
+      },
+    });
+
+    // Dossier still rendered (no throw)
+    expect(result.markdown_section).toBeDefined();
+    expect(result.markdown_section.length).toBeGreaterThan(0);
+
+    // regulatory_context has the error entry
+    expect(result.regulatory_context).toBeDefined();
+    expect(result.regulatory_context![0].status).toBe("api_error");
+
+    // gap entry for api_error
+    const apiErrorGap = result.gaps.find(
+      (g) => g.includes("topiramate") && g.includes("verify label manually"),
+    );
+    expect(apiErrorGap).toBeDefined();
+  });
+
+  // ── Test #26-4: unknown status → gap includes did_you_mean ───────────────
+
+  it("#26-4: unknown status → gap entry includes did_you_mean suggestions", async () => {
+    const unknownResult = {
+      drug: "topiramte", // typo
+      region: "us",
+      result: {
+        schema_version: "1.0" as const,
+        drug: "topiramte",
+        drug_normalised_inn: "topiramte",
+        drug_brand_names: [],
+        region: "us",
+        current_status: "unknown" as const,
+        approved_indications: [],
+        black_box_warnings: [],
+        rems_required: false,
+        contraindications: [],
+        recent_label_changes: {
+          count_12_months: 0,
+          last_revision_date: null,
+          last_revision_summary: null,
+        },
+        source_urls: [],
+        data_fetched_at: "2026-05-10T00:00:00Z",
+        data_age_hours: 0,
+        cache_hit: false,
+        did_you_mean: ["topiramate", "topamax", "topiramax"],
+      },
+    };
+
+    mockAutoCheckRegulatory.mockResolvedValueOnce([unknownResult]);
+
+    const result = await evidenceUnmetNeedHandler({
+      drug: "drug-x",
+      indication: "epilepsy",
+      jurisdictions: ["us"],
+      treatment_landscape: {
+        current_soc: ["topiramte"],
+        qualitative_summary: "Current SoC includes topiramate.",
+      },
+    });
+
+    // Gap entry for unknown
+    const unknownGap = result.gaps.find(
+      (g) =>
+        g.includes("topiramte") &&
+        g.includes("not found") &&
+        g.includes("primary-source verification needed"),
+    );
+    expect(unknownGap).toBeDefined();
+
+    // did_you_mean included in gap
+    expect(unknownGap).toContain("topiramate");
+  });
+
+  // ── Test #26-5: multiple jurisdictions → fan-out across us + eu ──────────
+
+  it("#26-5: jurisdictions=[us,de] fans out across us + eu, both in regulatory_context", async () => {
+    const usResult = { ...fremAutoCheckResult };
+    const euResult = {
+      drug: "fremanezumab",
+      region: "eu",
+      result: {
+        schema_version: "1.0" as const,
+        drug: "fremanezumab",
+        drug_normalised_inn: "fremanezumab",
+        drug_brand_names: ["Ajovy"],
+        region: "eu",
+        current_status: "approved" as const,
+        approved_indications: [
+          {
+            indication_text_verbatim:
+              "Fremanezumab is indicated for prophylaxis of migraine in adults.",
+            population: "adults",
+            population_parsed: null,
+            approval_date: "2019-04",
+            label_revision: null,
+            region_specific: false,
+          },
+        ],
+        black_box_warnings: [],
+        rems_required: false,
+        contraindications: [],
+        recent_label_changes: {
+          count_12_months: 0,
+          last_revision_date: null,
+          last_revision_summary: null,
+        },
+        source_urls: [
+          {
+            source: "EMA EPI",
+            url: "https://www.ema.europa.eu/epi/fremanezumab",
+            fetched_at: "2026-05-10T00:00:00Z",
+          },
+        ],
+        data_fetched_at: "2026-05-10T00:00:00Z",
+        data_age_hours: 0,
+        cache_hit: false,
+      },
+    };
+
+    mockAutoCheckRegulatory.mockResolvedValueOnce([usResult, euResult]);
+
+    const result = await evidenceUnmetNeedHandler({
+      drug: "alternative-x",
+      indication: "migraine",
+      jurisdictions: ["us", "de"], // de → eu region
+      treatment_landscape: {
+        current_soc: ["fremanezumab"],
+        qualitative_summary: "CGRP mAbs are SoC.",
+      },
+    });
+
+    expect(result.regulatory_context).toBeDefined();
+    expect(result.regulatory_context!.length).toBe(2);
+
+    const usEntry = result.regulatory_context!.find((r) => r.region === "us");
+    const euEntry = result.regulatory_context!.find((r) => r.region === "eu");
+    expect(usEntry).toBeDefined();
+    expect(euEntry).toBeDefined();
+  });
+
+  // ── Test #26-6: citations auto-registered into total_citations ────────────
+
+  it("#26-6: approved result → source_url auto-registered into total_citations", async () => {
+    mockAutoCheckRegulatory.mockResolvedValueOnce([fremAutoCheckResult]);
+
+    const result = await evidenceUnmetNeedHandler({
+      drug: "alternative-cgrp-x",
+      indication: "pediatric migraine",
+      jurisdictions: ["us"],
+      treatment_landscape: {
+        current_soc: ["fremanezumab"],
+        qualitative_summary: "CGRP mAbs are SoC.",
+      },
+    });
+
+    // The OpenFDA source URL should appear in total_citations
+    const openFdaCitation = result.total_citations.find(
+      (c) => c.url && c.url.includes("api.fda.gov"),
+    );
+    expect(openFdaCitation).toBeDefined();
+  });
+
+  // ── Test #26-7: approved → rendered text includes "Per FDA/OpenFDA label" ─
+
+  it("#26-7: approved result → rendered treatment_landscape includes verbatim label line", async () => {
+    mockAutoCheckRegulatory.mockResolvedValueOnce([fremAutoCheckResult]);
+
+    const result = await evidenceUnmetNeedHandler({
+      drug: "alternative-cgrp-x",
+      indication: "pediatric migraine",
+      jurisdictions: ["us"],
+      treatment_landscape: {
+        current_soc: ["fremanezumab"],
+        qualitative_summary: "CGRP mAbs are SoC.",
+      },
+    });
+
+    expect(result.treatment_landscape.rendered).toContain(
+      "Per FDA/OpenFDA label retrieved",
+    );
+    expect(result.treatment_landscape.rendered).toContain("fremanezumab");
+  });
+
+  // ── Test #26-8: no current_soc → autoCheckRegulatory not called ──────────
+
+  it("#26-8: no treatment_landscape → autoCheckRegulatory not called (nothing to check)", async () => {
+    const result = await evidenceUnmetNeedHandler({
+      drug: "drug-x",
+      indication: "condition-y",
+      jurisdictions: ["us"],
+      // no treatment_landscape
+    });
+
+    expect(mockAutoCheckRegulatory).not.toHaveBeenCalled();
+    expect(result.regulatory_context).toBeUndefined();
   });
 });

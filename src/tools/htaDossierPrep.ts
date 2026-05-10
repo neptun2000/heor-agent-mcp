@@ -158,6 +158,13 @@ const DossierSchema = z.object({
     .describe(
       "Optional: 1-paragraph unmet need synthesis from the evidence.unmet_need tool. When provided and hta_body='nice', prepended to the Unmet Need section (NICE STA Section B). When hta_body='gvd', prepended to the 'Unmet Need' section (GVD Section 4). Pipe evidence.unmet_need result.unmet_need_summary here.",
     ),
+  // Design log #26: accept regulatory_landscape from hta_workflow Phase 3.6
+  regulatory_landscape: z
+    .array(z.unknown())
+    .optional()
+    .describe(
+      "Optional: array of RegulatoryStatusResult objects from regulatory.status_check (via hta_workflow Phase 3.6). When provided and hta_body in {nice, jca, gvd, amcp}, renders a 'Regulatory Landscape' section with a comparator × region × status table before the gap analysis. Design log #26.",
+    ),
 });
 import {
   createAuditRecord,
@@ -893,6 +900,26 @@ async function handleJCADossier(
     }
   }
 
+  // Design log #26: Regulatory Landscape for JCA path
+  if (
+    params.regulatory_landscape &&
+    params.regulatory_landscape.length > 0 &&
+    REGULATORY_LANDSCAPE_BODIES.has(params.hta_body)
+  ) {
+    const regSection = renderRegulatoryLandscapeSection(
+      params.regulatory_landscape,
+      params.indication,
+    );
+    if (regSection) {
+      lines.push("---");
+      lines.push(regSection);
+      audit = addAssumption(
+        audit,
+        `Regulatory Landscape section rendered for ${params.regulatory_landscape.length} comparator/region combination(s). Design log #26.`,
+      );
+    }
+  }
+
   if (allGaps.length > 0) {
     lines.push(
       `---\n## Gap Analysis (${allGaps.length} sections require input)`,
@@ -934,6 +961,98 @@ async function handleJCADossier(
   }
 
   return { content: jcaTextContent, audit };
+}
+
+// ── Design log #26: Regulatory Landscape section renderer ────────────────
+
+const REGULATORY_LANDSCAPE_BODIES = new Set(["nice", "jca", "gvd", "amcp"]);
+
+interface RegulatoryStatusResultShape {
+  drug?: string;
+  region?: string;
+  current_status?: string;
+  approved_indications?: Array<{
+    indication_text_verbatim?: string;
+    population?: string;
+    approval_date?: string | null;
+  }>;
+  source_urls?: Array<{ source?: string; url?: string }>;
+  data_fetched_at?: string;
+  api_error?: { message?: string };
+}
+
+function isRegulatoryResult(x: unknown): x is RegulatoryStatusResultShape {
+  return typeof x === "object" && x !== null;
+}
+
+function renderRegulatoryLandscapeSection(
+  regulatoryLandscape: unknown[],
+  indication: string,
+): string {
+  const rows: string[] = [];
+  const fetchedAt =
+    regulatoryLandscape
+      .map((r) => (isRegulatoryResult(r) ? r.data_fetched_at : undefined))
+      .filter(Boolean)[0]
+      ?.slice(0, 10) ?? new Date().toISOString().slice(0, 10);
+
+  const header = [
+    `### Regulatory Landscape`,
+    ``,
+    `Current label state for comparators in ${indication}, retrieved from primary-source databases on ${fetchedAt} UTC:`,
+    ``,
+    `| Comparator | Region | Status | Population (verbatim) | Approval date | Source |`,
+    `|------------|--------|--------|------------------------|---------------|--------|`,
+  ];
+
+  for (const item of regulatoryLandscape) {
+    if (!isRegulatoryResult(item)) continue;
+
+    const drug = item.drug ?? "Unknown";
+    const region = (item.region ?? "").toUpperCase();
+    const status = item.current_status ?? "unknown";
+
+    let population = "";
+    let approvalDate = "—";
+    let sourceCell = "—";
+
+    if (status === "approved" && item.approved_indications?.length) {
+      const ind = item.approved_indications[0];
+      const raw = ind.indication_text_verbatim ?? ind.population ?? "";
+      // Truncate to ~120 chars
+      population =
+        raw.length > 120 ? raw.slice(0, 120).replace(/\s+\S*$/, "") + "…" : raw;
+      approvalDate = ind.approval_date ?? "—";
+    } else if (status === "unknown") {
+      population = "Unknown — primary-source verification needed";
+    } else if (status === "api_error") {
+      population = `API error: ${item.api_error?.message ?? "unknown error"}`;
+    }
+
+    if (item.source_urls?.length) {
+      const src = item.source_urls[0];
+      sourceCell = src.url
+        ? `[${src.source ?? "Source"}](${src.url})`
+        : (src.source ?? "—");
+    }
+
+    const statusLabel =
+      status === "approved"
+        ? "Approved"
+        : status === "unknown"
+          ? "Unknown"
+          : status === "api_error"
+            ? "API error"
+            : status;
+
+    rows.push(
+      `| ${drug} | ${region} | ${statusLabel} | ${population} | ${approvalDate} | ${sourceCell} |`,
+    );
+  }
+
+  if (rows.length === 0) return "";
+
+  return [...header, ...rows, ""].join("\n");
 }
 
 export async function handleHtaDossierPrep(
@@ -1045,6 +1164,22 @@ export async function handleHtaDossierPrep(
       }
     }
 
+    // Design log #26: Regulatory Landscape for GVD path
+    if (params.regulatory_landscape && params.regulatory_landscape.length > 0) {
+      const regSection = renderRegulatoryLandscapeSection(
+        params.regulatory_landscape,
+        params.indication,
+      );
+      if (regSection) {
+        lines.push("---");
+        lines.push(regSection);
+        audit = addAssumption(
+          audit,
+          `Regulatory Landscape section rendered for ${params.regulatory_landscape.length} comparator/region combination(s). Design log #26.`,
+        );
+      }
+    }
+
     // Append gvd_evidence_pack as a JSON code block for downstream consumption
     lines.push(`---`);
     lines.push(`## GVD Evidence Pack`);
@@ -1108,6 +1243,26 @@ export async function handleHtaDossierPrep(
       audit = addAssumption(
         audit,
         "GRADE evidence quality assessment auto-generated from literature search results",
+      );
+    }
+  }
+
+  // Design log #26: Regulatory Landscape section for nice/jca/gvd/amcp
+  if (
+    params.regulatory_landscape &&
+    params.regulatory_landscape.length > 0 &&
+    REGULATORY_LANDSCAPE_BODIES.has(params.hta_body)
+  ) {
+    const regSection = renderRegulatoryLandscapeSection(
+      params.regulatory_landscape,
+      params.indication,
+    );
+    if (regSection) {
+      lines.push("---");
+      lines.push(regSection);
+      audit = addAssumption(
+        audit,
+        `Regulatory Landscape section rendered for ${params.regulatory_landscape.length} comparator/region combination(s). Design log #26.`,
       );
     }
   }

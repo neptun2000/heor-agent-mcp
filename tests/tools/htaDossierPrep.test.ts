@@ -369,3 +369,200 @@ describe("handleHtaDossierPrep — NICE health inequalities (May 2025 module)", 
     expect(txt).toMatch(/May 2025|PMG36|inequalities methods update/i);
   });
 });
+
+// ── Design log #26: regulatory_landscape rendering tests ─────────────────
+
+const approvedRegulatoryResult = {
+  schema_version: "1.0",
+  drug: "erenumab",
+  drug_normalised_inn: "erenumab",
+  drug_brand_names: ["Aimovig"],
+  region: "us",
+  current_status: "approved",
+  approved_indications: [
+    {
+      indication_text_verbatim:
+        "AIMOVIG is indicated for the preventive treatment of migraine in adults.",
+      population: "adults",
+      population_parsed: null,
+      approval_date: "2018-05-17",
+      label_revision: null,
+      region_specific: false,
+    },
+  ],
+  black_box_warnings: [],
+  rems_required: false,
+  contraindications: [],
+  recent_label_changes: {
+    count_12_months: 0,
+    last_revision_date: null,
+    last_revision_summary: null,
+  },
+  source_urls: [
+    {
+      source: "OpenFDA",
+      url: "https://api.fda.gov/drug/label.json?search=erenumab",
+      fetched_at: "2026-05-10T00:00:00Z",
+    },
+  ],
+  data_fetched_at: "2026-05-10T00:00:00Z",
+  data_age_hours: 0,
+  cache_hit: false,
+};
+
+const unknownRegulatoryResult = {
+  schema_version: "1.0",
+  drug: "fake-drug-xyz",
+  drug_normalised_inn: "fake-drug-xyz",
+  drug_brand_names: [],
+  region: "us",
+  current_status: "unknown",
+  approved_indications: [],
+  black_box_warnings: [],
+  rems_required: false,
+  contraindications: [],
+  recent_label_changes: {
+    count_12_months: 0,
+    last_revision_date: null,
+    last_revision_summary: null,
+  },
+  source_urls: [],
+  data_fetched_at: "2026-05-10T00:00:00Z",
+  data_age_hours: 0,
+  cache_hit: false,
+  did_you_mean: ["fakodrug", "drugfake"],
+};
+
+const apiErrorRegulatoryResult = {
+  schema_version: "1.0",
+  drug: "topiramate",
+  drug_normalised_inn: "topiramate",
+  drug_brand_names: [],
+  region: "uk",
+  current_status: "api_error",
+  approved_indications: [],
+  black_box_warnings: [],
+  rems_required: false,
+  contraindications: [],
+  recent_label_changes: {
+    count_12_months: 0,
+    last_revision_date: null,
+    last_revision_summary: null,
+  },
+  source_urls: [],
+  data_fetched_at: "2026-05-10T00:00:00Z",
+  data_age_hours: 0,
+  cache_hit: false,
+  api_error: {
+    source: "UK eMC",
+    message: "UK eMC not available",
+    retry_after_seconds: 0,
+  },
+};
+
+describe("handleHtaDossierPrep — design log #26 regulatory_landscape", () => {
+  // ── Test #26-D1: regulatory_landscape renders for nice ─────────────────
+
+  it("#26-D1: regulatory_landscape renders Regulatory Landscape section for hta_body=nice", async () => {
+    const r = await handleHtaDossierPrep({
+      ...baseParams,
+      hta_body: "nice",
+      regulatory_landscape: [approvedRegulatoryResult],
+    });
+    const txt = r.content as string;
+    expect(txt).toMatch(/Regulatory Landscape/i);
+    expect(txt).toContain("erenumab");
+    expect(txt).toContain("Approved");
+  });
+
+  // ── Test #26-D2: regulatory_landscape renders for jca ──────────────────
+
+  it("#26-D2: regulatory_landscape renders for hta_body=jca", async () => {
+    const r = await handleHtaDossierPrep({
+      hta_body: "jca",
+      submission_type: "initial",
+      drug_name: "erenumab",
+      indication: "migraine",
+      regulatory_landscape: [approvedRegulatoryResult],
+    });
+    const txt = r.content as string;
+    expect(txt).toMatch(/Regulatory Landscape/i);
+  });
+
+  // ── Test #26-D3: regulatory_landscape renders for gvd ──────────────────
+
+  it("#26-D3: regulatory_landscape renders for hta_body=gvd", async () => {
+    const r = await handleHtaDossierPrep({
+      hta_body: "gvd",
+      submission_type: "initial",
+      drug_name: "erenumab",
+      indication: "migraine",
+      regulatory_landscape: [approvedRegulatoryResult],
+    });
+    const txt = r.content as string;
+    expect(txt).toMatch(/Regulatory Landscape/i);
+  });
+
+  // ── Test #26-D4: unknown status → row says "Unknown — primary-source..." ─
+
+  it("#26-D4: unknown status shows 'Unknown — primary-source verification needed' in table row", async () => {
+    const r = await handleHtaDossierPrep({
+      ...baseParams,
+      regulatory_landscape: [unknownRegulatoryResult],
+    });
+    const txt = r.content as string;
+    expect(txt).toMatch(/Unknown.*primary.source verification needed/i);
+  });
+
+  // ── Test #26-D5: api_error → row says "API error" ─────────────────────
+
+  it("#26-D5: api_error status shows 'API error' in table row", async () => {
+    const r = await handleHtaDossierPrep({
+      ...baseParams,
+      regulatory_landscape: [apiErrorRegulatoryResult],
+    });
+    const txt = r.content as string;
+    expect(txt).toMatch(/API error/i);
+  });
+
+  // ── Test #26-D6: omitting regulatory_landscape → no section rendered ────
+
+  it("#26-D6: omitting regulatory_landscape does not render Regulatory Landscape section", async () => {
+    const r = await handleHtaDossierPrep({
+      ...baseParams,
+    });
+    const txt = r.content as string;
+    // Should not render the section when not provided
+    expect(txt).not.toMatch(/### Regulatory Landscape/);
+  });
+
+  // ── Test #26-D7: ema body → regulatory_landscape NOT rendered ────────────
+
+  it("#26-D7: hta_body=ema does not render Regulatory Landscape section (not in nice/jca/gvd/amcp)", async () => {
+    const r = await handleHtaDossierPrep({
+      hta_body: "ema",
+      submission_type: "initial",
+      drug_name: "erenumab",
+      indication: "migraine",
+      regulatory_landscape: [approvedRegulatoryResult],
+    });
+    const txt = r.content as string;
+    expect(txt).not.toMatch(/### Regulatory Landscape/);
+  });
+
+  // ── Test #26-D8: table has all required columns ───────────────────────
+
+  it("#26-D8: Regulatory Landscape table has Comparator, Region, Status, Population, Approval date, Source columns", async () => {
+    const r = await handleHtaDossierPrep({
+      ...baseParams,
+      regulatory_landscape: [approvedRegulatoryResult],
+    });
+    const txt = r.content as string;
+    expect(txt).toContain("Comparator");
+    expect(txt).toContain("Region");
+    expect(txt).toContain("Status");
+    expect(txt).toContain("Population");
+    expect(txt).toContain("Approval date");
+    expect(txt).toContain("Source");
+  });
+});

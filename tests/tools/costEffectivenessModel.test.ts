@@ -167,4 +167,39 @@ describe("handleCostEffectivenessModel", () => {
       }
     });
   });
+
+  // Codex P1 (2026-05-07): model_type="partsa" without survival_inputs
+  // previously fell through silently to the Markov branch, while audit still
+  // reported "Partitioned Survival Analysis" and PSA was suppressed. Now it
+  // throws with a clear message instead.
+  describe("model_type='partsa' guard", () => {
+    it("throws when survival_inputs missing", async () => {
+      await expect(
+        handleCostEffectivenessModel({
+          ...validParams,
+          model_type: "partsa",
+          // survival_inputs deliberately omitted
+        }),
+      ).rejects.toThrow(/partsa.*requires survival_inputs/i);
+    });
+
+    it("succeeds when survival_inputs supplied", async () => {
+      const result = await handleCostEffectivenessModel({
+        ...validParams,
+        model_type: "partsa",
+        survival_inputs: {
+          os_median_months: 24,
+          pfs_median_months: 12,
+          survival_distribution: "exponential",
+        },
+      } as never);
+      expect(result.audit.methodology).toMatch(/Partitioned Survival/i);
+    });
+
+    it("does NOT throw for default Markov even without survival_inputs", async () => {
+      // Regression guard: Markov is the default and must not be affected by the new check.
+      const result = await handleCostEffectivenessModel(validParams);
+      expect(result.audit.methodology).toMatch(/Markov/i);
+    });
+  });
 });

@@ -79,6 +79,21 @@ const CEModelSchema = z.object({
     .describe(
       "Summary metric for the ICER numerator: 'qaly' (default, NICE reference case), 'evlyg' (equal value life-years gained — CMS IRA-compatible, treats every life-year as utility 1.0), or 'both' (reports both). CMS prohibits QALYs in IRA drug price negotiations (§1194(e)(2)); use 'evlyg' for those contexts.",
     ),
+  // Required when model_type='partsa'. Codex P1 (2026-05-07): previously
+  // omitted from the Zod schema entirely, so Zod's default-strip behaviour
+  // dropped any caller-supplied survival_inputs and PartSA was effectively
+  // unreachable. The handler now hard-fails when partsa is requested without
+  // this object.
+  survival_inputs: z
+    .object({
+      os_median_months: z.number().positive().optional(),
+      pfs_median_months: z.number().positive().optional(),
+      os_median_months_comparator: z.number().positive().optional(),
+      pfs_median_months_comparator: z.number().positive().optional(),
+      survival_distribution: z.enum(["exponential", "weibull"]).optional(),
+      weibull_shape: z.number().positive().optional(),
+    })
+    .optional(),
 });
 import { runPartSA } from "../models/partsa.js";
 import { runPSA } from "../models/psa.js";
@@ -301,6 +316,22 @@ export async function handleCostEffectivenessModel(
   );
 
   const modelType = params.model_type ?? "markov";
+
+  // Fail loudly if PartSA is requested but survival_inputs are missing.
+  // Previously this fell through silently to the Markov branch (the gate at
+  // `if (modelType === "partsa" && params.survival_inputs)` evaluated false
+  // when survival_inputs was undefined), while the audit methodology still
+  // claimed "Partitioned Survival Analysis" and PSA was suppressed by
+  // `modelType !== "partsa"` — corrupted output, no warning.
+  if (modelType === "partsa" && !params.survival_inputs) {
+    throw new Error(
+      "Invalid input: model_type='partsa' requires survival_inputs " +
+        "(provide survival_inputs.os_median_months, pfs_median_months, and " +
+        "optionally survival_distribution). Otherwise omit model_type to " +
+        "use the Markov default.",
+    );
+  }
+
   const years = getTimeHorizonYears(params.time_horizon);
   const threshold = WTP_THRESHOLDS[params.perspective];
   const { symbol } = threshold;
@@ -722,7 +753,24 @@ export const costEffectivenessModelToolSchema = {
       model_type: {
         type: "string",
         enum: ["markov", "partsa", "decision_tree"],
-        description: "Model type. Default: markov. Use 'partsa' for oncology.",
+        description:
+          "Model type. Default: markov. Use 'partsa' for oncology — requires survival_inputs (the handler now hard-fails when partsa is set without it).",
+      },
+      survival_inputs: {
+        type: "object",
+        description:
+          "Required when model_type='partsa'. Median survival inputs (months) for OS/PFS, optional comparator overrides, and parametric distribution choice. Codex P1 fix (2026-05-07).",
+        properties: {
+          os_median_months: { type: "number", minimum: 0 },
+          pfs_median_months: { type: "number", minimum: 0 },
+          os_median_months_comparator: { type: "number", minimum: 0 },
+          pfs_median_months_comparator: { type: "number", minimum: 0 },
+          survival_distribution: {
+            type: "string",
+            enum: ["exponential", "weibull"],
+          },
+          weibull_shape: { type: "number", minimum: 0 },
+        },
       },
       clinical_inputs: {
         type: "object",

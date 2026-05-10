@@ -506,3 +506,96 @@ describe("hta_workflow — v1.4.2 fixes", () => {
     }
   });
 });
+
+// ---- Codex review (2026-05-07) -----------------------------------------
+
+describe("hta_workflow — Codex P2: utility partial-input must not break CE", () => {
+  // Workflow accepted qaly_on_treatment OR qaly_comparator independently and
+  // built {utility_inputs} if either was set, but the CE model schema requires
+  // BOTH fields once utility_inputs exists. Result: silent fallthrough into CE
+  // workflow fallback. Fix: require both before constructing utility_inputs.
+
+  it("does NOT pass utility_inputs when only qaly_on_treatment is supplied", async () => {
+    // The workflow sets `utility_inputs: undefined` when one half is missing —
+    // the key may exist on the object but the VALUE must be undefined so the
+    // CE schema (which requires both qaly fields when utility_inputs is set)
+    // doesn't reject. Test the value, not key presence.
+    let receivedHasUtility = false;
+    const deps = {
+      ...makeDeps(),
+      costEffectivenessModel: async (input: unknown) => {
+        const v =
+          typeof input === "object" && input !== null
+            ? (input as { utility_inputs?: unknown }).utility_inputs
+            : undefined;
+        receivedHasUtility = v !== undefined;
+        return {
+          content: JSON.stringify({
+            base_case: { icer: 1000, delta_cost: 100, delta_qaly: 0.1 },
+          }),
+        };
+      },
+    };
+    const r = await run(
+      {
+        drug: "drugX",
+        indication: "Y",
+        ce_inputs: { qaly_on_treatment: 0.78 }, // only one of two
+      },
+      deps as ReturnType<typeof makeDeps>,
+    );
+    expect(receivedHasUtility).toBe(false);
+    expect(r.content).toMatch(/cost_effectiveness_model/);
+  });
+
+  it("DOES pass utility_inputs when BOTH qaly fields are supplied", async () => {
+    let receivedUtility: unknown = undefined;
+    const deps = {
+      ...makeDeps(),
+      costEffectivenessModel: async (input: unknown) => {
+        if (typeof input === "object" && input !== null) {
+          receivedUtility = (input as { utility_inputs?: unknown })
+            .utility_inputs;
+        }
+        return {
+          content: JSON.stringify({
+            base_case: { icer: 1000, delta_cost: 100, delta_qaly: 0.1 },
+          }),
+        };
+      },
+    };
+    await run(
+      {
+        drug: "drugX",
+        indication: "Y",
+        ce_inputs: { qaly_on_treatment: 0.78, qaly_comparator: 0.71 },
+      },
+      deps as ReturnType<typeof makeDeps>,
+    );
+    expect(receivedUtility).toEqual({
+      qaly_on_treatment: 0.78,
+      qaly_comparator: 0.71,
+    });
+  });
+});
+
+describe("hta_workflow — Codex P3: unmet_need_inputs visible in MCP tool schema", () => {
+  it("htaWorkflowToolSchema.inputSchema.properties.unmet_need_inputs is exported", async () => {
+    const mod = await import("../../src/tools/htaWorkflow.js");
+    const props = (
+      mod.htaWorkflowToolSchema.inputSchema as {
+        properties: Record<string, unknown>;
+      }
+    ).properties;
+    expect(props.unmet_need_inputs).toBeDefined();
+    const unmet = props.unmet_need_inputs as {
+      type: string;
+      description?: string;
+      properties: Record<string, unknown>;
+    };
+    expect(unmet.type).toBe("object");
+    expect(unmet.properties.disease_burden).toBeDefined();
+    expect(unmet.properties.treatment_landscape).toBeDefined();
+    expect(unmet.description).toMatch(/Phase 3\.5|evidence\.unmet_need/i);
+  });
+});

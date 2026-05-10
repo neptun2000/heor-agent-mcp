@@ -532,8 +532,11 @@ export async function runHtaWorkflow(
           ae_cost: ce.ae_cost ?? 0,
           admin_cost: ce.admin_cost ?? 0,
         },
+        // CE model requires BOTH qaly fields when utility_inputs is set
+        // (costEffectivenessModel.ts:33). Only build the object when both are
+        // supplied — otherwise silently fall through to QALY-from-efficacy-delta.
         utility_inputs:
-          ce.qaly_on_treatment !== undefined || ce.qaly_comparator !== undefined
+          ce.qaly_on_treatment !== undefined && ce.qaly_comparator !== undefined
             ? {
                 qaly_on_treatment: ce.qaly_on_treatment,
                 qaly_comparator: ce.qaly_comparator,
@@ -906,6 +909,28 @@ export const htaWorkflowToolSchema = {
         default: false,
         description:
           "Skip the cost-effectiveness model phase (e.g., for clinical-only dossiers).",
+      },
+      unmet_need_inputs: {
+        type: "object",
+        description:
+          "Optional structured inputs for Phase 3.5 (evidence.unmet_need). Only consumed when hta_body='gvd'. When supplied, the orchestrator runs evidence.unmet_need and pipes the resulting unmet_need_summary into Phase 5 hta_dossier (pre-filling GVD Section 4 / NICE Section B). Design log #23.",
+        properties: {
+          disease_burden: {
+            type: "object",
+            properties: {
+              incidence_per_100k: { type: "number", minimum: 0 },
+              prevalence_per_100k: { type: "number", minimum: 0 },
+              qualitative_summary: { type: "string" },
+            },
+          },
+          treatment_landscape: {
+            type: "object",
+            properties: {
+              current_soc: { type: "array", items: { type: "string" } },
+              qualitative_summary: { type: "string" },
+            },
+          },
+        },
       },
     },
     required: ["drug", "indication"],

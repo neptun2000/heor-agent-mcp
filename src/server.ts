@@ -117,6 +117,10 @@ import {
   evidenceUnmetNeedSchema,
   evidenceUnmetNeedToolSchema,
 } from "./tools/evidenceUnmetNeed.js";
+import {
+  handleRegulatoryStatusCheck,
+  regulatoryStatusCheckToolSchema,
+} from "./tools/regulatoryStatusCheck.js";
 import { randomUUID } from "node:crypto";
 import {
   trackToolCall,
@@ -280,6 +284,7 @@ function createMcpServer(
       icfReadabilityCheckToolSchema,
       evidenceClinicalScaleToolSchema,
       evidenceUnmetNeedToolSchema,
+      regulatoryStatusCheckToolSchema,
     ],
   }));
 
@@ -401,6 +406,21 @@ function createMcpServer(
           result = {
             content: [
               { type: "text", text: JSON.stringify(unmetResult, null, 2) },
+            ],
+          };
+          break;
+        }
+        case "regulatory.status_check": {
+          const regResult = await handleRegulatoryStatusCheck(args);
+          result = {
+            content: [
+              {
+                type: "text",
+                text:
+                  typeof regResult.content === "string"
+                    ? regResult.content
+                    : JSON.stringify(regResult.content, null, 2),
+              },
             ],
           };
           break;

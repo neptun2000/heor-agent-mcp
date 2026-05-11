@@ -2,6 +2,108 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.10.1 (2026-05-10) — auto-wire `regulatory.status_check` (the "make the right thing easy" follow-up to v1.10.0)
+
+v1.10.0 shipped the primary-source regulatory lookup tool. v1.10.1 closes the loop: the tool now fires *automatically* inside `evidence.unmet_need` and a new `hta_workflow` Phase 3.6, so the model can no longer fabricate a "no approved option" claim by simply forgetting to call it. Design log #26.
+
+### `evidence.unmet_need` — default-on regulatory fan-out
+
+When `treatment_landscape.current_soc[]` is supplied, the handler now fans out to `regulatory.status_check` for each molecule across the user-supplied `jurisdictions[]`. Results are injected as a structured `regulatory_context[]` array AND rendered as inline label-quote attributions in the treatment-landscape paragraph ("Per FDA/OpenFDA label retrieved 2026-05-10: fremanezumab is approved for the preventive treatment of migraine in adults and in pediatric patients 6 years of age and older [citation N].").
+
+- Default-on; opt out via `auto_check_regulatory: false`.
+- Region mapping: `us` → `us`; `de/fr/it/es/nl` → `eu`; `uk` → `uk` (currently degrades gracefully — no UK source yet); `jp` → graceful gap.
+- Citations auto-numbered into the existing registry.
+- Concurrency capped at 8 per request (see autoCheck.ts).
+- 24h cache shared with explicit `regulatory.status_check` calls — repeated drug/region lookups within a workflow are free.
+
+### `hta_workflow` Phase 3.6 — new "regulatory_landscape" phase
+
+Inserted between Phase 3.5 (evidence.unmet_need) and Phase 4 (CE model). Fans out across comparators surfaced in earlier phases, pipes results into `hta_dossier` as a new `regulatory_landscape[]` parameter. Always runs when comparators are present, regardless of `hta_body`. Adds ~5-10s to total workflow time on a typical 4-comparator dossier.
+
+### `hta_dossier` — new "Regulatory Landscape" section
+
+Renders for `nice` / `jca` / `gvd` / `amcp` bodies. Table format: comparator × region × current approved indication × label-revision date × source URL. Provides auditable provenance for the regulatory claims that downstream payers verify line-by-line.
+
+### Graceful degradation — non-negotiable
+
+`api_error` or `current_status: "unknown"` from `regulatory.status_check` never blocks dossier rendering. Instead the failure is appended to `gaps[]`:
+- `"regulatory_status check failed for {drug} ({region}) — verify label manually before submission"`
+- `"{drug} not found in {region} regulatory database — primary-source verification needed; did you mean: {suggestion_1}, {suggestion_2}?"`
+
+The dossier proceeds with whatever regulatory context is available. This is the same design philosophy as the literature-search degradation: surface gaps explicitly, don't fail the workflow.
+
+### Cycle safety
+
+`regulatory.status_check`'s handler is statically prevented from importing `evidence.unmet_need` (per design log #26 Q10). Tests assert this so a future contributor doesn't create an A→B→A loop.
+
+### Rate-limit headroom
+
+`OPENFDA_API_KEY` env var is now respected by the OpenFDA client (the v1.10.0 implementation accepted it but the wiring shipped here). Anonymous OpenFDA limit is 240 req/min; with key, 120K/day. Production should set the env var.
+
+### Tests
+
+29 new regression tests across autoCheck (9), evidence.unmet_need integration (8), hta_workflow Phase 3.6 (6), hta_dossier regulatory-landscape rendering (8). Full suite: **111 suites / 1069 tests** (up from 110 / 1037).
+
+### Compatibility
+
+- Tool count stays at **28** — no new tool, only auto-wiring of v1.10.0's tool into two existing tools.
+- `auto_check_regulatory: false` preserves the v1.10.0 behavior for callers that want the explicit-call path.
+- Existing `evidence.unmet_need` callers see no breaking change unless they were depending on the absence of `regulatory_context[]` in the output (unlikely).
+
+---
+
+## v1.10.0 (2026-05-10) — `regulatory.status_check` tool (#28) — primary-source label lookup
+
+New tool that closes a real-user incident category. Design log #25.
+
+### The trigger — fremanezumab/pediatric-migraine, 2026-05-07
+
+Michael's colleagues at work asked `evidence.unmet_need` for a fremanezumab/pediatric-migraine dossier. The output asserted "CGRP mAbs have no approved pediatric indication" — true at LLM training cutoff, **false since FDA approval of AJOVY (fremanezumab-vfrm) for pediatric episodic migraine in August 2025** (sBLA 761089/s031). Same staleness trap is waiting on every drug with recent label changes (Aimovig, lecanemab, donanemab, biosimilars, withdrawals…). Pointing the LLM at `orange_book` via `literature_search` returns product index entries, not the current Indications and Usage section. **HEORAgent had no canonical regulatory-status lookup.** v1.10.0 ships one.
+
+### What the tool does
+
+```ts
+regulatory.status_check({ drug: "fremanezumab", region: "us", indication?: "migraine" })
+```
+
+Returns:
+- `current_status` — `approved` | `pending` | `withdrawn` | **`unknown`** (never `not_approved` on database miss)
+- `approved_indications[]` — verbatim label text + age/weight constraints + approval date
+- `recent_label_revisions[]` — last 12 months of changes
+- `source_urls[]` + `data_fetched_at` for full auditability
+- `did_you_mean[]` — Levenshtein suggestions on no-match (catches typos before the analyst burns hours)
+
+### The CRITICAL invariant
+
+`current_status` **never** equals `"not_approved"`. Primary-source absence ≠ proof of non-approval — that's the exact fremanezumab failure inverted. Database miss → `unknown` + `did_you_mean[]`. Documented in the tool description, asserted in tests.
+
+### Sources
+
+- **US: OpenFDA** (drug/label endpoint) — primary. Optional `OPENFDA_API_KEY` for higher rate limits (wiring landed in v1.10.1).
+- **US: DailyMed** — cross-check for verbatim Indications and Usage text.
+- **EU: EMA EPI FHIR** — adapter against the EMA Open Data clinical-data API.
+- **UK: stub** — placeholder for eMC + NICE TA index; v1.7.x lookahead.
+
+### Caching
+
+24h TTL, in-memory, shared across MCP sessions. `force_refresh: true` bypasses. Cache key includes drug-name normalisation so `Fremanezumab` / `fremanezumab-vfrm` / `AJOVY` hit the same entry.
+
+### Tests
+
+Live OpenFDA smoke test confirmed primary-source retrieval on real label queries. Full suite **110 suites / 1037 tests** at v1.10.0 ship.
+
+### Companion fix bundled in this release: Codex review P1+P2+P3
+
+Three correctness fixes that shipped alongside the new tool:
+
+- **P1 (CE model)**: `model_type: "partsa"` silently fell through to Markov when `survival_inputs` was missing — Zod stripped the field because it was never in the schema. Added `survival_inputs` to `CEModelSchema` + the exported tool schema; the handler now hard-fails when `partsa` is set without it instead of degrading to the wrong model class.
+- **P2 (workflow)**: `utility_inputs` was being built with only one of two QALY fields, then rejected by CE schema (silent fallthrough). Now requires both fields together.
+- **P3 (workflow)**: `unmet_need_inputs` existed in the internal Zod schema but was missing from the exported MCP tool schema — clients couldn't discover the GVD Phase 3.5 surface. Added to tool inputSchema with description.
+
+7 new regression tests for these (3 PartSA, 2 utility, 2 schema-exposure).
+
+---
+
 ## v1.6.3 (2026-05-07) — code-review polish for v1.6.2 + Slack-digest hardening
 
 Two parallel reviewers audited v1.6.2 and the new Slack weekly-digest feature within hours of ship. Combined: 0 CRITICAL, 0 HIGH, 6 MEDIUM, 6 LOW. All real findings addressed; cosmetic items deferred. Total tests 833 → 838.

@@ -15,6 +15,13 @@ import {
   extractTaNumber,
   findPrecedents,
 } from "../data/niceTaPrecedents.js";
+import {
+  MFN_BASKET_2026,
+  MFN_BASKET_REVISION,
+  MFN_COUNTRY_NAMES,
+  computeMfnCeiling,
+  type CountryIso2,
+} from "../data/mfnBasket.js";
 import { routeGvdSections } from "./htaDossier/gvdSectionRouter.js";
 import { caseInsensitiveEnum } from "../util/caseInsensitive.js";
 
@@ -164,6 +171,44 @@ const DossierSchema = z.object({
     .optional()
     .describe(
       "Optional: array of RegulatoryStatusResult objects from regulatory.status_check (via hta_workflow Phase 3.6). When provided and hta_body in {nice, jca, gvd, amcp}, renders a 'Regulatory Landscape' section with a comparator × region × status table before the gap analysis. Design log #26.",
+    ),
+  // Design log #27: MFN (Most-Favored-Nation) pricing context.
+  // Auto-rendered for hta_body:"amcp" (US dossiers always); opt-in for
+  // other bodies (renders when basket_prices is supplied). The basket
+  // is the 19-country CMS GUARD/GLOBE OECD reference set (see
+  // src/data/mfnBasket.ts).
+  mfn_context: z
+    .object({
+      basket_prices: z
+        .record(z.string(), z.number().nonnegative().finite())
+        .optional()
+        .describe(
+          "Map of ISO 3166-1 alpha-2 country code → net price in basket country, e.g. { DE: 100, FR: 95, GB: 110 }. Unsupplied countries are reported as missing in the dossier section.",
+        ),
+      us_current_net_price: z
+        .number()
+        .nonnegative()
+        .finite()
+        .optional()
+        .describe(
+          "Optional: current US net price for context. When supplied alongside basket_prices, the section quantifies the gap to the projected MFN ceiling.",
+        ),
+      basket_revision: z
+        .string()
+        .optional()
+        .describe(
+          "Optional override of the basket revision stamp. Defaults to the constant in src/data/mfnBasket.ts (currently 2026-03).",
+        ),
+      excluded_countries: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Optional: ISO-2 country codes to exclude from the ceiling computation (e.g. drug not marketed there). Filters down from the 19-country basket.",
+        ),
+    })
+    .optional()
+    .describe(
+      "Optional: Most-Favored-Nation pricing context. Auto-renders for hta_body='amcp' (US dossiers); opt-in for other bodies via basket_prices presence. Adds 'MFN Exposure' section per CMS GUARD/GLOBE rules. Design log #27.",
     ),
 });
 import {
@@ -963,6 +1008,125 @@ async function handleJCADossier(
   return { content: jcaTextContent, audit };
 }
 
+// ── Design log #27: MFN Exposure section ─────────────────────────────────
+
+// Bodies for which the MFN section may render. v1.11.0 ships opt-in only
+// across every live body — render when basket_prices is supplied. The
+// "amcp" body is reserved per design log #24 (AMCP Format 4.1); when it
+// ships, add it to MFN_AUTO_BODIES so US dossiers always show MFN
+// context regardless of whether basket_prices was supplied.
+const MFN_AUTO_BODIES = new Set<string>([]); // intentionally empty in v1.11.0
+const MFN_OPTIN_BODIES = new Set([
+  "nice",
+  "jca",
+  "gvd",
+  "iqwig",
+  "has",
+  "ema",
+  "fda",
+]);
+
+function renderMfnExposureSection(
+  ctx: NonNullable<DossierParams["mfn_context"]>,
+  hta_body: string,
+): string {
+  const revision = ctx.basket_revision ?? MFN_BASKET_REVISION;
+  const excluded = (ctx.excluded_countries ?? []).filter(
+    (c): c is CountryIso2 => (MFN_BASKET_2026 as readonly string[]).includes(c),
+  );
+  const prices = (ctx.basket_prices ?? {}) as Partial<
+    Record<CountryIso2, number>
+  >;
+  const { ceiling, contributing_countries, missing_countries } =
+    computeMfnCeiling(prices, { excluded_countries: excluded });
+
+  const lines: string[] = [];
+  lines.push(`## MFN Exposure (basket revision ${revision})`);
+  lines.push("");
+  lines.push(
+    `Under the CMS proposed payment models (GUARD = Medicare Part D MFN; GLOBE = Medicare Part B MFN), the US net price for an MFN-eligible drug is bounded by the minimum net price observed across a basket of ${MFN_BASKET_2026.length} OECD countries (PPP-adjusted GDP per capita ≥ 60% of US AND total GDP ≥ $400B).`,
+  );
+  lines.push("");
+
+  // Price table — every basket country, with user-supplied price or "not provided".
+  lines.push("| Country | ISO | Net price | Status |");
+  lines.push("|---|---|---:|---|");
+  for (const code of MFN_BASKET_2026) {
+    const name = MFN_COUNTRY_NAMES[code];
+    const isExcluded = excluded.includes(code);
+    const price = prices[code];
+    if (isExcluded) {
+      lines.push(`| ${name} | ${code} | — | excluded by caller |`);
+    } else if (price === undefined) {
+      lines.push(`| ${name} | ${code} | — | not provided |`);
+    } else {
+      const isMin = ceiling !== null && price === ceiling;
+      lines.push(
+        `| ${name} | ${code} | ${price} | ${isMin ? "**minimum (sets ceiling)**" : "supplied"} |`,
+      );
+    }
+  }
+  lines.push("");
+
+  // Ceiling summary.
+  if (ceiling === null) {
+    lines.push(
+      `**Projected US net price ceiling:** insufficient basket data (no prices supplied for any of the ${MFN_BASKET_2026.length - excluded.length} active basket countries).`,
+    );
+  } else {
+    lines.push(
+      `**Projected US net price ceiling:** ${ceiling} (minimum of ${contributing_countries.length} supplied basket price${contributing_countries.length === 1 ? "" : "s"}; ${missing_countries.length} country price${missing_countries.length === 1 ? "" : "s"} not provided).`,
+    );
+    if (ctx.us_current_net_price !== undefined) {
+      const gap = ctx.us_current_net_price - ceiling;
+      const pctDown =
+        ctx.us_current_net_price > 0
+          ? ((gap / ctx.us_current_net_price) * 100).toFixed(1)
+          : "n/a";
+      const direction =
+        gap > 0
+          ? `requires a ${pctDown}% reduction from current US net price (${ctx.us_current_net_price} → ${ceiling})`
+          : gap < 0
+            ? `is already above current US net price — no MFN-driven reduction required at this basket`
+            : `equals current US net price exactly`;
+      lines.push("");
+      lines.push(`**Gap to current US:** ${direction}.`);
+    }
+  }
+  lines.push("");
+
+  // Risk callouts — only when we actually have a ceiling to defend against.
+  if (ceiling !== null) {
+    lines.push("**Mitigation recommendations:**");
+    lines.push(
+      "- **Anchor evidence to the strictest HTA in basket** (NICE / IQWiG / HAS define the global value-based price ceiling).",
+    );
+    lines.push(
+      "- **Align comparator strategy early** via HTA scientific advice and supportive real-world evidence on the local standard of care.",
+    );
+    lines.push(
+      "- **Ensure robust EQ-5D utility data** with sufficient follow-up to reduce modelling uncertainty (use `utility_value_set` for the appropriate value set).",
+    );
+    lines.push(
+      "- **Sequence launches carefully** — early low-price markets cascade downward through IRP baskets and reset the global price floor independently of evidence.",
+    );
+    lines.push("");
+  }
+
+  // Body-specific framing.
+  if (MFN_AUTO_BODIES.has(hta_body)) {
+    lines.push(
+      `*Auto-rendered for US dossier (hta_body=${hta_body}). MFN is in scope by default per CMS rulemaking.*`,
+    );
+  } else {
+    lines.push(
+      `*Rendered for hta_body=${hta_body} because basket_prices were supplied; MFN exposure drives the US ceiling for the same asset under CMS GUARD/GLOBE rules.*`,
+    );
+  }
+
+  return lines.join("\n");
+}
+
 // ── Design log #26: Regulatory Landscape section renderer ────────────────
 
 const REGULATORY_LANDSCAPE_BODIES = new Set(["nice", "jca", "gvd", "amcp"]);
@@ -1180,6 +1344,23 @@ export async function handleHtaDossierPrep(
       }
     }
 
+    // Design log #27: MFN Exposure for GVD path (opt-in via basket_prices).
+    // GVD's early-return path skips the shared wire-in lower in the file, so
+    // we mirror the check here. Opt-in across every body in v1.11.0.
+    const gvdMfnPrices = params.mfn_context?.basket_prices;
+    if (gvdMfnPrices && Object.keys(gvdMfnPrices).length > 0) {
+      const mfnSection = renderMfnExposureSection(
+        params.mfn_context ?? {},
+        params.hta_body,
+      );
+      lines.push("---");
+      lines.push(mfnSection);
+      audit = addAssumption(
+        audit,
+        `MFN Exposure section rendered for hta_body=gvd with ${Object.keys(gvdMfnPrices).length} basket price${Object.keys(gvdMfnPrices).length === 1 ? "" : "s"} supplied. Design log #27.`,
+      );
+    }
+
     // Append gvd_evidence_pack as a JSON code block for downstream consumption
     lines.push(`---`);
     lines.push(`## GVD Evidence Pack`);
@@ -1265,6 +1446,32 @@ export async function handleHtaDossierPrep(
         `Regulatory Landscape section rendered for ${params.regulatory_landscape.length} comparator/region combination(s). Design log #26.`,
       );
     }
+  }
+
+  // Design log #27: MFN Exposure section.
+  // Auto-renders for hta_body:"amcp" regardless of basket_prices presence
+  // (US dossier — MFN is in scope by default per CMS rulemaking; the
+  // section then renders with "insufficient basket data" guidance).
+  // Opt-in for other bodies via basket_prices presence.
+  const isAmcp = MFN_AUTO_BODIES.has(params.hta_body);
+  const isOptInWithPrices =
+    MFN_OPTIN_BODIES.has(params.hta_body) &&
+    params.mfn_context?.basket_prices !== undefined &&
+    Object.keys(params.mfn_context.basket_prices).length > 0;
+  if (isAmcp || isOptInWithPrices) {
+    const mfnSection = renderMfnExposureSection(
+      params.mfn_context ?? {},
+      params.hta_body,
+    );
+    lines.push("---");
+    lines.push(mfnSection);
+    const supplied = Object.keys(
+      params.mfn_context?.basket_prices ?? {},
+    ).length;
+    audit = addAssumption(
+      audit,
+      `MFN Exposure section rendered for hta_body=${params.hta_body} with ${supplied} basket price${supplied === 1 ? "" : "s"} supplied. Design log #27.`,
+    );
   }
 
   if (gaps.length > 0) {

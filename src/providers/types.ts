@@ -136,6 +136,16 @@ export interface CEModelParams {
     survival_distribution?: "exponential" | "weibull";
     weibull_shape?: number;
   };
+
+  // Design log #27: MFN price-sensitivity sweep input. When supplied,
+  // CE tool runs a deterministic price sweep across [min_basket, current_us_price]
+  // and includes the result in CEModelResult.mfn_sensitivity.
+  mfn_sensitivity?: {
+    min_basket: number;
+    current_us_price: number;
+    n_points?: number;
+    wtp_thresholds?: number[];
+  };
 }
 
 export interface PicoDefinition {
@@ -191,6 +201,13 @@ export interface DossierParams {
   /** Design log #26: array of RegulatoryStatusResult objects from hta_workflow Phase 3.6. Renders "Regulatory Landscape" section for nice/jca/gvd/amcp. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   regulatory_landscape?: any[];
+  /** Design log #27: MFN (Most-Favored-Nation) pricing context. Auto-renders MFN Exposure section for hta_body="amcp"; opt-in for other bodies via basket_prices presence. Basket = 19-country CMS GUARD/GLOBE OECD set (src/data/mfnBasket.ts). */
+  mfn_context?: {
+    basket_prices?: Record<string, number>;
+    us_current_net_price?: number;
+    basket_revision?: string;
+    excluded_countries?: string[];
+  };
 }
 
 export interface ToolResult {
@@ -248,6 +265,14 @@ export interface CEModelResult {
   };
   psa?: PSASummary;
   owsa?: OWSASummary[];
+  /** Design log #27: MFN price-sensitivity sweep result. Present when caller supplied mfn_sensitivity. */
+  mfn_sensitivity?: {
+    range: { min_basket: number; current_us_price: number; n_points: number };
+    curve: Array<{ drug_price: number; icer: number }>;
+    crossovers: Array<{ wtp: number; crossover_price: number | null }>;
+    icer_at_ceiling: number;
+    icer_at_current: number;
+  };
   wtp_analysis: {
     nhs: WTPAssessment;
     us_payer: WTPAssessment;

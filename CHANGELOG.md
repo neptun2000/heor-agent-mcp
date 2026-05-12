@@ -2,6 +2,68 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.11.0 (2026-05-09) — MFN-aware tooling: basket data, dossier section, CE price sweep
+
+Implements the Most-Favored-Nation pricing layer across three tool surfaces. Triggered by CMS proposed GUARD (Part D) and GLOBE (Part B) payment models, which anchor US drug prices to a 19-country OECD basket minimum — a structural shift that makes the gap between US net price and the MFN ceiling a first-order market-access input. Design log #27.
+
+### New: `src/data/mfnBasket.ts` — 19-country basket data + ceiling math
+
+- `MFN_BASKET_2026` — canonical 19-country ISO-2 list (AT BE CZ DK FR DE IE IT NL NO ES SE CH GB AU JP KR CA IL) per CMS GUARD/GLOBE proposed rule, revision 2026-03.
+- `computeMfnCeiling(basket_prices, opts?)` — returns `{ ceiling: number|null, contributing_countries, missing_countries }`. Returns `null` when no basket prices supplied; never fabricates a ceiling from memory.
+- Rejects negative / NaN / Infinity prices with `TypeError`.
+- 16 unit tests in `tests/data/mfnBasket.test.ts`.
+
+### New: `src/models/mfnSensitivity.ts` — deterministic ICER price sweep
+
+`runMfnSensitivity(baseParams, inputs, runModel)` sweeps drug price from `min_basket` to `current_us_price` at N discrete points (default 11) and returns:
+- `curve` — ICER at each price point.
+- `crossovers` — price at which ICER crosses each WTP threshold (linear interpolation); `null` when the curve never crosses.
+- `icer_at_ceiling` / `icer_at_current` — convenience aliases for first/last curve points.
+
+Why deterministic sweep instead of another PSA? MFN is an exogenous price shock, not statistical uncertainty. 11 Markov runs vs 1000+ PSA runs; output is payer-readable ("ICER drops from $X to $Y; WTP crossover at price $Z").
+
+13 unit tests in `tests/models/mfnSensitivity.test.ts`.
+
+### Extended: `models.cost_effectiveness` — `mfn_sensitivity` input field
+
+When caller supplies `mfn_sensitivity: { min_basket, current_us_price, n_points?, wtp_thresholds? }`:
+- Runs the deterministic price sweep after the base-case model.
+- JSON output gains `mfn_sensitivity: { range, curve, crossovers, icer_at_ceiling, icer_at_current }`.
+- Text output gains a `### MFN Price Sensitivity` section with the price table and WTP crossover bullets.
+- Zod schema enforces `min_basket ≥ 0`, `current_us_price ≥ 0`, `n_points` 2–101.
+
+6 integration tests in `tests/tools/costEffectivenessModelMfn.test.ts`.
+
+### Extended: `hta.dossier` — `mfn_context` input field
+
+When caller supplies `mfn_context: { basket_prices, us_current_net_price?, basket_revision?, excluded_countries? }` and the HTA body is NICE / EMA / FDA / IQWiG / HAS / GVD:
+- Renders an **MFN Exposure** section with the full 19-country basket table, computed MFN ceiling, gap-to-US %, and 4 mitigation strategy recommendations (evidence-package investment, managed-entry agreements, launch sequencing, confidential rebate structures).
+- The section is opt-in (requires `basket_prices` to be non-empty). No auto-render body in v1.11.0 — AMCP is pending design log #24.
+- GVD dossier early-return branch also includes the MFN section (mirrors design log #26 Regulatory Landscape pattern).
+
+15 integration tests in `tests/tools/htaDossierMfn.test.ts`.
+
+### Extended: `src/server.ts` — MFN telemetry flags
+
+`trackToolCall` on success now includes:
+- `mfn_sensitivity_invoked: true` when `models.cost_effectiveness` is called with `mfn_sensitivity`.
+- `mfn_context_emitted: true` + `mfn_basket_countries: N` when `hta.dossier` is called with `mfn_context`.
+
+Enables PostHog HogQL queries to measure MFN feature adoption without schema changes.
+
+### Extended: web tier — SYSTEM_PROMPT + tool schema
+
+- `web/lib/claude.ts` SYSTEM_PROMPT: new **MFN (MOST-FAVORED-NATION) PRICING & GLOBAL ACCESS STRATEGY** block. Covers 3 market archetypes (evidence-constrained / IRP-influenced / structural), evidence-anchor strategy, when to call `mfn_sensitivity` vs `mfn_context`, and a hard rule against fabricating basket prices.
+- `web/lib/tools.ts`: `cost_effectiveness_model` schema gains `mfn_sensitivity` object; `hta_dossier` schema gains `mfn_context` object. Claude can now pass both without schema errors.
+
+12 web tests in `web/__tests__/mfnPhase4.test.ts`.
+
+### Full test suite
+
+1133 tests passing (1121 MCP + 12 new web). 0 failures.
+
+---
+
 ## v1.10.2 (2026-05-12) — stop reusing the 500-char telemetry cap as the client response
 
 A 0-CRITICAL hygiene release that fixes a quiet bug discovered while debugging a real ChatGPT failure on 2026-05-12 09:15:24 (user `1be263` called `hta.dossier` with no payload).

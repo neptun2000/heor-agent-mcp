@@ -443,12 +443,36 @@ function createMcpServer(
           };
       }
 
+      const mfnProps: Record<string, unknown> = {};
+      if (
+        name === "models.cost_effectiveness" &&
+        args &&
+        typeof args === "object" &&
+        "mfn_sensitivity" in args &&
+        args.mfn_sensitivity != null
+      ) {
+        mfnProps["mfn_sensitivity_invoked"] = true;
+      }
+      if (
+        name === "hta.dossier" &&
+        args &&
+        typeof args === "object" &&
+        "mfn_context" in args &&
+        args.mfn_context != null
+      ) {
+        const ctx = args.mfn_context as Record<string, unknown>;
+        mfnProps["mfn_context_emitted"] = true;
+        mfnProps["mfn_basket_countries"] =
+          ctx.basket_prices != null
+            ? Object.keys(ctx.basket_prices as object).length
+            : 0;
+      }
       trackToolCall(
         name,
         Date.now() - callStart,
         "ok",
         sessionIdRef.value || undefined,
-        { surface: surfaceRef.value },
+        { surface: surfaceRef.value, ...mfnProps },
       );
 
       const content =

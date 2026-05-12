@@ -94,10 +94,55 @@ const CEModelSchema = z.object({
       weibull_shape: z.number().positive().optional(),
     })
     .optional(),
+  // Design log #27: MFN price-sensitivity sweep. Cheap deterministic
+  // alternative to a full PSA re-run — sweeps drug_cost_annual across
+  // [min_basket, current_us_price] at n_points and reports ICER per
+  // price plus WTP crossover prices. When omitted, no MFN sensitivity
+  // section is added to the output.
+  mfn_sensitivity: z
+    .object({
+      min_basket: z
+        .number()
+        .nonnegative()
+        .finite()
+        .describe(
+          "Lower bound of the price sweep. Typically min(basket excluding US) from the 19-country GUARD/GLOBE MFN basket (see src/data/mfnBasket.ts).",
+        ),
+      current_us_price: z
+        .number()
+        .nonnegative()
+        .finite()
+        .describe(
+          "Upper bound — the drug's current US net price. Must be >= min_basket.",
+        ),
+      n_points: z
+        .number()
+        .int()
+        .min(2)
+        .max(101)
+        .optional()
+        .describe(
+          "Number of price points in the sweep (default 11). Each point is one Markov run, so wall-clock scales linearly with n_points × time_horizon.",
+        ),
+      wtp_thresholds: z
+        .array(z.number().nonnegative().finite())
+        .optional()
+        .describe(
+          "WTP thresholds in $/QALY for crossover detection. Defaults to [30000, 100000, 150000] (NHS / US payer low / US payer mid).",
+        ),
+    })
+    .optional()
+    .describe(
+      "Optional MFN price-sensitivity sweep. When supplied, the output includes an mfn_sensitivity block with ICER per price point and WTP-crossover prices. Design log #27.",
+    ),
 });
 import { runPartSA } from "../models/partsa.js";
 import { runPSA } from "../models/psa.js";
 import { runOWSA, buildDefaultOWSAParameters } from "../models/owsa.js";
+import {
+  runMfnSensitivity,
+  type MfnSensitivityResult,
+} from "../models/mfnSensitivity.js";
 import {
   buildMarkovParamsFromCE,
   runMarkovAndComputeICER,
@@ -495,6 +540,14 @@ export async function handleCostEffectivenessModel(
     }));
   }
 
+  // --- MFN sensitivity (design log #27) ---
+  let mfnSensitivity: MfnSensitivityResult | undefined;
+  if (params.mfn_sensitivity) {
+    mfnSensitivity = runMfnSensitivity(params, params.mfn_sensitivity, (p) =>
+      runMarkovAndComputeICER(p),
+    );
+  }
+
   // --- WTP Analysis ---
   const wtp_analysis = {
     nhs: buildWTPAssessment(icer, "nhs", delta_cost, delta_qaly),
@@ -516,6 +569,7 @@ export async function handleCostEffectivenessModel(
     },
     psa: psaSummary,
     owsa: owsaResults,
+    mfn_sensitivity: mfnSensitivity,
     wtp_analysis,
     model_metadata: {
       model_type: modelType,
@@ -635,6 +689,47 @@ export async function handleCostEffectivenessModel(
     owsaSection.push(``);
   }
 
+  // Design log #27: MFN sensitivity section (text).
+  const mfnSection: string[] = [];
+  if (mfnSensitivity) {
+    mfnSection.push(`### MFN Price Sensitivity (design log #27)`);
+    mfnSection.push(
+      `ICER swept across ${mfnSensitivity.range.n_points} drug-price points from MFN ceiling ${symbol}${mfnSensitivity.range.min_basket.toLocaleString()} to current US ${symbol}${mfnSensitivity.range.current_us_price.toLocaleString()}:`,
+    );
+    mfnSection.push("");
+    mfnSection.push(`| Drug price | ICER |`);
+    mfnSection.push(`|---:|---:|`);
+    for (const pt of mfnSensitivity.curve) {
+      const icerCell = Number.isFinite(pt.icer)
+        ? `${symbol}${Math.round(pt.icer).toLocaleString()}`
+        : "Infinity";
+      mfnSection.push(
+        `| ${symbol}${Math.round(pt.drug_price).toLocaleString()} | ${icerCell} |`,
+      );
+    }
+    mfnSection.push("");
+    mfnSection.push(
+      `**ICER at MFN ceiling (${symbol}${Math.round(mfnSensitivity.range.min_basket).toLocaleString()}):** ${Number.isFinite(mfnSensitivity.icer_at_ceiling) ? `${symbol}${Math.round(mfnSensitivity.icer_at_ceiling).toLocaleString()}` : "Infinity"}/QALY`,
+    );
+    mfnSection.push(
+      `**ICER at current US price (${symbol}${Math.round(mfnSensitivity.range.current_us_price).toLocaleString()}):** ${Number.isFinite(mfnSensitivity.icer_at_current) ? `${symbol}${Math.round(mfnSensitivity.icer_at_current).toLocaleString()}` : "Infinity"}/QALY`,
+    );
+    mfnSection.push("");
+    mfnSection.push(`**WTP crossover prices:**`);
+    for (const c of mfnSensitivity.crossovers) {
+      if (c.crossover_price === null) {
+        mfnSection.push(
+          `- ${symbol}${c.wtp.toLocaleString()}/QALY — never crossed in this price range`,
+        );
+      } else {
+        mfnSection.push(
+          `- ${symbol}${c.wtp.toLocaleString()}/QALY — crossed at drug price ${symbol}${Math.round(c.crossover_price).toLocaleString()}`,
+        );
+      }
+    }
+    mfnSection.push("");
+  }
+
   const textLines = [
     `## Cost-Effectiveness Analysis: ${params.intervention} vs ${params.comparator}`,
     `**Indication:** ${params.indication} | **Perspective:** ${params.perspective.toUpperCase()} | **Horizon:** ${params.time_horizon}`,
@@ -660,6 +755,7 @@ export async function handleCostEffectivenessModel(
     ),
     ...psaSection,
     ...owsaSection,
+    ...mfnSection,
     ...buildScenarioSection(params, symbol),
     `### Model Structure`,
     `Multi-state Markov model with half-cycle correction. Discounted at ${DISCOUNT_RATE * 100}% per NICE reference case.`,

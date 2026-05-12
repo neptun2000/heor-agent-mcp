@@ -66,22 +66,38 @@ export function trackEvent(
 }
 
 /**
- * Extracts structured analytics properties from a thrown value. Always
- * returns the same two property names so PostHog dashboards can query
- * `properties.error_class` and `properties.error_message` reliably.
+ * Extracts structured analytics properties from a thrown value.
  *
- * - Error subclasses → constructor name + message (truncated to 500 chars)
+ * Returns THREE fields so callers can pick the right one for each surface:
+ *   - `error_class`     — constructor/category name, stable for dashboards
+ *   - `error_message`   — FULL message, no truncation. Use this for the
+ *                         client-facing response so callers (including the
+ *                         ChatGPT Custom GPT) see the complete validation
+ *                         feedback and can recover in-conversation.
+ *   - `telemetry_message` — same message capped at 500 chars. Use this for
+ *                         PostHog `properties.error_message` so we don't
+ *                         blow up event payload size on a 50KB ZodError.
+ *
+ * Why we split these (added v1.10.2): pre-v1.10.2 the capped field doubled
+ * as the client response (server.ts:475), so ChatGPT received a JSON
+ * ZodError truncated mid-key and could not recover. The 500-char cap was
+ * a telemetry-hygiene decision that quietly broke the response surface.
+ *
+ * - Error subclasses → constructor name + full message
  * - Strings / numbers / null → class="unknown", message=stringified
  * - Circular objects / weird values → class="unknown", message=safe stringify
  */
 export function classifyToolError(err: unknown): {
   error_class: string;
   error_message: string;
+  telemetry_message: string;
 } {
   if (err instanceof Error) {
+    const full = err.message ?? "";
     return {
       error_class: err.constructor?.name ?? "Error",
-      error_message: (err.message ?? "").slice(0, 500),
+      error_message: full,
+      telemetry_message: full.slice(0, 500),
     };
   }
   let message: string;
@@ -92,7 +108,8 @@ export function classifyToolError(err: unknown): {
   }
   return {
     error_class: "unknown",
-    error_message: message.slice(0, 500),
+    error_message: message,
+    telemetry_message: message.slice(0, 500),
   };
 }
 

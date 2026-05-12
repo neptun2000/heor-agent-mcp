@@ -57,15 +57,64 @@ describe("classifyToolError — produces error_class + error_message", () => {
     });
   });
 
-  it("truncates very long messages to <=500 chars", () => {
+  // v1.10.2 SPLIT: error_message is full (for the client response);
+  // telemetry_message is capped at 500 (for PostHog event hygiene).
+  // Pre-v1.10.2 the cap was applied to a single field that doubled as
+  // the client surface, which truncated multi-issue ZodError dumps
+  // mid-key and broke ChatGPT recovery.
+  it("error_message preserves full text, telemetry_message capped at 500", () => {
     const longMsg = "x".repeat(2000);
     const props = classifyToolError(new Error(longMsg));
-    expect(props.error_message?.length).toBeLessThanOrEqual(500);
+    expect(props.error_message?.length).toBe(2000);
+    expect(props.telemetry_message?.length).toBeLessThanOrEqual(500);
+    // For short messages the two fields match.
+    const shortProps = classifyToolError(new Error("boom"));
+    expect(shortProps.error_message).toBe(shortProps.telemetry_message);
+  });
+
+  it("ZodError full-text is preserved on error_message (regression for the 2026-05-12 hta.dossier incident)", () => {
+    let zodErr: unknown;
+    try {
+      const { z } = require("zod");
+      // Schema with many required fields → forces a long multi-issue message.
+      z.object({
+        hta_body: z.enum(["nice", "ema", "fda", "iqwig", "has", "jca", "gvd"]),
+        submission_type: z.enum([
+          "sta",
+          "mta",
+          "early_access",
+          "initial",
+          "renewal",
+          "variation",
+        ]),
+        drug_name: z.string(),
+        indication: z.string(),
+        evidence_summary: z.string(),
+        comparator: z.string(),
+        target_population: z.string(),
+        primary_outcome: z.string(),
+      }).parse({});
+    } catch (e) {
+      zodErr = e;
+    }
+    const props = classifyToolError(zodErr);
+    expect(props.error_class).toBe("ZodError");
+    // The full ZodError dump is well over 500 chars for an 8-field
+    // schema. Pre-v1.10.2 it would have been sliced mid-issue.
+    expect(props.error_message.length).toBeGreaterThan(500);
+    expect(props.telemetry_message.length).toBeLessThanOrEqual(500);
   });
 
   it("never throws on circular / weird thrown values", () => {
     const circular: { self?: unknown } = {};
     circular.self = circular;
     expect(() => classifyToolError(circular)).not.toThrow();
+  });
+
+  it("non-Error long values: error_message full, telemetry_message capped", () => {
+    const longStr = "y".repeat(2000);
+    const props = classifyToolError(longStr);
+    expect(props.error_message).toBe(longStr);
+    expect(props.telemetry_message.length).toBeLessThanOrEqual(500);
   });
 });

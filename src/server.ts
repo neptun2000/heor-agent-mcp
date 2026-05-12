@@ -460,7 +460,12 @@ function createMcpServer(
         content: [{ type: "text", text: content }],
       };
     } catch (err) {
-      const { error_class, error_message } = classifyToolError(err);
+      const { error_class, error_message, telemetry_message } =
+        classifyToolError(err);
+      // PostHog gets the 500-char cap; the client gets the full message.
+      // Pre-v1.10.2 these were the same value, which truncated ZodError
+      // dumps mid-key and broke ChatGPT's ability to recover from
+      // validation failures in-conversation. Design log + CHANGELOG v1.10.2.
       trackToolCall(
         name,
         Date.now() - callStart,
@@ -469,12 +474,11 @@ function createMcpServer(
         {
           surface: surfaceRef.value,
           error_class,
-          error_message,
+          error_message: telemetry_message,
         },
       );
-      const message = error_message;
       return {
-        content: [{ type: "text", text: `Error: ${message}` }],
+        content: [{ type: "text", text: `Error: ${error_message}` }],
         isError: true,
       };
     }

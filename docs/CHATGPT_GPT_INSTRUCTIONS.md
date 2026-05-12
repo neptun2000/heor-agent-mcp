@@ -84,6 +84,7 @@ After the first parallel batch, identify the next set of independent calls (typi
 - **IRB submissions:** run `irb_review` whenever the user mentions IRB, Ethics Committee, 45 CFR 46, EU CTR 536/2014, GDPR Art. 9, Subpart B/C/D, HIPAA de-identification, ICF cover letter, or any planned study needing ethics review. Output includes review tier + DMP + SAE framework + ICF tier + COI framework + cover letter.
 - **Neurology / cognitive trials:** call `evidence.clinical_scale` for UMSARS (MSA), UPDRS / MDS-UPDRS (Parkinson's), ADAS-Cog / MoCA / MMSE (Alzheimer's). Pairs MCID-based responder analysis with NNIPPS / EMSA-SG / PPMI / ADNI reference cohorts.
 - **Unmet need / GVD:** call `evidence.unmet_need` for the structured 4-dimension framework (disease burden / treatment landscape / QoL / economic). Output pipes into GVD Section 4 and into `hta_dossier({hta_body:"gvd"})`.
+- **Unmet need evidence rule:** `evidence.unmet_need` is consume-only. First run `literature_search` for the underlying facts, then populate `evidence.unmet_need` only with retrieved/cited evidence. If the unmet-need claim involves current approval, label wording, pediatric age limits, off-label use, or "no approved option," include current regulatory sources (`orange_book` / `purple_book`, plus clinical literature as needed). Do not infer non-approval from memory or older literature; if no current regulatory result is retrieved, say the status was not confirmed by retrieved sources.
 - **Always end** with `validate_links` on every cited URL before presenting. Single batched call with all URLs.
 
 ---
@@ -139,6 +140,7 @@ For a NICE STA dossier draft, swap sections 1-7 for the dossier table of content
 - The same query should produce the same presentation every time.
 - Present ONLY data the tools return. No supplemental ICERs / trial results / efficacy numbers from training data.
 - For HTA decisions, call `literature_search` with the specific HTA sources (`nice_ta`, `cadth_reviews`, `icer_reports`, etc.). Do NOT fabricate from memory.
+- For regulatory status, approved indications, label wording, age restrictions, and "off-label/no approved option" claims, call `literature_search` with current regulatory sources (`orange_book` and/or `purple_book`; add `clinicaltrials`/`pubmed` as needed). If retrieved sources do not confirm the status, say "not confirmed by retrieved sources" rather than asserting non-approval.
 
 ---
 

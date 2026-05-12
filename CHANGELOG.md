@@ -2,6 +2,53 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.10.2 (2026-05-12) — stop reusing the 500-char telemetry cap as the client response
+
+A 0-CRITICAL hygiene release that fixes a quiet bug discovered while debugging a real ChatGPT failure on 2026-05-12 09:15:24 (user `1be263` called `hta.dossier` with no payload).
+
+### The bug
+
+`classifyToolError` in `src/analytics.ts` returned a single `error_message` field, truncated to 500 chars. That truncation was intended for telemetry hygiene — PostHog event properties have a size limit, and a multi-issue ZodError dump on a heavy schema can run 1-2KB.
+
+`src/server.ts:475` then used that same truncated string as the **client-facing response** content (the `text` of the `text` content block returned to whoever called the tool). Multi-issue ZodErrors arrived at clients (ChatGPT Custom GPT especially) **with the JSON cut mid-key** — `"received": "string", "rece` — and were unparseable. ChatGPT bounced instead of retrying with the missing fields. Five real-user errors followed this pattern in the 14 days before discovery.
+
+### The fix
+
+Split the field. `classifyToolError` now returns:
+
+```ts
+{
+  error_class: string;       // unchanged — Error subclass name for dashboards
+  error_message: string;     // FULL text — for the client response
+  telemetry_message: string; // capped at 500 chars — for PostHog
+}
+```
+
+`server.ts:472` now passes `telemetry_message` to `trackToolCall` (PostHog hygiene preserved) and uses `error_message` for the `text` content (full message reaches the client).
+
+### Why it isn't strictly redundant with the web-tier fix (deployed 2026-05-12)
+
+The web tier (`web/lib/zodErrorFormatter.ts`) already reformats raw ZodError JSON arriving from MCP into one-line "field.path: Required" text, AND salvages complete issues from truncated arrays. So clients calling via the web/ChatGPT adapter are protected today even on v1.10.1.
+
+But:
+1. **Direct MCP clients (Claude Desktop, Cursor, the npm `npx` users) don't go through the web tier.** They see the raw truncated ZodError straight from Railway. v1.10.2 fixes their experience.
+2. **The web-tier fix is defensive masking; v1.10.2 is the root-cause fix.** Both layers help — defense in depth.
+
+### Tests
+
+`tests/analytics/errorClassification.test.ts` updated to cover the split:
+- `error_message` preserves full text (2000-char input → 2000-char output).
+- `telemetry_message` capped at ≤500.
+- ZodError on an 8-required-field schema produces an `error_message` > 500 chars (regression for the 2026-05-12 `hta.dossier` failure pattern).
+
+Full suite: 8/8 in errorClassification, no other tests touched.
+
+### Non-breaking for consumers
+
+`error_class` and `error_message` are still present and PostHog dashboards keep working unchanged (telemetry is now slightly more selective about which message it stores). The only behavioral change visible to a client of the MCP server is: error responses are no longer truncated mid-message. That's a strict improvement.
+
+---
+
 ## v1.10.1 (2026-05-10) — auto-wire `regulatory.status_check` (the "make the right thing easy" follow-up to v1.10.0)
 
 v1.10.0 shipped the primary-source regulatory lookup tool. v1.10.1 closes the loop: the tool now fires *automatically* inside `evidence.unmet_need` and a new `hta_workflow` Phase 3.6, so the model can no longer fabricate a "no approved option" claim by simply forgetting to call it. Design log #26.

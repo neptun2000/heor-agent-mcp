@@ -70,6 +70,7 @@ const BROWSER_ONLY_DOMAINS = [
   "has-sante.fr",
   "pbs.gov.au",
   "cochranelibrary.com",
+  "ispor.org", // presentations-database search returns 200 but times out on bot requests
 ];
 
 function categorize(url: string, status: number): LinkStatus["category"] {
@@ -83,7 +84,12 @@ function categorize(url: string, status: number): LinkStatus["category"] {
   }
   if (status === 404 || status === 410) return "broken";
   if (status === 429 || status === 503) return "rate_limited";
-  if (status === 0) return "timeout";
+  if (status === 0) {
+    const host = new URL(url).hostname;
+    if (BROWSER_ONLY_DOMAINS.some((d) => host.includes(d)))
+      return "browser_only";
+    return "timeout";
+  }
   return "error";
 }
 

@@ -18,7 +18,7 @@ export async function fetchIcerReports(
     {
       title: `ICER Health-Benefit Price Benchmarks (HBPB)`,
       abstract: `ICER publishes health-benefit price benchmarks for drugs under review, representing the price at which the drug would achieve acceptable cost-effectiveness at $50K, $100K, and $150K/QALY thresholds. HBPBs are widely referenced in US payer negotiations and value-based contracts. Archive of benchmarks available for previously reviewed drugs.`,
-      url: "https://icer.org/our-approach/methods-process/value-based-price-benchmarks/",
+      url: "https://icer.org/explore-our-research/assessments/",
     },
   ];
 

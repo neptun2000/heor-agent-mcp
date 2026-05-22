@@ -2,6 +2,12 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.11.2 (2026-05-22) — Fix: expose 6 hidden hta_dossier fields in MCP schema
+
+`heterogeneity_per_outcome`, `upgrading_per_outcome`, `severity_modifier`, `health_inequalities`, `pv_classification`, and `regulatory_landscape` were all accepted and used by the `hta.dossier` handler but absent from the published MCP JSON `inputSchema`. External MCP clients (Claude Desktop, Smithery, etc.) could not discover or pass these fields, silently breaking the pipe workflows that `pv_classify` and `regulatory_status_check` were designed to feed into `hta.dossier`.
+
+All 6 fields are now fully documented in the `inputSchema` with types and descriptions matching the Zod schemas. `tests/schemas/mcpToolSchemas.test.ts` extended with 6 new drift-guard assertions.
+
 ## v1.11.1 (2026-05-22) — Bug fixes: MFN schema exposure, PartSA MFN runner, telemetry
 
 ### Fixed: MFN fields missing from MCP-published tool schemas

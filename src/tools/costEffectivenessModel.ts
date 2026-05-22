@@ -543,8 +543,44 @@ export async function handleCostEffectivenessModel(
   // --- MFN sensitivity (design log #27) ---
   let mfnSensitivity: MfnSensitivityResult | undefined;
   if (params.mfn_sensitivity) {
-    mfnSensitivity = runMfnSensitivity(params, params.mfn_sensitivity, (p) =>
-      runMarkovAndComputeICER(p),
+    const mfnRunner =
+      modelType === "partsa" && params.survival_inputs
+        ? (p: typeof params) => {
+            const si = p.survival_inputs!;
+            const r = runPartSA({
+              intervention_survival: {
+                os_median_months: si.os_median_months ?? 24,
+                pfs_median_months: si.pfs_median_months ?? 12,
+                distribution: si.survival_distribution ?? "exponential",
+                weibull_shape: si.weibull_shape,
+              },
+              comparator_survival: {
+                os_median_months: si.os_median_months_comparator ?? 18,
+                pfs_median_months: si.pfs_median_months_comparator ?? 9,
+                distribution: si.survival_distribution ?? "exponential",
+                weibull_shape: si.weibull_shape,
+              },
+              states: ["PFS", "PD", "Dead"],
+              utility_pfs: p.utility_inputs?.qaly_on_treatment ?? 0.75,
+              utility_pd: p.utility_inputs?.qaly_comparator ?? 0.55,
+              cost_pfs_annual: p.cost_inputs.drug_cost_annual,
+              cost_pd_annual: p.cost_inputs.comparator_cost_annual,
+              n_cycles: years,
+              cycle_length_years: 1,
+              discount_rate_costs: DISCOUNT_RATE,
+              discount_rate_outcomes: DISCOUNT_RATE,
+            });
+            const dc = r.intervention.total_cost - r.comparator.total_cost;
+            const dq = r.intervention.total_qaly - r.comparator.total_qaly;
+            return {
+              icer: dq > 0 ? dc / dq : dq < 0 ? -Infinity : Infinity,
+            };
+          }
+        : runMarkovAndComputeICER;
+    mfnSensitivity = runMfnSensitivity(
+      params,
+      params.mfn_sensitivity,
+      mfnRunner,
     );
   }
 
@@ -959,6 +995,35 @@ export const costEffectivenessModelToolSchema = {
           },
           required: ["name", "overrides"],
         },
+      },
+      mfn_sensitivity: {
+        type: "object",
+        description:
+          "Optional MFN price-sensitivity sweep. When supplied, the output includes an mfn_sensitivity block with ICER per price point and WTP-crossover prices. Design log #27.",
+        properties: {
+          min_basket: {
+            type: "number",
+            description:
+              "Lower bound of the price sweep. Typically min(basket excluding US) from the 19-country GUARD/GLOBE MFN basket.",
+          },
+          current_us_price: {
+            type: "number",
+            description:
+              "Upper bound — the drug's current US net price. Must be >= min_basket.",
+          },
+          n_points: {
+            type: "number",
+            description:
+              "Number of price points in the sweep (default 11, max 101).",
+          },
+          wtp_thresholds: {
+            type: "array",
+            items: { type: "number" },
+            description:
+              "WTP thresholds in $/QALY for crossover detection. Defaults to [30000, 100000, 150000].",
+          },
+        },
+        required: ["min_basket", "current_us_price"],
       },
       output_format: {
         type: "string",

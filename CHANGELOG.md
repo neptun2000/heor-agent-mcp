@@ -2,6 +2,28 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.11.1 (2026-05-22) — Bug fixes: MFN schema exposure, PartSA MFN runner, telemetry
+
+### Fixed: MFN fields missing from MCP-published tool schemas
+
+`mfn_sensitivity` was implemented in the `models.cost_effectiveness` Zod schema and handler but absent from the exported `costEffectivenessModelToolSchema` JSON — external MCP clients (Claude Desktop, Smithery, etc.) could not discover the field. Likewise `mfn_context` was missing from the `hta.dossier` MCP inputSchema. Both fields are now present in the published schemas with full descriptions and required-field lists.
+
+Added `tests/schemas/mcpToolSchemas.test.ts` as a permanent drift guard so Zod and MCP schemas can't diverge silently again.
+
+### Fixed: MFN sensitivity always used Markov runner even for PartSA models
+
+`runMfnSensitivity` was called with `runMarkovAndComputeICER` regardless of `model_type`. When the base model was `partsa`, the MFN curve was computed from a Markov run, producing mixed-method output (PartSA base case + Markov MFN curve). The callback now dispatches to `runPartSA` when `model_type="partsa"`, producing a consistent single-method result.
+
+### Fixed (web): `hta_body` enum in `web/lib/tools.ts` missing `"gvd"`
+
+The web-tier tool definition exposed `["nice", "ema", "fda", "iqwig", "has", "jca"]` — `"gvd"` was present in the MCP server schema but not in the Claude web UI tool definition. GVD dossiers were silently inaccessible from the web UI.
+
+### Fixed (web): MCP tool errors tracked as `status=ok` in PostHog
+
+`McpSession.dispatch()` catches all errors and returns `"Error: ..."` strings (by design — so Claude receives the error text). The chat route's `trackToolCall` call sat immediately after `dispatch()` and always emitted `status: "ok"`. The route now checks for the `"Error: "` prefix and emits `status: "error"` with `error_class: "McpError"` and the message body.
+
+Also fixed: the PostHog `distinctId` was hardcoded to `"chatgpt_adapter"` for all surfaces. Claude web UI calls now use `distinctId: "anon_claude_web"` so the two surfaces are distinguishable in analytics.
+
 ## v1.11.0 (2026-05-09) — MFN-aware tooling: basket data, dossier section, CE price sweep
 
 Implements the Most-Favored-Nation pricing layer across three tool surfaces. Triggered by CMS proposed GUARD (Part D) and GLOBE (Part B) payment models, which anchor US drug prices to a 19-country OECD basket minimum — a structural shift that makes the gap between US net price and the MFN ceiling a first-order market-access input. Design log #27.

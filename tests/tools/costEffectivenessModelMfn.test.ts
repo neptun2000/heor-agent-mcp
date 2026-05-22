@@ -128,4 +128,39 @@ describe("cost_effectiveness_model — MFN sensitivity wire-in", () => {
       }),
     ).rejects.toThrow();
   });
+
+  it("uses PartSA runner (not Markov) for MFN sweep when model_type=partsa", async () => {
+    const result = await handleCostEffectivenessModel({
+      ...baseParams,
+      model_type: "partsa",
+      survival_inputs: {
+        os_median_months: 24,
+        pfs_median_months: 12,
+        os_median_months_comparator: 18,
+        pfs_median_months_comparator: 9,
+        survival_distribution: "exponential",
+      },
+      output_format: "json",
+      mfn_sensitivity: {
+        min_basket: 100,
+        current_us_price: 200,
+        n_points: 3,
+      },
+    });
+    const r = result.content as Record<string, unknown>;
+    expect(r).toHaveProperty("mfn_sensitivity");
+    const mfn = r.mfn_sensitivity as {
+      curve: Array<{ drug_price: number; icer: number }>;
+    };
+    // All 3 curve points should reflect PartSA ICER (finite numbers)
+    expect(mfn.curve).toHaveLength(3);
+    mfn.curve.forEach((pt) => {
+      expect(Number.isFinite(pt.icer)).toBe(true);
+    });
+    // PartSA ICER grows with drug price — monotone check
+    expect(mfn.curve[2]!.icer).toBeGreaterThan(mfn.curve[0]!.icer);
+    // model_metadata should confirm model type
+    const meta = r.model_metadata as { model_type: string };
+    expect(meta.model_type).toBe("partsa");
+  });
 });

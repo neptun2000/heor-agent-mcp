@@ -1647,6 +1647,24 @@ export const htaDossierPrepToolSchema = {
         description:
           "Optional: 1-paragraph unmet need synthesis from the evidence.unmet_need tool. Pipe evidence.unmet_need result.unmet_need_summary here. Prepended to the Unmet Need section for NICE (Section B) and GVD (Section 4).",
       },
+      mfn_context: {
+        type: "object",
+        description:
+          "Optional MFN pricing context. When basket_prices is supplied and hta_body is one of {nice, ema, fda, iqwig, has, jca, gvd}, renders an MFN Exposure section with ceiling math and gap-to-US analysis. Design log #27.",
+        properties: {
+          basket_prices: {
+            type: "object",
+            description:
+              'Map of ISO country code → net price (USD equivalent). E.g. {"DE": 95, "FR": 88, "GB": 102}. Ceiling = min(values).',
+            additionalProperties: { type: "number" },
+          },
+          us_current_net_price: {
+            type: "number",
+            description:
+              "Drug's current US net price (USD). Used to compute gap-to-ceiling.",
+          },
+        },
+      },
     },
     required: ["hta_body", "submission_type", "drug_name", "indication"],
   },

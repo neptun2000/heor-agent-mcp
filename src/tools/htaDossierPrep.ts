@@ -1647,6 +1647,84 @@ export const htaDossierPrepToolSchema = {
         description:
           "Optional: 1-paragraph unmet need synthesis from the evidence.unmet_need tool. Pipe evidence.unmet_need result.unmet_need_summary here. Prepended to the Unmet Need section for NICE (Section B) and GVD (Section 4).",
       },
+      heterogeneity_per_outcome: {
+        type: "object",
+        description:
+          "Optional: I² and study count per outcome (from evidence_indirect tool). When provided, GRADE inconsistency is computed from I² instead of heuristic. Example: { 'overall survival': { i_squared_pct: 45, n_studies: 6 } }",
+        additionalProperties: {
+          type: "object",
+          properties: {
+            i_squared_pct: { type: "number" },
+            n_studies: { type: "number" },
+          },
+          required: ["i_squared_pct", "n_studies"],
+        },
+      },
+      upgrading_per_outcome: {
+        type: "object",
+        description:
+          "Optional: GRADE upgrading flags per outcome for observational evidence (Guyatt 2011). Keys are outcome names; values specify large_effect ('none'/'large'/'very_large'), dose_response (boolean), and plausible_confounding_toward_null (boolean). Ignored for RCT evidence. Capped at +2 steps.",
+        additionalProperties: {
+          type: "object",
+          properties: {
+            large_effect: {
+              type: "string",
+              enum: ["none", "large", "very_large"],
+            },
+            dose_response: { type: "boolean" },
+            plausible_confounding_toward_null: { type: "boolean" },
+          },
+        },
+      },
+      severity_modifier: {
+        type: "object",
+        description:
+          "NICE PMG36 severity modifier inputs (replaced end-of-life modifier, April 2022). Provide absolute_qaly_shortfall (years) and/or proportional_qaly_shortfall (0-1). Modifier weight: <12 absolute AND <0.85 proportional → 1.0×; 12-18 or 0.85-0.95 → 1.2×; ≥18 or ≥0.95 → 1.7×.",
+        properties: {
+          absolute_qaly_shortfall: { type: "number" },
+          proportional_qaly_shortfall: { type: "number" },
+        },
+      },
+      health_inequalities: {
+        type: "object",
+        description:
+          "Health inequalities evidence per NICE PMG36 May 2025 modular update. Required by NICE for interventions affecting disadvantaged groups. intervention_impact: 'narrows'/'neutral'/'widens'/'unknown'.",
+        properties: {
+          affected_groups: {
+            type: "array",
+            items: { type: "string" },
+          },
+          baseline_disparity_evidence: { type: "string" },
+          intervention_impact: {
+            type: "string",
+            enum: ["narrows", "neutral", "widens", "unknown"],
+          },
+          mitigation_plan: { type: "string" },
+        },
+      },
+      pv_classification: {
+        type: "object",
+        description:
+          "Optional: structured PV classification from the pv_classify tool. When provided, the dossier includes a Pharmacovigilance Plan section with GVP module, ENCePP template, submission obligations, and RMP implications. Pipe pv_classify output here.",
+        properties: {
+          primary_category: { type: "string" },
+          alternatives: { type: "array", items: { type: "string" } },
+          gvp_module: { type: "string" },
+          gvp_revision: { type: "string" },
+          encepp_study_category: { type: "string" },
+          rmp_implications: { type: "array", items: { type: "string" } },
+          fda_analogue: { type: "string" },
+          submission_obligations: { type: "array", items: { type: "string" } },
+          rationale: { type: "string" },
+        },
+        required: ["primary_category", "gvp_module", "gvp_revision"],
+      },
+      regulatory_landscape: {
+        type: "array",
+        description:
+          "Optional: array of RegulatoryStatusResult objects from regulatory.status_check (via hta_workflow Phase 3.6). When provided and hta_body in {nice, jca, gvd}, renders a Regulatory Landscape section with a comparator × region × status table. Design log #26.",
+        items: { type: "object" },
+      },
       mfn_context: {
         type: "object",
         description:

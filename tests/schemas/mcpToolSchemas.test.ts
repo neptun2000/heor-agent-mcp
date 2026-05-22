@@ -49,3 +49,31 @@ describe("htaDossierToolSchema — MFN fields", () => {
     expect(body.enum).toContain("gvd");
   });
 });
+
+describe("htaDossierToolSchema — pipe-in fields from other tools", () => {
+  it("exposes pv_classification (pipe from pv_classify)", () => {
+    expect(props(htaDossierToolSchema)).toHaveProperty("pv_classification");
+  });
+
+  it("exposes regulatory_landscape (pipe from regulatory_status_check)", () => {
+    expect(props(htaDossierToolSchema)).toHaveProperty("regulatory_landscape");
+  });
+
+  it("exposes severity_modifier (NICE PMG36)", () => {
+    expect(props(htaDossierToolSchema)).toHaveProperty("severity_modifier");
+  });
+
+  it("exposes health_inequalities (NICE PMG36 May 2025)", () => {
+    expect(props(htaDossierToolSchema)).toHaveProperty("health_inequalities");
+  });
+
+  it("exposes heterogeneity_per_outcome (GRADE inconsistency)", () => {
+    expect(props(htaDossierToolSchema)).toHaveProperty(
+      "heterogeneity_per_outcome",
+    );
+  });
+
+  it("exposes upgrading_per_outcome (GRADE upgrading for observational)", () => {
+    expect(props(htaDossierToolSchema)).toHaveProperty("upgrading_per_outcome");
+  });
+});

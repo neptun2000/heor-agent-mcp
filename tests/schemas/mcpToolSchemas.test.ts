@@ -9,12 +9,31 @@
 
 import { costEffectivenessModelToolSchema } from "../../src/tools/costEffectivenessModel.js";
 import { htaDossierPrepToolSchema as htaDossierToolSchema } from "../../src/tools/htaDossierPrep.js";
+import { literatureSearchToolSchema } from "../../src/tools/literatureSearch.js";
 
 type Props = Record<string, unknown>;
 
 function props(schema: { inputSchema: { properties: Props } }): Props {
   return schema.inputSchema.properties;
 }
+
+describe("costEffectivenessModelToolSchema — hidden optional fields", () => {
+  it("exposes run_owsa (used in handler but was missing from JSON schema)", () => {
+    expect(props(costEffectivenessModelToolSchema)).toHaveProperty("run_owsa");
+  });
+});
+
+describe("literatureSearchToolSchema — hidden optional fields", () => {
+  it("exposes study_types (Zod enum defined but was missing from JSON schema)", () => {
+    const p = props(
+      literatureSearchToolSchema as { inputSchema: { properties: Props } },
+    );
+    expect(p).toHaveProperty("study_types");
+    const st = p.study_types as { type: string; items: { enum: string[] } };
+    expect(st.items.enum).toContain("rct");
+    expect(st.items.enum).toContain("meta_analysis");
+  });
+});
 
 describe("costEffectivenessModelToolSchema — MFN fields", () => {
   it("exposes mfn_sensitivity", () => {

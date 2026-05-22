@@ -976,6 +976,11 @@ export const costEffectivenessModelToolSchema = {
         type: "number",
         description: "PSA iterations (default: 1000, max: 10000)",
       },
+      run_owsa: {
+        type: "boolean",
+        description:
+          "Run one-way sensitivity analysis (default: true). Set to false to skip OWSA and speed up large PSA runs.",
+      },
       scenarios: {
         type: "array",
         description:

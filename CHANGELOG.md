@@ -2,6 +2,12 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.11.3 (2026-05-22) — Fix: expose run_owsa and study_types in MCP schemas
+
+`run_owsa` was accepted by the `models.cost_effectiveness` handler (`if (params.run_owsa !== false)`) but absent from the JSON `inputSchema` — MCP clients couldn't discover or disable one-way sensitivity analysis. `study_types` was defined as a Zod enum in `literature.search` but similarly missing from the JSON schema.
+
+Both fields are now published in their respective `inputSchema` objects with full type and description. `tests/schemas/mcpToolSchemas.test.ts` extended with 2 new drift-guard assertions (total: 13).
+
 ## v1.11.2 (2026-05-22) — Fix: expose 6 hidden hta_dossier fields in MCP schema
 
 `heterogeneity_per_outcome`, `upgrading_per_outcome`, `severity_modifier`, `health_inequalities`, `pv_classification`, and `regulatory_landscape` were all accepted and used by the `hta.dossier` handler but absent from the published MCP JSON `inputSchema`. External MCP clients (Claude Desktop, Smithery, etc.) could not discover or pass these fields, silently breaking the pipe workflows that `pv_classify` and `regulatory_status_check` were designed to feed into `hta.dossier`.

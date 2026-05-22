@@ -281,6 +281,15 @@ export const literatureSearchToolSchema = {
         description:
           "Exclude results before this date (ISO format: YYYY-MM-DD)",
       },
+      study_types: {
+        type: "array",
+        items: {
+          type: "string",
+          enum: ["rct", "meta_analysis", "observational", "review"],
+        },
+        description:
+          "Filter results by study design. Values: 'rct' (randomised controlled trials), 'meta_analysis', 'observational' (cohort/case-control/cross-sectional), 'review' (systematic reviews, narrative reviews).",
+      },
       output_format: {
         type: "string",
         enum: ["text", "json", "docx"],

@@ -7,6 +7,7 @@ import {
   setMethodology,
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
+import { extractDisclosureLevel } from "../formatters/disclosure.js";
 
 /**
  * Population-Adjusted Indirect Comparison (MAIC / STC)
@@ -457,7 +458,7 @@ export async function handlePopulationAdjustedComparison(
     `---`,
     `> **Disclaimer:** This population-adjusted comparison is for orientation only. Final analyses should use individual patient data where available and be validated by a qualified statistician.`,
     ``,
-    auditToMarkdown(audit),
+    auditToMarkdown(audit, { disclosure: { level: extractDisclosureLevel(rawParams, "standard") } }),
   ]
     .filter(Boolean)
     .join("\n");
@@ -584,6 +585,11 @@ export const populationAdjustedComparisonToolSchema = {
       output_format: { type: "string", enum: ["text", "json"] },
       project: { type: "string", description: "Project ID for persistence" },
     },
+      ai_disclosure_level: {
+        type: "string",
+        enum: ["off", "standard", "submission"],
+        description: "AI assistance disclosure level. \"off\" = no disclosure; \"standard\" = default (model/tools/sources/date + human-review reminder); \"submission\" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.",
+      },
     required: ["index_trial", "target_trial", "effect_modifiers"],
   },
 };

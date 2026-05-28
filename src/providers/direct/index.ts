@@ -298,7 +298,9 @@ export class DirectProvider implements IProvider {
       const sizeKb = Math.round(base64.length / 1024);
       content = `## DOCX Report Generated\n\n**File:** \`${savedPath}\`\n**Size:** ${sizeKb} KB\n**Results:** ${allResults.length} studies from ${audit.sources_queried.length} sources\n\nOpen with: \`open "${savedPath}"\``;
     } else {
-      const markdownContent = resultsToMarkdown(allResults, audit);
+      const markdownContent = resultsToMarkdown(allResults, audit, {
+        disclosure: { level: "standard" },
+      });
       const profileMarkdown = profileToMarkdown(profile);
       content = markdownContent + "\n" + profileMarkdown;
     }

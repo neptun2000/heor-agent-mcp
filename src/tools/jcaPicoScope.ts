@@ -14,6 +14,7 @@ import {
   setMethodology,
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
+import { extractDisclosureLevel } from "../formatters/disclosure.js";
 import { suggestForEnum } from "../util/didYouMean.js";
 import { caseInsensitiveEnum } from "../util/caseInsensitive.js";
 import { buildScope } from "../jca/scopeBuilder.js";
@@ -184,7 +185,7 @@ export async function handleJcaPicoScope(
       audit,
       `Refused to produce JCA PICO matrix: indication "${input.indication}" (${matrix.indication_category}) is not in JCA scope until ${eligibility.in_scope_from_year}.`,
     );
-    refusalLines.push(auditToMarkdown(audit));
+    refusalLines.push(auditToMarkdown(audit, { disclosure: { level: extractDisclosureLevel(rawInput, "submission") } }));
 
     return {
       content: refusalLines.join("\n"),
@@ -381,7 +382,7 @@ export async function handleJcaPicoScope(
   );
   lines.push("");
 
-  lines.push(auditToMarkdown(audit));
+  lines.push(auditToMarkdown(audit, { disclosure: { level: extractDisclosureLevel(rawInput, "submission") } }));
 
   return {
     content: lines.join("\n"),
@@ -436,6 +437,11 @@ export const jcaPicoScopeToolSchema = {
           "Override the JCA scope eligibility check. Default false. Set true to produce a JCA-style matrix anyway when the indication is not yet in JCA scope (e.g., for protocol-design or anticipatory market-access work). Output will carry an explicit out-of-scope warning either way.",
       },
     },
+      ai_disclosure_level: {
+        type: "string",
+        enum: ["off", "standard", "submission"],
+        description: "AI assistance disclosure level. \"off\" = no disclosure; \"standard\" = default (model/tools/sources/date + human-review reminder); \"submission\" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.",
+      },
     required: ["drug", "indication", "drug_class"],
   },
 } as const;

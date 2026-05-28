@@ -154,6 +154,7 @@ import {
   setMethodology,
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
+import { extractDisclosureLevel } from "../formatters/disclosure.js";
 import { contentToDocx } from "../formatters/docx.js";
 import { saveReport } from "../knowledge/index.js";
 import { saveModelRun } from "../knowledge/index.js";
@@ -800,7 +801,7 @@ export async function handleCostEffectivenessModel(
     `---`,
     `> ⚠️ **Disclaimer:** This is a preliminary model for orientation purposes only. Results require validation by a qualified health economist before use in any HTA submission or payer negotiation.`,
     ``,
-    auditToMarkdown(audit),
+    auditToMarkdown(audit, { disclosure: { level: extractDisclosureLevel(rawParams, "standard") } }),
   ].join("\n");
 
   if (params.project) {
@@ -1048,6 +1049,11 @@ export const costEffectivenessModelToolSchema = {
           "Summary metric for the ICER numerator. 'qaly' (default, NICE reference case), 'evlyg' (equal value life-years gained — CMS IRA-compatible; CMS prohibits QALYs in Medicare IRA drug price negotiations per §1194(e)(2)), or 'both' to report both side-by-side.",
       },
     },
+      ai_disclosure_level: {
+        type: "string",
+        enum: ["off", "standard", "submission"],
+        description: "AI assistance disclosure level. \"off\" = no disclosure; \"standard\" = default (model/tools/sources/date + human-review reminder); \"submission\" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.",
+      },
     required: [
       "intervention",
       "comparator",

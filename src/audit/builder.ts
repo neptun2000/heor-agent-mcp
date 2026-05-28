@@ -1,10 +1,15 @@
-import type { AuditRecord, SourceAudit, ExclusionRecord } from "./types.js";
+import type {
+  AuditRecord,
+  SourceAudit,
+  ExclusionRecord,
+  ToolCallTrace,
+} from "./types.js";
 
 export function createAuditRecord(
   tool: string,
   query: Record<string, unknown>,
   output_format: string,
-  methodology = ""
+  methodology = "",
 ): AuditRecord {
   return {
     tool,
@@ -17,10 +22,21 @@ export function createAuditRecord(
     assumptions: [],
     warnings: [],
     output_format,
+    tools_called: [],
   };
 }
 
-export function addSource(record: AuditRecord, source: SourceAudit): AuditRecord {
+export function addToolCall(
+  record: AuditRecord,
+  trace: ToolCallTrace,
+): AuditRecord {
+  return { ...record, tools_called: [...record.tools_called, trace] };
+}
+
+export function addSource(
+  record: AuditRecord,
+  source: SourceAudit,
+): AuditRecord {
   return {
     ...record,
     sources_queried: [...record.sources_queried, source],
@@ -28,14 +44,20 @@ export function addSource(record: AuditRecord, source: SourceAudit): AuditRecord
   };
 }
 
-export function addExclusion(record: AuditRecord, exclusion: ExclusionRecord): AuditRecord {
+export function addExclusion(
+  record: AuditRecord,
+  exclusion: ExclusionRecord,
+): AuditRecord {
   return {
     ...record,
     exclusions: [...record.exclusions, exclusion],
   };
 }
 
-export function addAssumption(record: AuditRecord, assumption: string): AuditRecord {
+export function addAssumption(
+  record: AuditRecord,
+  assumption: string,
+): AuditRecord {
   return { ...record, assumptions: [...record.assumptions, assumption] };
 }
 
@@ -43,6 +65,9 @@ export function addWarning(record: AuditRecord, warning: string): AuditRecord {
   return { ...record, warnings: [...record.warnings, warning] };
 }
 
-export function setMethodology(record: AuditRecord, methodology: string): AuditRecord {
+export function setMethodology(
+  record: AuditRecord,
+  methodology: string,
+): AuditRecord {
   return { ...record, methodology };
 }

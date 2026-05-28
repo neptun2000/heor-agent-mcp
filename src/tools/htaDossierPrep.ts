@@ -220,6 +220,7 @@ import {
 import { assessInconsistency } from "../grade/inconsistency.js";
 import { assessUpgrading } from "../grade/upgrading.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
+import { extractDisclosureLevel } from "../formatters/disclosure.js";
 import { contentToDocx } from "../formatters/docx.js";
 import { saveReport } from "../knowledge/index.js";
 import { saveDossier } from "../knowledge/index.js";
@@ -865,6 +866,7 @@ function buildJCASection(
 async function handleJCADossier(
   params: DossierParams,
   audit: ReturnType<typeof createAuditRecord>,
+  disclosureLevel: import("../formatters/disclosure.js").AiDisclosureLevel = "submission",
 ): Promise<ToolResult> {
   // Default single PICO if none provided
   const picos: PicoDefinition[] =
@@ -973,7 +975,11 @@ async function handleJCADossier(
     lines.push("");
   }
 
-  lines.push(auditToMarkdown(audit));
+  lines.push(
+    auditToMarkdown(audit, {
+      disclosure: { level: disclosureLevel },
+    }),
+  );
 
   const outputFormat = params.output_format ?? "text";
   const jcaTextContent = lines.join("\n");
@@ -1240,7 +1246,11 @@ export async function handleHtaDossierPrep(
 
   // JCA: generate per-PICO sections
   if (params.hta_body === "jca") {
-    return handleJCADossier(params, audit);
+    return handleJCADossier(
+      params,
+      audit,
+      extractDisclosureLevel(rawParams, "submission"),
+    );
   }
 
   const sections = SECTIONS_BY_BODY[params.hta_body] ?? NICE_STA_SECTIONS;
@@ -1522,7 +1532,11 @@ export async function handleHtaDossierPrep(
 
   appendPvPlanSection(lines, params.pv_classification);
 
-  lines.push(auditToMarkdown(audit));
+  lines.push(
+    auditToMarkdown(audit, {
+      disclosure: { level: extractDisclosureLevel(rawParams, "submission") },
+    }),
+  );
 
   const dossierTextContent = lines.join("\n");
 
@@ -1743,6 +1757,12 @@ export const htaDossierPrepToolSchema = {
           },
         },
       },
+    },
+    ai_disclosure_level: {
+      type: "string",
+      enum: ["off", "standard", "submission"],
+      description:
+        'AI assistance disclosure level. "off" = no disclosure; "standard" = default (model/tools/sources/date + human-review reminder); "submission" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.',
     },
     required: ["hta_body", "submission_type", "drug_name", "indication"],
   },

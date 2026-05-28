@@ -126,7 +126,23 @@ The first prompt exercises `literature_search` + `validate_links` (free, no API 
 
 ## What's new
 
-See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current: **v1.10.2** (28 tools, 44 data sources).
+See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current: **v1.13.0** (28 tools, 44 data sources).
+
+### v1.13.0 — AI Transparency Disclosure (ISPOR ELEVATE-GenAI aligned)
+
+16 tools now accept an `ai_disclosure_level` parameter:
+
+| Value | Behaviour |
+|-------|-----------|
+| `"off"` | No disclosure block appended |
+| `"standard"` | Model ID · tools called · data sources · date · human-review reminder |
+| `"submission"` | Standard block + ISPOR ELEVATE-GenAI full citation |
+
+**Default by tool tier**: HTA/regulatory tools (`hta_dossier`, `hta_workflow`, `jca_pico_scope`, `pv_classify`, etc.) default to `"submission"`; analysis tools (`risk_of_bias`, `cost_effectiveness_model`, etc.) default to `"standard"`. Pass `ai_disclosure_level: "off"` to suppress.
+
+**Environment-level default**: set `HEORAGENT_DISCLOSURE_LEVEL=off|standard|submission` to override the built-in per-tool defaults globally.
+
+**Web UI persona defaults**: payer and HTA-reviewer personas always use `"submission"`; analyst personas default to `"standard"` and switch to `"off"` for scratch / exploratory prompts.
 
 ### v1.0.4 highlights (still in v1.6.3)
 
@@ -145,7 +161,7 @@ See [CHANGELOG.md](./CHANGELOG.md) for the full diff.
 
 ---
 
-## Tools (27)
+## Tools (28)
 
 | Tool | Purpose |
 |------|---------|

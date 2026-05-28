@@ -89,6 +89,8 @@ describe("handleRiskOfBias", () => {
         ? result.content
         : JSON.stringify(result.content);
     expect(content).toMatch(/RoB 2|randomization/i);
+    // V1: disclosure block present for standard-level tool
+    expect(content).toContain("AI Assistance Disclosure");
   });
 
   it("accepts study without url — falls back gracefully", async () => {

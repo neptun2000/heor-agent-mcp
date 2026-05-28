@@ -6,6 +6,7 @@ import {
   setMethodology,
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
+import { extractDisclosureLevel } from "../formatters/disclosure.js";
 import { contentToDocx } from "../formatters/docx.js";
 import { saveReport } from "../knowledge/index.js";
 
@@ -206,7 +207,7 @@ export async function handleBudgetImpactModel(
     `---`,
     `> **Disclaimer:** This is a preliminary budget impact estimate for orientation purposes only. Results require validation by a qualified health economist before use in any HTA submission or payer negotiation.`,
     ``,
-    auditToMarkdown(audit),
+    auditToMarkdown(audit, { disclosure: { level: extractDisclosureLevel(rawParams, "standard") } }),
   ]
     .filter(Boolean)
     .join("\n");
@@ -356,6 +357,11 @@ export const budgetImpactModelToolSchema = {
       },
       project: { type: "string", description: "Project ID for persistence" },
     },
+      ai_disclosure_level: {
+        type: "string",
+        enum: ["off", "standard", "submission"],
+        description: "AI assistance disclosure level. \"off\" = no disclosure; \"standard\" = default (model/tools/sources/date + human-review reminder); \"submission\" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.",
+      },
     required: [
       "intervention",
       "comparator",

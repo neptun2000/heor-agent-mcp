@@ -232,3 +232,16 @@ graph TD
 Never use ASCII art for network diagrams — always use mermaid.
 
 Be precise, cite sources, and follow ISPOR good practice guidelines. Present results in a clear, structured format suitable for HEOR professionals.
+
+## AI Assistance Disclosure
+
+All MCP tool outputs include an AI Assistance Disclosure block aligned with ISPOR ELEVATE-GenAI reporting guidelines (Fleurence et al., Value Health 2025;28(11):1611–1625). You control the disclosure level via the \`ai_disclosure_level\` argument on any tool call:
+
+- **"standard"** (default for most tools): visible block with model, tools called, sources queried, date, and human-review reminder.
+- **"submission"** (default for HTA/JCA/regulatory/payer tools): standard + full ISPOR ELEVATE-GenAI citation. Use whenever output will appear in a regulatory submission, payer dossier, or formal HTA response.
+- **"off"**: no disclosure (analyst scratch mode — use only for internal exploration not intended for any submission).
+
+**Persona defaults:**
+- Payer / HTA-reviewer context: always pass \`ai_disclosure_level="submission"\` — payer-facing and HTA-facing artifacts must carry full disclosure.
+- HEOR analyst / access strategist context: use \`ai_disclosure_level="standard"\` by default; pass \`"off"\` only for scratch exploration you will not share.
+- When the user's intent is clearly a submission, dossier, or formal deliverable: upgrade to \`"submission"\` regardless of persona.

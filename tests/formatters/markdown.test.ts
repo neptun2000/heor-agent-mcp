@@ -1,4 +1,7 @@
-import { resultsToMarkdown, auditToMarkdown } from "../../src/formatters/markdown.js";
+import {
+  resultsToMarkdown,
+  auditToMarkdown,
+} from "../../src/formatters/markdown.js";
 import { createAuditRecord, addSource } from "../../src/audit/builder.js";
 import type { LiteratureResult } from "../../src/providers/types.js";
 
@@ -24,7 +27,11 @@ describe("resultsToMarkdown", () => {
   });
 
   it("includes audit summary section", () => {
-    const audit = createAuditRecord("literature.search", { query: "semaglutide" }, "text");
+    const audit = createAuditRecord(
+      "literature.search",
+      { query: "semaglutide" },
+      "text",
+    );
     const md = resultsToMarkdown(mockResults, audit);
     expect(md).toContain("Audit");
   });
@@ -45,5 +52,39 @@ describe("auditToMarkdown", () => {
     expect(md).toContain("pubmed");
     expect(md).toContain("47");
     expect(md).toContain("12");
+  });
+
+  it("without disclosure opts produces no disclosure block", () => {
+    const audit = createAuditRecord("hta.workflow", {}, "text");
+    const md = auditToMarkdown(audit);
+    expect(md).not.toContain("AI Assistance Disclosure");
+  });
+
+  it("with disclosure level standard prepends disclosure block", () => {
+    const audit = createAuditRecord("hta.workflow", {}, "text");
+    const md = auditToMarkdown(audit, {
+      disclosure: { level: "standard", dateISO: "2026-05-28" },
+    });
+    expect(md).toContain("AI Assistance Disclosure");
+    expect(md).toContain("Audit Report");
+    // disclosure appears before audit trail
+    expect(md.indexOf("AI Assistance Disclosure")).toBeLessThan(
+      md.indexOf("Audit Report"),
+    );
+  });
+
+  it("with disclosure level off produces no disclosure block", () => {
+    const audit = createAuditRecord("hta.workflow", {}, "text");
+    const md = auditToMarkdown(audit, { disclosure: { level: "off" } });
+    expect(md).not.toContain("AI Assistance Disclosure");
+  });
+
+  it("with disclosure level submission includes ISPOR citation", () => {
+    const audit = createAuditRecord("hta.workflow", {}, "text");
+    const md = auditToMarkdown(audit, {
+      disclosure: { level: "submission", dateISO: "2026-05-28" },
+    });
+    expect(md).toContain("ELEVATE-GenAI");
+    expect(md).toContain("10.1016/j.jval.2025.06.018");
   });
 });

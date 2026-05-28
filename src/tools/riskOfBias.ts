@@ -8,6 +8,7 @@ import {
   setMethodology,
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
+import { extractDisclosureLevel } from "../formatters/disclosure.js";
 
 // Only title + abstract + study_type are needed for RoB inference. The rest
 // are display/citation fields — make them optional with sensible fallbacks
@@ -810,7 +811,7 @@ export async function handleRiskOfBias(
     `> **Pass \`rob_results\` to \`hta_dossier_prep\`** to use this assessment in the GRADE table instead of the heuristic fallback.`,
   );
   lines.push(``);
-  lines.push(auditToMarkdown(audit));
+  lines.push(auditToMarkdown(audit, { disclosure: { level: extractDisclosureLevel(rawParams, "standard") } }));
 
   return { content: lines.join("\n"), audit };
 }
@@ -867,6 +868,11 @@ export const riskOfBiasToolSchema = {
       },
       output_format: { type: "string", enum: ["text", "json"] },
     },
+      ai_disclosure_level: {
+        type: "string",
+        enum: ["off", "standard", "submission"],
+        description: "AI assistance disclosure level. \"off\" = no disclosure; \"standard\" = default (model/tools/sources/date + human-review reminder); \"submission\" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.",
+      },
     required: ["studies"],
   },
 };

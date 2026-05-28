@@ -2,6 +2,35 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.13.0 (2026-05-28) — Feature: AI Transparency Disclosure (ISPOR ELEVATE-GenAI aligned)
+
+Adds a structured AI-assistance disclosure block to tool outputs, aligned with the ISPOR ELEVATE-GenAI reporting guidelines (Fleurence RL et al., Value Health 2025;28(11):1611–1625).
+
+### New
+
+- **`ai_disclosure_level` parameter** on 16 tools: `"off"` | `"standard"` (default for most) | `"submission"` (default for HTA/regulatory tools). Controls whether and how the disclosure block is appended to tool output.
+- **`buildDisclosure(audit, opts)`** in `src/formatters/disclosure.ts`: renders a formatted AI Assistance Disclosure section from the audit record. Derives data sources from the existing `sources_queried: SourceAudit[]` field — no schema duplication.
+- **`extractDisclosureLevel(args, default)`**: safe extraction from raw args before Zod parsing, allowing per-call override without modifying 30 Zod schemas.
+- **`AI_DISCLOSURE_LEVEL_SCHEMA_PROPERTY`**: reusable JSON Schema fragment published in `inputSchema.properties` for all 16 wired tools.
+- **`addToolCall(record, trace)`** in `src/audit/builder.ts`: appends a `ToolCallTrace` to `audit.tools_called` (immutable append).
+- **`ToolCallTrace` interface** in `src/audit/types.ts`: `{ name, ms, outcome, output_size_bytes? }`.
+- **Persona-driven defaults** in `web/lib/systemPrompt.ts`: payer/HTA-reviewer personas default to `"submission"`; analyst personas default to `"standard"`; scratchpad intent → `"off"`.
+- **3 new homepage example cards** in `Chat.tsx` demonstrating submission-ready disclosure, payer dossier full disclosure, and disclosure-off scratchpad workflows.
+
+### Wiring by tool tier
+
+| Tier | Tools | Default level |
+|------|-------|---------------|
+| Standard | riskOfBias, screenAbstracts, itcFeasibility, populationAdjustedComparison, survivalFitting, costEffectivenessModel, budgetImpactModel | `"standard"` |
+| Submission | htaDossierPrep, htaWorkflow, utilityValueSet, maicWorkflow, jcaPicoScope, pvClassify, pvSignalWorkflow, irbReview, icfReadabilityCheck | `"submission"` |
+| Excluded | knowledge.*, project.create, utils.validate_links | no change |
+
+### ISPOR citation
+
+> Fleurence RL, Dawoud D, Bian J, Higashi MK, Wang X, Xu H, Chhatwal J, Ayer T; ISPOR Working Group on Generative AI. ELEVATE-GenAI: Reporting Guidelines for the Use of Large Language Models in Health Economics and Outcomes Research: An ISPOR Working Group Report. Value Health. 2025;28(11):1611–1625. doi:10.1016/j.jval.2025.06.018
+
+---
+
 ## v1.11.3 (2026-05-22) — Fix: expose run_owsa and study_types in MCP schemas
 
 `run_owsa` was accepted by the `models.cost_effectiveness` handler (`if (params.run_owsa !== false)`) but absent from the JSON `inputSchema` — MCP clients couldn't discover or disable one-way sensitivity analysis. `study_types` was defined as a Zod enum in `literature.search` but similarly missing from the JSON schema.

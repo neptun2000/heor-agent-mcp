@@ -19,6 +19,7 @@ import {
   setMethodology,
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
+import { extractDisclosureLevel } from "../formatters/disclosure.js";
 import { suggestForEnum } from "../util/didYouMean.js";
 import { caseInsensitiveEnum } from "../util/caseInsensitive.js";
 import { assessIrb } from "../irb/decisionTree.js";
@@ -310,7 +311,7 @@ export async function handleIrbReview(rawInput: unknown): Promise<ToolResult> {
   lines.push("- PHS 42 CFR 50 Subpart F — Promoting Objectivity in Research");
   lines.push("");
 
-  lines.push(auditToMarkdown(audit));
+  lines.push(auditToMarkdown(audit, { disclosure: { level: extractDisclosureLevel(rawInput, "submission") } }));
 
   return {
     content: lines.join("\n"),
@@ -415,6 +416,11 @@ export const irbReviewToolSchema = {
           "Set true for voice / digital / image recording collection (45 CFR 46.110 cat 6).",
       },
     },
+      ai_disclosure_level: {
+        type: "string",
+        enum: ["off", "standard", "submission"],
+        description: "AI assistance disclosure level. \"off\" = no disclosure; \"standard\" = default (model/tools/sources/date + human-review reminder); \"submission\" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.",
+      },
     required: [
       "study_design",
       "intervention",

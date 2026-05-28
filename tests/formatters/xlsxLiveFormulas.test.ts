@@ -24,6 +24,7 @@ const mockAudit: AuditRecord = {
   assumptions: ["Base-case discount rate 3.5%"],
   warnings: [],
   output_format: "xlsx",
+  tools_called: [],
 };
 
 // Minimal valid params

@@ -135,6 +135,8 @@ describe("hta_workflow — schema validation", () => {
     const r = await run({ drug: "drugX", indication: "Y" });
     expect(r.content).toMatch(/HTA Submission Workflow/);
     expect(r.workflow_summary?.total_ms).toBeGreaterThanOrEqual(0);
+    // V1: disclosure block present for submission-level tool
+    expect(r.content).toContain("AI Assistance Disclosure");
   });
 
   it("rejects unknown hta_body with did-you-mean", async () => {

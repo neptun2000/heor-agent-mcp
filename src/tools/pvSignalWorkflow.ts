@@ -16,6 +16,7 @@ import {
   setMethodology,
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
+import { extractDisclosureLevel } from "../formatters/disclosure.js";
 import { suggestForEnum } from "../util/didYouMean.js";
 import { computeAllStats, decideVerdict } from "../pv/signalDecision.js";
 import { GVP_REVISION } from "../pv/gvpModules.js";
@@ -289,7 +290,7 @@ export async function handlePvSignalWorkflow(
     "- DuMouchel W. (1999). Bayesian data mining in large freq tables. *Am Stat* 53:177-190.",
   );
   lines.push("");
-  lines.push(auditToMarkdown(audit));
+  lines.push(auditToMarkdown(audit, { disclosure: { level: extractDisclosureLevel(rawInput, "submission") } }));
 
   return {
     content: lines.join("\n"),
@@ -443,6 +444,11 @@ export const pvSignalWorkflowToolSchema = {
       outcome_serious: { type: "boolean", default: false },
       rmp_has_pregnancy_concern: { type: "boolean", default: false },
     },
+      ai_disclosure_level: {
+        type: "string",
+        enum: ["off", "standard", "submission"],
+        description: "AI assistance disclosure level. \"off\" = no disclosure; \"standard\" = default (model/tools/sources/date + human-review reminder); \"submission\" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.",
+      },
     required: ["drug", "indication", "case_counts"],
   },
 } as const;

@@ -1,9 +1,11 @@
 import type { LiteratureResult } from "../providers/types.js";
 import type { AuditRecord } from "../audit/types.js";
+import { buildDisclosure, type DisclosureOpts } from "./disclosure.js";
 
 export function resultsToMarkdown(
   results: LiteratureResult[],
   audit: AuditRecord,
+  opts?: { disclosure?: DisclosureOpts },
 ): string {
   const lines: string[] = [];
 
@@ -30,11 +32,21 @@ export function resultsToMarkdown(
     });
   }
 
-  lines.push(auditToMarkdown(audit));
+  lines.push(auditToMarkdown(audit, opts));
   return lines.join("\n");
 }
 
-export function auditToMarkdown(audit: AuditRecord): string {
+export function auditToMarkdown(
+  audit: AuditRecord,
+  opts?: { disclosure?: DisclosureOpts },
+): string {
+  const disclosure = opts?.disclosure
+    ? buildDisclosure(audit, opts.disclosure)
+    : "";
+  return (disclosure ? disclosure + "\n\n" : "") + renderAuditBody(audit);
+}
+
+function renderAuditBody(audit: AuditRecord): string {
   const lines: string[] = [];
   lines.push(`---`);
   lines.push(`## Audit Report`);

@@ -18,6 +18,7 @@ import {
   setMethodology,
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
+import { extractDisclosureLevel } from "../formatters/disclosure.js";
 import {
   computeReadabilityScores,
   computeStats,
@@ -267,7 +268,7 @@ export async function handleIcfReadabilityCheck(
   lines.push("- NIH Plain Language Guidelines (clinical-trial consent).");
   lines.push("- FDA Communicating Risks and Benefits (2011).");
   lines.push("");
-  lines.push(auditToMarkdown(audit));
+  lines.push(auditToMarkdown(audit, { disclosure: { level: extractDisclosureLevel(rawInput, "submission") } }));
 
   return {
     content: lines.join("\n"),
@@ -309,6 +310,11 @@ export const icfReadabilityCheckToolSchema = {
           "Whether to run the medical-jargon dictionary lookup. Default true.",
       },
     },
+      ai_disclosure_level: {
+        type: "string",
+        enum: ["off", "standard", "submission"],
+        description: "AI assistance disclosure level. \"off\" = no disclosure; \"standard\" = default (model/tools/sources/date + human-review reminder); \"submission\" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.",
+      },
     required: ["icf_text"],
   },
 };

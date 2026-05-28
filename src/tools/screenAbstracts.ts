@@ -7,6 +7,7 @@ import {
   setMethodology,
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
+import { extractDisclosureLevel } from "../formatters/disclosure.js";
 
 /**
  * Abstract Screening Tool
@@ -579,7 +580,7 @@ export async function handleScreenAbstracts(
     `> **Note:** This is automated screening based on keyword matching against PICO criteria. It supplements but does not replace manual screening by a qualified reviewer. Per Cochrane Handbook, at least two independent reviewers should screen abstracts for systematic reviews.`,
   );
   lines.push(``);
-  lines.push(auditToMarkdown(audit));
+  lines.push(auditToMarkdown(audit, { disclosure: { level: extractDisclosureLevel(rawParams, "standard") } }));
 
   return { content: lines.join("\n"), audit };
 }
@@ -671,6 +672,11 @@ export const screenAbstractsToolSchema = {
       output_format: { type: "string", enum: ["text", "json"] },
       project: { type: "string", description: "Project ID for persistence" },
     },
+      ai_disclosure_level: {
+        type: "string",
+        enum: ["off", "standard", "submission"],
+        description: "AI assistance disclosure level. \"off\" = no disclosure; \"standard\" = default (model/tools/sources/date + human-review reminder); \"submission\" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.",
+      },
     required: ["results", "criteria"],
   },
 };

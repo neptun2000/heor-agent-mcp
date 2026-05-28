@@ -22,6 +22,13 @@ export interface SourceSelectionRow {
   reason: string;
 }
 
+export interface ToolCallTrace {
+  name: string;
+  ms: number;
+  outcome: "ok" | "degraded" | "skipped" | "error";
+  output_size_bytes?: number;
+}
+
 export interface AuditRecord {
   tool: string;
   /** ISO 8601 timestamp when the tool invocation began (query start time, not completion time) */
@@ -38,4 +45,5 @@ export interface AuditRecord {
   assumptions: string[];
   warnings: string[];
   output_format: string;
+  tools_called: ToolCallTrace[];
 }

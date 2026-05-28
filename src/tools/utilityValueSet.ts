@@ -7,6 +7,7 @@ import {
   setMethodology,
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
+import { extractDisclosureLevel } from "../formatters/disclosure.js";
 import {
   EQ5D_VALUE_SETS,
   BIZ_2026_IMPACT,
@@ -368,7 +369,7 @@ export async function handleUtilityValueSet(
       break;
   }
 
-  return { content: body + "\n" + auditToMarkdown(audit), audit };
+  return { content: body + "\n" + auditToMarkdown(audit, { disclosure: { level: extractDisclosureLevel(rawParams, "submission") } }), audit };
 }
 
 export const utilityValueSetToolSchema = {
@@ -418,6 +419,11 @@ export const utilityValueSetToolSchema = {
           "Optional: current incremental QALY gain to project forward under new UK 5L.",
       },
     },
+      ai_disclosure_level: {
+        type: "string",
+        enum: ["off", "standard", "submission"],
+        description: "AI assistance disclosure level. \"off\" = no disclosure; \"standard\" = default (model/tools/sources/date + human-review reminder); \"submission\" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.",
+      },
     required: ["action"],
   },
 };

@@ -349,6 +349,15 @@ describe("jca_pico_scope — output content", () => {
     });
     expect(String(r.content)).toMatch(/2021\/2282|HTA Regulation/i);
   });
+
+  it("includes submission-level disclosure block (V1)", async () => {
+    const r = await scope({
+      drug: "x",
+      indication: "y",
+      drug_class: "small_molecule",
+    });
+    expect(String(r.content)).toContain("AI Assistance Disclosure");
+  });
 });
 
 // ---- Indication classifier — guards against substring overmatch --------

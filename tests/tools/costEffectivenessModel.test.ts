@@ -39,6 +39,8 @@ describe("handleCostEffectivenessModel", () => {
   it("includes disclaimer in output", async () => {
     const result = await handleCostEffectivenessModel(validParams);
     expect(result.content as string).toContain("qualified health economist");
+    // V1: disclosure block present for standard-level tool
+    expect(result.content as string).toContain("AI Assistance Disclosure");
   });
 
   it("records assumptions in audit", async () => {

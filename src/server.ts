@@ -121,6 +121,12 @@ import {
   handleRegulatoryStatusCheck,
   regulatoryStatusCheckToolSchema,
 } from "./tools/regulatoryStatusCheck.js";
+import {
+  handleClaimsQuery,
+  claimsQueryToolSchema,
+} from "./tools/claimsQuery.js";
+// mssql is loaded via dynamic require() inside claimsQuery.ts to avoid
+// bundling Node.js-only native modules — same pattern as applicationinsights
 import { randomUUID } from "node:crypto";
 import {
   trackToolCall,
@@ -285,6 +291,11 @@ function createMcpServer(
       evidenceClinicalScaleToolSchema,
       evidenceUnmetNeedToolSchema,
       regulatoryStatusCheckToolSchema,
+      // data.claims_query is only registered when Azure Blob Storage is configured
+      // (internal deployment only). Not exposed in the public npm package.
+      ...(process.env.AZURE_STORAGE_CONNECTION_STRING
+        ? [claimsQueryToolSchema]
+        : []),
     ],
   }));
 
@@ -420,6 +431,32 @@ function createMcpServer(
                   typeof regResult.content === "string"
                     ? regResult.content
                     : JSON.stringify(regResult.content, null, 2),
+              },
+            ],
+          };
+          break;
+        }
+        case "data.claims_query": {
+          if (!process.env.AZURE_STORAGE_CONNECTION_STRING) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "data.claims_query is not available in this deployment.",
+                },
+              ],
+              isError: true,
+            };
+          }
+          const claimsResult = await handleClaimsQuery(args);
+          result = {
+            content: [
+              {
+                type: "text",
+                text:
+                  typeof claimsResult.content === "string"
+                    ? claimsResult.content
+                    : JSON.stringify(claimsResult.content, null, 2),
               },
             ],
           };

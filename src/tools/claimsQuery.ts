@@ -23,12 +23,25 @@ import { createAuditRecord } from "../audit/builder.js";
 // ── Zod schema ────────────────────────────────────────────────────────────────
 
 const DATASET_VALUES = [
-  "namcs",
-  "nhamcs_ed",
-  "nhamcs_opd",
+  // US datasets
+  "namcs", // NCHS National Ambulatory Medical Care Survey (physician office visits)
+  "nhamcs_ed", // NCHS NHAMCS Emergency Department, 2011-2022, ~250K visits/yr
+  "meps", // AHRQ Medical Expenditure Panel Survey, 2017-2023, ~500K events/yr with costs
+  "ny_sparcs", // NY State inpatient discharges, 2017-2024, ~2M/yr
+  "nhanes", // NCHS health examination survey, 1999-2021, ~10K persons/cycle
+  "nhis", // NCHS health interview survey, 2016-2023, ~25K persons/yr
+  // Latin America
+  "ecuador_inec", // Ecuador INEC hospital discharges, 2022-2023, ~1.1M/yr
+  "uruguay_eh", // Uruguay MSP egresos hospitalarios, 2013-2024, ~200K/yr
+  "mexico_egresos", // Mexico DGIS egresos hospitalarios, 2018-2025, multi-million/yr
+  "brazil_datasus", // Brazil DataSUS SIH inpatient, multiple years
+  "chile_deis", // Chile DEIS egresos hospitalarios, 2001-2023, ~1.5M/yr
+  "colombia_rips", // Colombia RIPS health services, 2009-2023
+  // Legacy names kept for backward compat
   "datasus_sih",
   "datasus_sia",
   "datasus_sim",
+  "nhamcs_opd",
   "all",
 ] as const;
 
@@ -262,9 +275,9 @@ async function queryDrugUtilization(
        LOWER(drug) AS drug,
        COUNT(*) AS visit_count
      FROM (
-       SELECT UNNEST(json_extract_string_array(drugs_mentioned)) AS drug
+       SELECT UNNEST(string_split(drugs_mentioned, ';')) AS drug
        FROM read_parquet('${path}', hive_partitioning = true, union_by_name = true)
-       ${where} AND drugs_mentioned IS NOT NULL AND drugs_mentioned <> '[]'
+       ${where} AND drugs_mentioned IS NOT NULL AND drugs_mentioned <> ''
      )
      WHERE drug IS NOT NULL AND drug <> ''
      GROUP BY LOWER(drug)
@@ -371,9 +384,9 @@ async function queryComorbidities(
        UPPER(icd) AS icd10,
        COUNT(*) AS count
      FROM (
-       SELECT UNNEST(json_extract_string_array(secondary_diags)) AS icd
+       SELECT UNNEST(string_split(secondary_diags, ';')) AS icd
        FROM read_parquet('${path}', hive_partitioning = true, union_by_name = true)
-       ${where} AND secondary_diags IS NOT NULL AND secondary_diags <> '[]'
+       ${where} AND secondary_diags IS NOT NULL AND secondary_diags <> ''
      )
      WHERE icd IS NOT NULL ${exclusion}
      GROUP BY UPPER(icd)
@@ -407,12 +420,12 @@ async function queryCost(
     return {
       note:
         "Insufficient cost data (< 5 records) — suppressed per disclosure rules. " +
-        "Cost data is only available for DataSUS SIH (Brazilian inpatient admissions). " +
-        "Make sure to include source_dataset=datasus_sih in your query.",
+        "Cost data is available for: meps (USD, total event cost), ny_sparcs (USD, total charges), " +
+        "brazil_datasus/datasus_sih (BRL, authorised inpatient cost). " +
+        "Make sure to include one of those datasets in your query.",
     };
   }
-  const r = rows[0];
-  return {
+  return rows.map((r) => ({
     currency: r["local_currency"],
     n_with_cost: r["n_with_cost"],
     mean: r["mean"],
@@ -420,8 +433,7 @@ async function queryCost(
     p25: r["p25"],
     p75: r["p75"],
     p90: r["p90"],
-    note: `${r["local_currency"]} values from DataSUS SIH authorised hospital costs. Convert to USD using contemporaneous exchange rate.`,
-  };
+  }));
 }
 
 // ── Check table has data ──────────────────────────────────────────────────────
@@ -534,10 +546,14 @@ export async function handleClaimsQuery(
         },
         results,
         data_notes: [
-          "NAMCS/NHAMCS: visit_weight = sampling weight for US national estimates.",
-          "DataSUS SIH: record count = actual admissions, no sampling weight.",
+          "Survey data (meps, namcs, nhamcs_ed, nhanes, nhis): visit_weight = sampling weight for national estimates. Apply when computing population-level rates.",
+          "Census data (ny_sparcs, ecuador_inec, uruguay_eh, mexico_egresos, brazil_datasus, chile_deis): record count = actual events, visit_weight is null.",
+          "meps: US nationwide, covers inpatient/ER/office/prescriptions, has cost in USD (total_cost_local).",
+          "ny_sparcs: New York State inpatient discharges only, cost in USD (total_cost_local).",
+          "brazil_datasus: inpatient admissions (datasus_sih), cost in BRL (total_cost_local).",
+          "nhanes/nhis: visit_type='survey_examination', one row per person per cycle, not per visit.",
+          "uruguay_eh: age is group midpoint (not exact age), no cost data.",
           "Counts < 5 are suppressed per NCHS disclosure rules.",
-          "Storage: Azure Blob hive-partitioned Parquet — adding a new year requires only uploading one new file.",
         ],
       },
       null,
@@ -552,10 +568,16 @@ export async function handleClaimsQuery(
 export const claimsQueryToolSchema = {
   name: "data.claims_query",
   description:
-    "Query real-world claims and survey data: NAMCS (US physician office visits), " +
-    "NHAMCS ED/OPD (US hospital ambulatory), DataSUS SIH/SIA/SIM (Brazil inpatient/outpatient/mortality). " +
-    "Data stored as hive-partitioned Parquet on Azure Blob Storage, queried via DuckDB — " +
-    "partition pruning means multi-year queries only read the relevant year files. " +
+    "Query real-world claims and survey data across 12 datasets spanning the US and Latin America. " +
+    "US datasets: meps (expenditure survey, 2017-2023, costs in USD), namcs (physician office visits), " +
+    "nhamcs_ed (ED visits 2011-2022), ny_sparcs (NY inpatient 2017-2024, costs in USD), " +
+    "nhanes (health examination survey 1999-2021, person-level), nhis (health interview survey 2016-2023). " +
+    "Latin America: ecuador_inec (hospital discharges 2022-2023), uruguay_eh (2013-2024), " +
+    "mexico_egresos (2018-2025), brazil_datasus (inpatient, costs in BRL), " +
+    "chile_deis (2001-2023), colombia_rips (health services 2009-2023). " +
+    "Common schema: age_years, sex, country_code, region, visit_type, primary_diag_icd, " +
+    "secondary_diags (semicolon-separated ICD-10), drugs_mentioned (semicolon-separated names), " +
+    "visit_weight, total_cost_local, local_currency, source_dataset, source_year. " +
     "Returns aggregated statistics only (cell suppression n<5). Design log #28.",
   annotations: {
     title: "Real-World Claims & Survey Data Query",
@@ -572,13 +594,23 @@ export const claimsQueryToolSchema = {
         items: {
           type: "string",
           enum: [
+            "all",
+            "meps",
             "namcs",
             "nhamcs_ed",
-            "nhamcs_opd",
+            "ny_sparcs",
+            "nhanes",
+            "nhis",
+            "ecuador_inec",
+            "uruguay_eh",
+            "mexico_egresos",
+            "brazil_datasus",
+            "chile_deis",
+            "colombia_rips",
             "datasus_sih",
             "datasus_sia",
             "datasus_sim",
-            "all",
+            "nhamcs_opd",
           ],
         },
         default: ["all"],
@@ -603,7 +635,8 @@ export const claimsQueryToolSchema = {
         type: "integer",
         minimum: 2000,
         maximum: 2030,
-        description: "NAMCS/NHAMCS: 2018–2022. DataSUS: 2008–2022.",
+        description:
+          "meps: 2017-2023 | ny_sparcs: 2017-2024 | nhamcs_ed: 2011-2022 | nhanes: 1999-2021 | nhis: 2016-2023 | ecuador_inec: 2022-2023 | uruguay_eh: 2013-2024 | mexico_egresos: 2018-2025 | chile_deis: 2001-2023 | colombia_rips: 2009-2023 | brazil_datasus: 2008-2022",
       },
       year_to: { type: "integer", minimum: 2000, maximum: 2030 },
       aggregation: {

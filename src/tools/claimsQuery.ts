@@ -211,7 +211,7 @@ async function queryPrevalence(
        COUNT(*) AS record_count,
        SUM(CASE WHEN visit_weight IS NOT NULL THEN visit_weight ELSE 0 END) AS weighted_sum,
        COUNT(CASE WHEN visit_weight IS NOT NULL THEN 1 END) AS weighted_count
-     FROM read_parquet('${path}', hive_partitioning = true, union_by_name = true)
+     FROM read_parquet('${path}', hive_partitioning = false, union_by_name = true)
      ${where}
      GROUP BY source_year, source_dataset
      ORDER BY source_year`,
@@ -276,7 +276,7 @@ async function queryDrugUtilization(
        COUNT(*) AS visit_count
      FROM (
        SELECT UNNEST(string_split(drugs_mentioned, ';')) AS drug
-       FROM read_parquet('${path}', hive_partitioning = true, union_by_name = true)
+       FROM read_parquet('${path}', hive_partitioning = false, union_by_name = true)
        ${where} AND drugs_mentioned IS NOT NULL AND drugs_mentioned <> ''
      )
      WHERE drug IS NOT NULL AND drug <> ''
@@ -288,7 +288,7 @@ async function queryDrugUtilization(
 
   const total = await dbAll(
     db,
-    `SELECT COUNT(*) AS total FROM read_parquet('${path}', hive_partitioning = true, union_by_name = true) ${where}`,
+    `SELECT COUNT(*) AS total FROM read_parquet('${path}', hive_partitioning = false, union_by_name = true) ${where}`,
   );
   const totalVisits = (total[0]?.["total"] as number) ?? 0;
 
@@ -323,7 +323,7 @@ async function queryDemographics(
            ELSE 'unknown'
          END AS age_group,
          COUNT(*) AS count
-       FROM read_parquet('${path}', hive_partitioning = true, union_by_name = true)
+       FROM read_parquet('${path}', hive_partitioning = false, union_by_name = true)
        ${where} AND age_years IS NOT NULL
        GROUP BY age_group
        HAVING COUNT(*) >= 5
@@ -332,14 +332,14 @@ async function queryDemographics(
     dbAll(
       db,
       `SELECT sex, COUNT(*) AS count
-       FROM read_parquet('${path}', hive_partitioning = true, union_by_name = true)
+       FROM read_parquet('${path}', hive_partitioning = false, union_by_name = true)
        ${where}
        GROUP BY sex`,
     ),
     dbAll(
       db,
       `SELECT region, COUNT(*) AS count
-       FROM read_parquet('${path}', hive_partitioning = true, union_by_name = true)
+       FROM read_parquet('${path}', hive_partitioning = false, union_by_name = true)
        ${where} AND region IS NOT NULL
        GROUP BY region
        HAVING COUNT(*) >= 5
@@ -385,7 +385,7 @@ async function queryComorbidities(
        COUNT(*) AS count
      FROM (
        SELECT UNNEST(string_split(secondary_diags, ';')) AS icd
-       FROM read_parquet('${path}', hive_partitioning = true, union_by_name = true)
+       FROM read_parquet('${path}', hive_partitioning = false, union_by_name = true)
        ${where} AND secondary_diags IS NOT NULL AND secondary_diags <> ''
      )
      WHERE icd IS NOT NULL ${exclusion}
@@ -411,7 +411,7 @@ async function queryCost(
        ROUND(PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY total_cost_local), 2) AS p25,
        ROUND(PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY total_cost_local), 2) AS p75,
        ROUND(PERCENTILE_CONT(0.90) WITHIN GROUP (ORDER BY total_cost_local), 2) AS p90
-     FROM read_parquet('${path}', hive_partitioning = true, union_by_name = true)
+     FROM read_parquet('${path}', hive_partitioning = false, union_by_name = true)
      ${where} AND total_cost_local IS NOT NULL AND total_cost_local > 0
      GROUP BY local_currency`,
   );

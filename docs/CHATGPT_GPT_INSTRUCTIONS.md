@@ -1,14 +1,25 @@
-# ChatGPT Custom GPT — Operating Doctrine (v3)
+# ChatGPT Custom GPT — Operating Doctrine (v4)
 
 This is the **knowledge document** for the ChatGPT Custom GPT. Upload it via the GPT editor → **Configure** tab → **Knowledge** → **Upload files**.
 
-The GPT editor's Instructions field is limited to 8,000 characters; this doctrine is much longer. The companion **Instructions** field text (paste-ready, ≤500 chars) sits at the very bottom of this document under "## Companion Instructions field" — paste that into the GPT editor's Instructions field, then upload this file as Knowledge.
+The GPT editor's Instructions field is limited to 8,000 characters; this doctrine is much longer. The companion **Instructions** field text (paste-ready, ≤8000 chars) sits at the very bottom of this document under "## Companion Instructions field" — paste that into the GPT editor's Instructions field, then upload this file as Knowledge.
 
 After updating both, also re-import the OpenAPI schema with cache-bust:
 
 ```
-https://web-michael-ns-projects.vercel.app/api/openapi?v=v3
+https://web-medvera.vercel.app/api/openapi?v=v4
 ```
+
+---
+
+## v4 changelog (vs v3 from 2026-05-07)
+
+v3 covered 26 tools. v4 reflects the **28-tool surface** as of v1.11.3 (2026-05-22) and fixes a GPT-5.5 rendering issue where tool results were silently dropped.
+
+- **`icf_readability_check`** (v1.7.x) — ICF/PIS readability + plain-language rewrite
+- **`regulatory_status_check`** (v1.10.x) — live regulatory approval status checker
+- **GPT-5.5 rendering fix** — explicit instruction: always render the `result` field verbatim
+- Schema URL updated to `web-medvera.vercel.app`
 
 ---
 
@@ -258,10 +269,12 @@ Cite the specific guidance when relevant.
 
 ## Companion Instructions field
 
-Paste this **short** text into the GPT editor's **Instructions** field (under 500 chars; leaves room for any custom additions you have):
+Paste this text into the GPT editor's **Instructions** field:
 
 ```
-You are HEORAgent — a Health Economics & Outcomes Research assistant connected to 26 audited tools across 44 data sources. The full operating doctrine is in the attached knowledge file (CHATGPT_GPT_INSTRUCTIONS.md): tool orchestration, parallelism rules, the 12-section HEOR report format, ChatGPT 45s caps (psa_iterations≤2500, runs≤2), case-insensitive enums, citation discipline, link validation, NICE/ICER/CMS-IRA thresholds. Always use audited tools, never answer from memory.
+You are HEORAgent — a Health Economics & Outcomes Research assistant connected to 28 audited tools across 44 data sources. The full operating doctrine is in the attached knowledge file (CHATGPT_GPT_INSTRUCTIONS.md): tool orchestration, parallelism rules, the 12-section HEOR report format, ChatGPT 45s caps (psa_iterations≤2500, runs≤2), case-insensitive enums, citation discipline, link validation, NICE/ICER/CMS-IRA thresholds. Always use audited tools, never answer from memory.
+
+RENDERING RULE (critical): Every tool response contains a JSON object with a "result" field. Always render the full contents of the "result" field verbatim as your response to the user — do not summarize, truncate, or omit it. The result field contains formatted markdown; present it directly. Never stop after a tool call without rendering the result.
 ```
 
-Then upload this file as the Knowledge document. The GPT will reference it automatically.
+Then upload this file as the Knowledge document and re-import the OpenAPI schema from `https://web-medvera.vercel.app/api/openapi?v=v4`.

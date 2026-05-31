@@ -148,14 +148,41 @@ async function getDb(): Promise<DuckDBConnection> {
 
 // ── Parquet path helpers ──────────────────────────────────────────────────────
 
-function parquetPath(): string {
+const DATASUS_NAMES = new Set(["datasus_sih", "brazil_datasus"]);
+
+function parquetPaths(input: ClaimsQueryInput): {
+  pathSql: string;
+  skipRegionWhere: boolean;
+} {
   const container = process.env.AZURE_STORAGE_CONTAINER ?? "heor-claims";
-  return `azure://${container}/claims_visits/**/*.parquet`;
+  const base = `azure://${container}/claims_visits`;
+
+  // datasus_sih stores `region` as a Hive path segment, not a data column.
+  // With hive_partitioning=false that column is unavailable, so WHERE region='SP'
+  // always returns zero rows. When querying datasus_sih exclusively with a
+  // region filter, use a globbed path that encodes the region in the directory.
+  const active = input.datasets.includes("all")
+    ? []
+    : input.datasets.filter((d) => d !== "all");
+  const isDatasusOnly =
+    active.length > 0 && active.every((d) => DATASUS_NAMES.has(d));
+
+  if (isDatasusOnly && input.regions && input.regions.length > 0) {
+    const pathList = input.regions
+      .map((r) => {
+        const safeR = r.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+        return `'${base}/source_dataset=datasus_sih/*/region=${safeR}/*.parquet'`;
+      })
+      .join(", ");
+    return { pathSql: `[${pathList}]`, skipRegionWhere: true };
+  }
+
+  return { pathSql: `'${base}/**/*.parquet'`, skipRegionWhere: false };
 }
 
 // ── WHERE clause builder (sanitised — all values come from Zod-validated input) ──
 
-function buildWhere(input: ClaimsQueryInput): string {
+function buildWhere(input: ClaimsQueryInput, skipRegion = false): string {
   const parts: string[] = [];
 
   // Dataset filter (values from enum — safe to inline)
@@ -188,8 +215,9 @@ function buildWhere(input: ClaimsQueryInput): string {
   });
   if (icdParts.length > 0) parts.push(`(${icdParts.join(" OR ")})`);
 
-  // Region filter — sanitise to [A-Za-z0-9 \-] only before inlining
-  if (input.regions && input.regions.length > 0) {
+  // Region filter — sanitise to [A-Za-z0-9 \-] only before inlining.
+  // Skipped when path-based region filtering is active (datasus_sih).
+  if (!skipRegion && input.regions && input.regions.length > 0) {
     const safeRegions = input.regions.map((r) =>
       r.replace(/[^A-Za-z0-9 \-]/g, "").toUpperCase(),
     );
@@ -226,7 +254,7 @@ function buildIcdExclusion(prefixes: string[]): string {
 
 async function queryPrevalence(
   db: DuckDBConnection,
-  path: string,
+  pathSql: string,
   where: string,
 ): Promise<unknown> {
   const rows = await dbAll(
@@ -237,7 +265,7 @@ async function queryPrevalence(
        COUNT(*) AS record_count,
        SUM(CASE WHEN visit_weight IS NOT NULL THEN visit_weight ELSE 0 END) AS weighted_sum,
        COUNT(CASE WHEN visit_weight IS NOT NULL THEN 1 END) AS weighted_count
-     FROM read_parquet('${path}', hive_partitioning = false, union_by_name = true)
+     FROM read_parquet(${pathSql}, hive_partitioning = false, union_by_name = true)
      ${where}
      GROUP BY source_year, source_dataset
      ORDER BY source_year`,
@@ -291,7 +319,7 @@ async function queryPrevalence(
 
 async function queryDrugUtilization(
   db: DuckDBConnection,
-  path: string,
+  pathSql: string,
   where: string,
   topN: number,
 ): Promise<unknown> {
@@ -302,7 +330,7 @@ async function queryDrugUtilization(
        COUNT(*) AS visit_count
      FROM (
        SELECT UNNEST(string_split(drugs_mentioned, ';')) AS drug
-       FROM read_parquet('${path}', hive_partitioning = false, union_by_name = true)
+       FROM read_parquet(${pathSql}, hive_partitioning = false, union_by_name = true)
        ${where} AND drugs_mentioned IS NOT NULL AND drugs_mentioned <> ''
      )
      WHERE drug IS NOT NULL AND drug <> ''
@@ -314,7 +342,7 @@ async function queryDrugUtilization(
 
   const total = await dbAll(
     db,
-    `SELECT COUNT(*) AS total FROM read_parquet('${path}', hive_partitioning = false, union_by_name = true) ${where}`,
+    `SELECT COUNT(*) AS total FROM read_parquet(${pathSql}, hive_partitioning = false, union_by_name = true) ${where}`,
   );
   const totalVisits = (total[0]?.["total"] as number) ?? 0;
 
@@ -333,7 +361,7 @@ async function queryDrugUtilization(
 
 async function queryDemographics(
   db: DuckDBConnection,
-  path: string,
+  pathSql: string,
   where: string,
 ): Promise<unknown> {
   const [ageRows, sexRows, regionRows] = await Promise.all([
@@ -349,7 +377,7 @@ async function queryDemographics(
            ELSE 'unknown'
          END AS age_group,
          COUNT(*) AS count
-       FROM read_parquet('${path}', hive_partitioning = false, union_by_name = true)
+       FROM read_parquet(${pathSql}, hive_partitioning = false, union_by_name = true)
        ${where} AND age_years IS NOT NULL
        GROUP BY age_group
        HAVING COUNT(*) >= 5
@@ -358,14 +386,14 @@ async function queryDemographics(
     dbAll(
       db,
       `SELECT sex, COUNT(*) AS count
-       FROM read_parquet('${path}', hive_partitioning = false, union_by_name = true)
+       FROM read_parquet(${pathSql}, hive_partitioning = false, union_by_name = true)
        ${where}
        GROUP BY sex`,
     ),
     dbAll(
       db,
       `SELECT region, COUNT(*) AS count
-       FROM read_parquet('${path}', hive_partitioning = false, union_by_name = true)
+       FROM read_parquet(${pathSql}, hive_partitioning = false, union_by_name = true)
        ${where} AND region IS NOT NULL
        GROUP BY region
        HAVING COUNT(*) >= 5
@@ -397,7 +425,7 @@ async function queryDemographics(
 
 async function queryComorbidities(
   db: DuckDBConnection,
-  path: string,
+  pathSql: string,
   where: string,
   icd10Prefixes: string[],
   topN: number,
@@ -411,7 +439,7 @@ async function queryComorbidities(
        COUNT(*) AS count
      FROM (
        SELECT UNNEST(string_split(secondary_diags, ';')) AS icd
-       FROM read_parquet('${path}', hive_partitioning = false, union_by_name = true)
+       FROM read_parquet(${pathSql}, hive_partitioning = false, union_by_name = true)
        ${where} AND secondary_diags IS NOT NULL AND secondary_diags <> ''
      )
      WHERE icd IS NOT NULL ${exclusion}
@@ -424,7 +452,7 @@ async function queryComorbidities(
 
 async function queryCost(
   db: DuckDBConnection,
-  path: string,
+  pathSql: string,
   where: string,
 ): Promise<unknown> {
   const rows = await dbAll(
@@ -437,7 +465,7 @@ async function queryCost(
        ROUND(PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY total_cost_local), 2) AS p25,
        ROUND(PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY total_cost_local), 2) AS p75,
        ROUND(PERCENTILE_CONT(0.90) WITHIN GROUP (ORDER BY total_cost_local), 2) AS p90
-     FROM read_parquet('${path}', hive_partitioning = false, union_by_name = true)
+     FROM read_parquet(${pathSql}, hive_partitioning = false, union_by_name = true)
      ${where} AND total_cost_local IS NOT NULL AND total_cost_local > 0
      GROUP BY local_currency`,
   );
@@ -466,12 +494,12 @@ async function queryCost(
 
 async function checkHasData(
   db: DuckDBConnection,
-  path: string,
+  pathSql: string,
 ): Promise<boolean> {
   try {
     const rows = await dbAll(
       db,
-      `SELECT 1 FROM read_parquet('${path}', union_by_name = true) LIMIT 1`,
+      `SELECT 1 FROM read_parquet(${pathSql}, union_by_name = true) LIMIT 1`,
     );
     return rows.length > 0;
   } catch {
@@ -502,9 +530,9 @@ export async function handleClaimsQuery(
   );
 
   const db = await getDb();
-  const path = parquetPath();
+  const { pathSql, skipRegionWhere } = parquetPaths(input);
 
-  const hasData = await checkHasData(db, path);
+  const hasData = await checkHasData(db, pathSql);
   if (!hasData) {
     return {
       content: JSON.stringify(
@@ -524,31 +552,31 @@ export async function handleClaimsQuery(
     };
   }
 
-  const where = buildWhere(input);
+  const where = buildWhere(input, skipRegionWhere);
   let results: unknown;
 
   switch (input.aggregation) {
     case "prevalence":
     case "count":
-      results = await queryPrevalence(db, path, where);
+      results = await queryPrevalence(db, pathSql, where);
       break;
     case "drug_utilization":
-      results = await queryDrugUtilization(db, path, where, input.top_n);
+      results = await queryDrugUtilization(db, pathSql, where, input.top_n);
       break;
     case "demographics":
-      results = await queryDemographics(db, path, where);
+      results = await queryDemographics(db, pathSql, where);
       break;
     case "comorbidities":
       results = await queryComorbidities(
         db,
-        path,
+        pathSql,
         where,
         input.icd10_prefixes,
         input.top_n,
       );
       break;
     case "cost":
-      results = await queryCost(db, path, where);
+      results = await queryCost(db, pathSql, where);
       break;
   }
 

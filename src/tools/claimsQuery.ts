@@ -54,18 +54,32 @@ const ClaimsQuerySchema = z.object({
       "ICD-10 prefixes: ['E11'] = Type 2 diabetes, ['I21'] = AMI, ['C50'] = breast cancer.",
     ),
   drug_names: z.array(z.string().min(1)).optional(),
+  regions: z
+    .array(z.string().min(1))
+    .optional()
+    .describe(
+      "Region/state codes to filter on. For Brazil datasus: UF codes e.g. ['SP','RJ','MG']. " +
+        "For US NAMCS/MEPS: census region codes e.g. ['Northeast','South']. Leave unset for all regions.",
+    ),
   age_min: z.number().int().min(0).max(130).optional(),
   age_max: z.number().int().min(0).max(130).optional(),
   sex: z.enum(["male", "female", "all"]).default("all"),
   year_from: z.number().int().min(2000).max(2030).optional(),
   year_to: z.number().int().min(2000).max(2030).optional(),
-  aggregation: z.enum([
-    "prevalence",
-    "drug_utilization",
-    "demographics",
-    "comorbidities",
-    "cost",
-  ]),
+  aggregation: z
+    .enum([
+      "prevalence",
+      "count",
+      "drug_utilization",
+      "demographics",
+      "comorbidities",
+      "cost",
+    ])
+    .describe(
+      "prevalence/count: record counts and weighted estimates by year (use for population sizing). " +
+        "drug_utilization: top drugs by frequency. demographics: age/sex breakdown. " +
+        "comorbidities: top co-diagnosis ICD-10 codes. cost: cost distribution statistics.",
+    ),
   top_n: z.number().int().min(5).max(50).default(20),
 });
 
@@ -173,6 +187,18 @@ function buildWhere(input: ClaimsQueryInput): string {
     return `primary_diag_icd LIKE '${safe}%'`;
   });
   if (icdParts.length > 0) parts.push(`(${icdParts.join(" OR ")})`);
+
+  // Region filter — sanitise to [A-Za-z0-9 \-] only before inlining
+  if (input.regions && input.regions.length > 0) {
+    const safeRegions = input.regions.map((r) =>
+      r.replace(/[^A-Za-z0-9 \-]/g, "").toUpperCase(),
+    );
+    if (safeRegions.length === 1) {
+      parts.push(`region = '${safeRegions[0]}'`);
+    } else {
+      parts.push(`region IN (${safeRegions.map((r) => `'${r}'`).join(",")})`);
+    }
+  }
 
   // Drug filter — use raw JSON string contains (safe: drug names are alphanumeric)
   if (input.drug_names && input.drug_names.length > 0) {
@@ -503,6 +529,7 @@ export async function handleClaimsQuery(
 
   switch (input.aggregation) {
     case "prevalence":
+    case "count":
       results = await queryPrevalence(db, path, where);
       break;
     case "drug_utilization":
@@ -579,8 +606,9 @@ export const claimsQueryToolSchema = {
     "secondary_diags (semicolon-separated ICD-10), drugs_mentioned (semicolon-separated names), " +
     "visit_weight, total_cost_local, local_currency, source_dataset, source_year. " +
     "Returns aggregated statistics only (cell suppression n<5). " +
-    "IMPORTANT: do NOT pass raw SQL — use the 'datasets', 'icd10_prefixes', 'aggregation' parameters. " +
-    "aggregation must be one of: prevalence, drug_utilization, demographics, comorbidities, cost. " +
+    "Use 'regions' to filter by state/region: Brazil UF codes ['SP','RJ'] or US census regions ['Northeast']. " +
+    "IMPORTANT: do NOT pass raw SQL — use the structured parameters: datasets, icd10_prefixes, aggregation, regions. " +
+    "For population sizing and budget impact: use aggregation='count' or 'prevalence'. " +
     "Design log #28.",
   annotations: {
     title: "Real-World Claims & Survey Data Query",
@@ -631,6 +659,12 @@ export const claimsQueryToolSchema = {
         description:
           "Substring match in drug list. E.g. ['metformin'] or ['empagliflozin', 'dapagliflozin'].",
       },
+      regions: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "Region/state filter. Brazil datasus UF codes: ['SP'] = São Paulo, ['SP','RJ','MG'] = top 3 states. US NAMCS/MEPS census regions: ['Northeast','South','West','Midwest']. Omit for all regions.",
+      },
       age_min: { type: "integer", minimum: 0, maximum: 130 },
       age_max: { type: "integer", minimum: 0, maximum: 130 },
       sex: { type: "string", enum: ["male", "female", "all"], default: "all" },
@@ -639,20 +673,21 @@ export const claimsQueryToolSchema = {
         minimum: 2000,
         maximum: 2030,
         description:
-          "meps: 2017-2023 | ny_sparcs: 2017-2024 | nhamcs_ed: 2011-2022 | nhanes: 1999-2021 | nhis: 2016-2023 | ecuador_inec: 2022-2023 | uruguay_eh: 2013-2024 | mexico_egresos: 2018-2025 | chile_deis: 2001-2023 | colombia_rips: 2009-2023 | brazil_datasus: 2008-2022",
+          "meps: 2017-2023 | ny_sparcs: 2017-2024 | nhamcs_ed: 2011-2022 | nhanes: 1999-2021 | nhis: 2016-2023 | ecuador_inec: 2022-2023 | uruguay_eh: 2013-2024 | mexico_egresos: 2018-2025 | chile_deis: 2001-2023 | colombia_rips: 2009-2023 | brazil_datasus: 2018-2021",
       },
       year_to: { type: "integer", minimum: 2000, maximum: 2030 },
       aggregation: {
         type: "string",
         enum: [
           "prevalence",
+          "count",
           "drug_utilization",
           "demographics",
           "comorbidities",
           "cost",
         ],
         description:
-          "prevalence | drug_utilization | demographics | comorbidities | cost(DataSUS only)",
+          "prevalence or count: record counts + weighted estimates by year — USE THIS for population sizing and budget impact. drug_utilization: top drugs by frequency. demographics: age/sex breakdown. comorbidities: top co-diagnosis ICD codes. cost: cost distribution (BRL for datasus, USD for meps/ny_sparcs).",
       },
       top_n: { type: "integer", minimum: 5, maximum: 50, default: 20 },
     },

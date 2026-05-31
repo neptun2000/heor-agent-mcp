@@ -578,7 +578,10 @@ export const claimsQueryToolSchema = {
     "Common schema: age_years, sex, country_code, region, visit_type, primary_diag_icd, " +
     "secondary_diags (semicolon-separated ICD-10), drugs_mentioned (semicolon-separated names), " +
     "visit_weight, total_cost_local, local_currency, source_dataset, source_year. " +
-    "Returns aggregated statistics only (cell suppression n<5). Design log #28.",
+    "Returns aggregated statistics only (cell suppression n<5). " +
+    "IMPORTANT: do NOT pass raw SQL — use the 'datasets', 'icd10_prefixes', 'aggregation' parameters. " +
+    "aggregation must be one of: prevalence, drug_utilization, demographics, comorbidities, cost. " +
+    "Design log #28.",
   annotations: {
     title: "Real-World Claims & Survey Data Query",
     readOnlyHint: true,

@@ -816,10 +816,12 @@ export async function handleClaimsQuery(
           "Survey data (meps, namcs, nhamcs_ed, nhanes, nhis): visit_weight = sampling weight for national estimates. Apply when computing population-level rates.",
           "Census data (ny_sparcs, ecuador_inec, uruguay_eh, mexico_egresos, brazil_datasus, chile_deis): record count = actual events, visit_weight is null.",
           "meps: US nationwide, covers inpatient/ER/office/prescriptions, has cost in USD (total_cost_local).",
-          "ny_sparcs: New York State inpatient discharges only, cost in USD (total_cost_local).",
-          "brazil_datasus: inpatient admissions (datasus_sih), cost in BRL (total_cost_local).",
+          "ny_sparcs: NY State inpatient discharges, cost in USD. CODING NOTE: public Socrata export uses CCSR codes — the tool auto-translates your ICD-10 prefixes (e.g. E11→END003) so always pass ICD-10, never CCSR directly.",
+          "brazil_datasus: inpatient admissions (datasus_sih), cost in BRL. CODING NOTE: T2D (E11) rarely coded as principal diagnosis — complications coded under complication ICD (e.g. N18, I63) with E11 as secondary. Use data.query_agent for Brazil T2D burden, not direct E11 count.",
+          "colombia_rips: secondary_diags field sparse — comorbidity queries return empty.",
+          "mexico_egresos: secondary_diags not populated — comorbidity queries return empty.",
           "nhanes/nhis: visit_type='survey_examination', one row per person per cycle, not per visit.",
-          "uruguay_eh (2016-2024): age is group midpoint (not exact age), no cost data.",
+          "uruguay_eh: household survey — NO ICD codes; ICD queries return zero. Visit-frequency analysis only.",
           "Counts < 5 are suppressed per NCHS disclosure rules.",
         ],
       },
@@ -842,9 +844,13 @@ export const claimsQueryToolSchema = {
     "Latin America: ecuador_inec (hospital discharges 2022-2023), uruguay_eh (2016-2024), " +
     "mexico_egresos (2018-2025), brazil_datasus (inpatient 2018-2024, costs in BRL), " +
     "colombia_rips (health services 2018-2023). " +
-    "Common schema: age_years, sex, country_code, region, visit_type, primary_diag_icd, " +
+    "Common schema: age_years, sex, country_code, region, visit_type, primary_diag_icd (ICD-10), " +
     "secondary_diags (semicolon-separated ICD-10), drugs_mentioned (semicolon-separated names), " +
     "visit_weight, total_cost_local, local_currency, source_dataset, source_year. " +
+    "METADATA NOTE — primary_diag_icd coding varies by dataset: " +
+    "ny_sparcs stores CCSR codes (tool auto-translates your ICD-10 to CCSR internally — always pass ICD-10); " +
+    "brazil_datasus stores ICD-10 but E11 rarely appears as principal diagnosis (complications coded separately); " +
+    "colombia_rips and mexico_egresos have sparse/empty secondary_diags. " +
     "Returns aggregated statistics only (cell suppression n<5). " +
     "Use 'regions' to filter by state/region: Brazil UF codes ['SP','RJ'] or US census regions ['Northeast']. " +
     "IMPORTANT: do NOT pass raw SQL — use the structured parameters: datasets, icd10_prefixes, aggregation, regions. " +

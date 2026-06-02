@@ -35,7 +35,7 @@ const DATASET_VALUES = [
   "uruguay_eh", // Uruguay Encuesta de Hogares household SURVEY — NO ICD codes; ICD queries return zero. Visit-frequency analysis only.
   "mexico_egresos", // Mexico DGIS egresos hospitalarios, 2018-2025, multi-million/yr
   "brazil_datasus", // Brazil DataSUS SIH inpatient, multiple years
-  "chile_deis", // Chile DEIS egresos hospitalarios, 2001-2023, ~1.5M/yr
+  "chile_deis", // Chile DEIS egresos hospitalarios, 2018-2024, ~1.6M/yr
   "colombia_rips", // Colombia RIPS health services 2018-2023 — secondary_diags field sparse; comorbidity queries return empty
   "argentina_ba", // Argentina Buenos Aires hospital discharges, 2016-2020
   // Legacy names kept for backward compat
@@ -944,6 +944,7 @@ export const claimsQueryToolSchema = {
     "nhanes (health examination survey 1999-2021, person-level), nhis (health interview survey 2016-2023). " +
     "Latin America: ecuador_inec (hospital discharges 2022-2023), uruguay_eh (2016-2024), " +
     "mexico_egresos (2018-2025), brazil_datasus (inpatient 2018-2024, costs in BRL), " +
+    "chile_deis (hospital discharges 2018-2024, ~1.6M/yr), " +
     "colombia_rips (health services 2018-2023). " +
     "Common schema: age_years, sex, country_code, region, visit_type, primary_diag_icd (ICD-10), " +
     "secondary_diags (semicolon-separated ICD-10), drugs_mentioned (semicolon-separated names), " +
@@ -1020,7 +1021,7 @@ export const claimsQueryToolSchema = {
         minimum: 2000,
         maximum: 2030,
         description:
-          "meps: 2017-2023 | ny_sparcs: 2017-2022, 2024 (no 2023) | nhamcs_ed: 2011-2022 | nhanes: 1999-2021 | nhis: 2019-2023 | ecuador_inec: 2022-2023 | uruguay_eh: 2016-2024 | mexico_egresos: 2018-2025 | colombia_rips: 2018-2023 | brazil_datasus/datasus_sih: 2018-2024 | namcs: 2018-2022",
+          "meps: 2017-2023 | ny_sparcs: 2017-2022, 2024 (no 2023) | nhamcs_ed: 2011-2022 | nhanes: 1999-2021 | nhis: 2019-2023 | ecuador_inec: 2022-2023 | uruguay_eh: 2016-2024 | mexico_egresos: 2018-2025 | colombia_rips: 2018-2023 | brazil_datasus/datasus_sih: 2018-2024 | chile_deis: 2018-2024 | namcs: 2018-2022",
       },
       year_to: { type: "integer", minimum: 2000, maximum: 2030 },
       aggregation: {

@@ -109,13 +109,44 @@ let _dbInitializing: Promise<DuckDBConnection> | null = null;
 // DuckDB query finishes — no orphaned concurrent scans, no OOM.
 const QUERY_TIMEOUT_MS = 90_000;
 let _queryQueue: Promise<unknown> = Promise.resolve();
-export function withDbLock<T>(fn: () => Promise<T>): Promise<T> {
-  const lockPromise = _queryQueue.then(() => fn());
+
+function abortError(): Error {
+  return new Error(
+    "DuckDB query cancelled before execution because the client disconnected.",
+  );
+}
+
+export function withDbLock<T>(
+  fn: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  let started = false;
+  const run = async () => {
+    if (signal?.aborted) throw abortError();
+    started = true;
+    return fn();
+  };
+  const lockPromise = _queryQueue.then(run);
   _queryQueue = lockPromise.catch(() => {});
   return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const cleanup: Array<() => void> = [];
+    const resolveOnce = (value: T) => {
+      if (settled) return;
+      settled = true;
+      cleanup.forEach((fn) => fn());
+      resolve(value);
+    };
+    const rejectOnce = (err: unknown) => {
+      if (settled) return;
+      settled = true;
+      cleanup.forEach((fn) => fn());
+      reject(err);
+    };
+
     const timer = setTimeout(
       () =>
-        reject(
+        rejectOnce(
           new Error(
             "DuckDB query timed out (90s). Add year_from/year_to to limit the scan, " +
               "or reduce the date range.",
@@ -123,15 +154,23 @@ export function withDbLock<T>(fn: () => Promise<T>): Promise<T> {
         ),
       QUERY_TIMEOUT_MS,
     );
+    cleanup.push(() => clearTimeout(timer));
+
+    if (signal) {
+      const onAbort = () => {
+        if (!started) rejectOnce(abortError());
+      };
+      if (signal.aborted) {
+        rejectOnce(abortError());
+      } else {
+        signal.addEventListener("abort", onAbort, { once: true });
+        cleanup.push(() => signal.removeEventListener("abort", onAbort));
+      }
+    }
+
     lockPromise.then(
-      (v) => {
-        clearTimeout(timer);
-        resolve(v);
-      },
-      (e: unknown) => {
-        clearTimeout(timer);
-        reject(e);
-      },
+      (v) => resolveOnce(v),
+      (e: unknown) => rejectOnce(e),
     );
   });
 }
@@ -601,10 +640,16 @@ async function queryDemographics(
   pathSql: string,
   where: string,
 ): Promise<unknown> {
-  const [ageRows, sexRows, regionRows] = await Promise.all([
-    dbAll(
-      db,
-      `SELECT
+  const rows = await dbAll(
+    db,
+    `WITH base AS (
+       SELECT age_years, sex, region
+       FROM read_parquet(${pathSql}, hive_partitioning = false, union_by_name = true)
+       ${where}
+     ),
+     age AS (
+       SELECT
+         'age' AS breakdown,
          CASE
            WHEN age_years BETWEEN 0 AND 17  THEN '0-17 (paediatric)'
            WHEN age_years BETWEEN 18 AND 44 THEN '18-44 (young adult)'
@@ -612,37 +657,57 @@ async function queryDemographics(
            WHEN age_years BETWEEN 65 AND 74 THEN '65-74 (elderly)'
            WHEN age_years >= 75             THEN '75+ (very elderly)'
            ELSE 'unknown'
-         END AS age_group,
-         COUNT(*) AS count
-       FROM read_parquet(${pathSql}, hive_partitioning = false, union_by_name = true)
-       ${where} AND age_years IS NOT NULL
-       GROUP BY age_group
+         END AS label,
+         COUNT(*) AS count,
+         MIN(age_years) AS sort_num
+       FROM base
+       WHERE age_years IS NOT NULL
+       GROUP BY label
        HAVING COUNT(*) >= 5
-       ORDER BY MIN(age_years)`,
-    ),
-    dbAll(
-      db,
-      `SELECT sex, COUNT(*) AS count
-       FROM read_parquet(${pathSql}, hive_partitioning = false, union_by_name = true)
-       ${where}
-       GROUP BY sex`,
-    ),
-    dbAll(
-      db,
-      `SELECT region, COUNT(*) AS count
-       FROM read_parquet(${pathSql}, hive_partitioning = false, union_by_name = true)
-       ${where} AND region IS NOT NULL
+     ),
+     sex_breakdown AS (
+       SELECT
+         'sex' AS breakdown,
+         COALESCE(sex, 'unknown') AS label,
+         COUNT(*) AS count,
+         0 AS sort_num
+       FROM base
+       GROUP BY COALESCE(sex, 'unknown')
+     ),
+     region_counts AS (
+       SELECT
+         'region' AS breakdown,
+         region AS label,
+         COUNT(*) AS count
+       FROM base
+       WHERE region IS NOT NULL
        GROUP BY region
        HAVING COUNT(*) >= 5
-       ORDER BY count DESC
-       LIMIT 10`,
-    ),
-  ]);
+     ),
+     region_ranked AS (
+       SELECT
+         breakdown,
+         label,
+         count,
+         ROW_NUMBER() OVER (ORDER BY count DESC, label) AS sort_num
+       FROM region_counts
+     )
+     SELECT breakdown, label, count, sort_num FROM age
+     UNION ALL
+     SELECT breakdown, label, count, sort_num FROM sex_breakdown
+     UNION ALL
+     SELECT breakdown, label, count, sort_num FROM region_ranked WHERE sort_num <= 10
+     ORDER BY breakdown, sort_num`,
+  );
+
+  const ageRows = rows.filter((r) => r["breakdown"] === "age");
+  const sexRows = rows.filter((r) => r["breakdown"] === "sex");
+  const regionRows = rows.filter((r) => r["breakdown"] === "region");
 
   const total = ageRows.reduce((s, r) => s + (r["count"] as number), 0);
   return {
     age_groups: ageRows.map((r) => ({
-      group: r["age_group"],
+      group: r["label"],
       count: r["count"],
       pct:
         total > 0
@@ -650,10 +715,10 @@ async function queryDemographics(
           : 0,
     })),
     sex_distribution: Object.fromEntries(
-      sexRows.map((r) => [r["sex"] ?? "unknown", r["count"]]),
+      sexRows.map((r) => [r["label"] ?? "unknown", r["count"]]),
     ),
     top_regions: regionRows.map((r) => ({
-      region: r["region"],
+      region: r["label"],
       count: r["count"],
     })),
     total,
@@ -770,6 +835,7 @@ function _cacheSet(key: string, result: unknown): void {
 
 export async function handleClaimsQuery(
   rawInput: unknown,
+  signal?: AbortSignal,
 ): Promise<ToolResult> {
   const parsed = ClaimsQuerySchema.safeParse(rawInput);
   if (!parsed.success) {
@@ -823,7 +889,7 @@ export async function handleClaimsQuery(
             `Unknown aggregation type: ${(input as { aggregation: string }).aggregation}`,
           );
       }
-    });
+    }, signal);
     _cacheSet(cacheKey, results);
   }
 

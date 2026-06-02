@@ -393,7 +393,10 @@ type QueryAgentInput = z.infer<typeof QueryAgentSchema>;
 
 // ── Main handler ──────────────────────────────────────────────────────────────
 
-export async function handleQueryAgent(rawInput: unknown): Promise<ToolResult> {
+export async function handleQueryAgent(
+  rawInput: unknown,
+  signal?: AbortSignal,
+): Promise<ToolResult> {
   const parsed = QueryAgentSchema.safeParse(rawInput);
   if (!parsed.success) {
     throw new Error(
@@ -454,7 +457,7 @@ export async function handleQueryAgent(rawInput: unknown): Promise<ToolResult> {
 
     let rawResult: unknown;
     try {
-      const toolResult = await handleClaimsQuery(queryInput);
+      const toolResult = await handleClaimsQuery(queryInput, signal);
       rawResult = JSON.parse(
         typeof toolResult.content === "string"
           ? toolResult.content

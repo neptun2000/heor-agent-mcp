@@ -17,6 +17,7 @@ import {
   ListResourcesRequestSchema,
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
+  type RequestId,
 } from "@modelcontextprotocol/sdk/types.js";
 import {
   handleLiteratureSearch,
@@ -215,6 +216,7 @@ const HEOR_PROMPTS = [
 function createMcpServer(
   surfaceRef: { value: string } = { value: "direct_mcp" },
   sessionIdRef: { value: string } = { value: "" },
+  httpAbortSignals: Map<RequestId, AbortSignal> = new Map(),
 ): Server {
   const server = new Server(
     { name: "heor-agent-mcp", version: PKG_VERSION },
@@ -300,9 +302,13 @@ function createMcpServer(
     ],
   }));
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const { name, arguments: args } = request.params;
     const callStart = Date.now();
+    const httpSignal = httpAbortSignals.get(extra.requestId);
+    const requestSignal = httpSignal
+      ? AbortSignal.any([extra.signal, httpSignal])
+      : extra.signal;
 
     try {
       let result;
@@ -449,7 +455,10 @@ function createMcpServer(
               isError: true,
             };
           }
-          const claimsResult = await handleClaimsQuery(args);
+          const claimsResult = await handleClaimsQuery(
+            args,
+            requestSignal,
+          );
           result = {
             content: [
               {
@@ -475,7 +484,7 @@ function createMcpServer(
               isError: true,
             };
           }
-          const qaResult = await handleQueryAgent(args);
+          const qaResult = await handleQueryAgent(args, requestSignal);
           result = {
             content: [
               {
@@ -603,11 +612,25 @@ const SESSION_ID_RE =
 
 interface ManagedSession {
   transport: StreamableHTTPServerTransport;
+  httpAbortSignals: Map<RequestId, AbortSignal>;
   surface?: string;
   lastActivity: number;
 }
 
 const sessions = new Map<string, ManagedSession>();
+
+function isRequestId(value: unknown): value is RequestId {
+  return typeof value === "string" || typeof value === "number";
+}
+
+function jsonRpcRequestIds(body: unknown): RequestId[] {
+  const messages = Array.isArray(body) ? body : [body];
+  return messages.flatMap((message) => {
+    if (message == null || typeof message !== "object") return [];
+    const id = (message as { id?: unknown }).id;
+    return isRequestId(id) ? [id] : [];
+  });
+}
 
 function evictStaleSessions(): void {
   const now = Date.now();
@@ -753,11 +776,13 @@ async function runHttp(port: number) {
         }
 
         let transport: StreamableHTTPServerTransport;
+        let httpAbortSignals: Map<RequestId, AbortSignal> | undefined;
 
         if (sessionId && sessions.has(sessionId)) {
           const session = sessions.get(sessionId)!;
           session.lastActivity = Date.now();
           transport = session.transport;
+          httpAbortSignals = session.httpAbortSignals;
         } else if (!sessionId && body?.method === "initialize") {
           // Enforce session limit
           evictStaleSessions();
@@ -784,12 +809,18 @@ async function runHttp(port: number) {
           // Without this, all tool_call events distinct_id="anonymous" and
           // per-user analytics are blind.
           const sessionIdRef = { value: "" };
-          const server = createMcpServer(surfaceRef, sessionIdRef);
+          httpAbortSignals = new Map();
+          const server = createMcpServer(
+            surfaceRef,
+            sessionIdRef,
+            httpAbortSignals,
+          );
           transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
             onsessioninitialized: (id) => {
               sessions.set(id, {
                 transport,
+                httpAbortSignals: httpAbortSignals!,
                 lastActivity: Date.now(),
                 surface,
               });
@@ -816,7 +847,31 @@ async function runHttp(port: number) {
           return;
         }
 
-        await transport.handleRequest(req, res, body);
+        const requestAbort = new AbortController();
+        const abortCurrentRequest = () => {
+          if (!requestAbort.signal.aborted) requestAbort.abort();
+        };
+        const onResponseClose = () => {
+          if (!res.writableEnded) abortCurrentRequest();
+        };
+        req.on("aborted", abortCurrentRequest);
+        res.on("close", onResponseClose);
+
+        const requestIds = jsonRpcRequestIds(body);
+        for (const id of requestIds) {
+          httpAbortSignals?.set(id, requestAbort.signal);
+        }
+        try {
+          await transport.handleRequest(req, res, body);
+        } finally {
+          req.off("aborted", abortCurrentRequest);
+          res.off("close", onResponseClose);
+          for (const id of requestIds) {
+            if (httpAbortSignals?.get(id) === requestAbort.signal) {
+              httpAbortSignals.delete(id);
+            }
+          }
+        }
         return;
       }
 

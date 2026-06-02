@@ -121,6 +121,30 @@ describe("queryAgent — dataset selection and validation", () => {
       expect.objectContaining({
         datasets: ["ny_sparcs", "meps"],
       }),
+      undefined,
+    );
+  });
+
+  it("passes abort signals through to claims queries", async () => {
+    mockClaims.mockResolvedValue(
+      makeClaimsResult([{ year: 2022, record_count: 150000 }]),
+    );
+
+    const controller = new AbortController();
+    await handleQueryAgent(
+      {
+        indication: "type 2 diabetes",
+        country_codes: ["US"],
+        regions: [],
+      },
+      controller.signal,
+    );
+
+    expect(mockClaims).toHaveBeenCalledWith(
+      expect.objectContaining({
+        datasets: ["ny_sparcs", "meps"],
+      }),
+      controller.signal,
     );
   });
 

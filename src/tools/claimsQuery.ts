@@ -203,6 +203,11 @@ async function getDb(): Promise<DuckDBConnection> {
 // ── Parquet path helpers ──────────────────────────────────────────────────────
 
 const DATASUS_NAMES = new Set(["datasus_sih", "brazil_datasus"]);
+const DATASET_STORAGE_NAMES: Record<string, string> = {
+  brazil_datasus: "datasus_sih",
+};
+const storageDatasetName = (ds: string): string =>
+  DATASET_STORAGE_NAMES[ds] ?? ds;
 
 // Build explicit year list for partition pruning. Querying year_from=2021,year_to=2023
 // produces paths like source_year=2021/**, source_year=2022/**, source_year=2023/**
@@ -262,15 +267,31 @@ function parquetPaths(input: ClaimsQueryInput): {
   //   */*.parquet — nested (datasus): year/region=SP/data.parquet
   // Avoids **, which requires at least one sub-directory and returns zero for
   // flat-structure datasets when the year segment is already in the path prefix.
+  const dsSegs =
+    active.length > 0 ? [...new Set(active.map(storageDatasetName))] : ["*"];
+
   if (yearRange) {
     const paths: string[] = [];
     for (const y of yearRange) {
-      paths.push(`'${base}/source_dataset=*/source_year=${y}/*.parquet'`);
-      paths.push(`'${base}/source_dataset=*/source_year=${y}/*/*.parquet'`);
+      for (const ds of dsSegs) {
+        paths.push(`'${base}/source_dataset=${ds}/source_year=${y}/*.parquet'`);
+        paths.push(
+          `'${base}/source_dataset=${ds}/source_year=${y}/*/*.parquet'`,
+        );
+      }
     }
     return { pathSql: `[${paths.join(", ")}]`, skipRegionWhere: false };
   }
 
+  if (dsSegs[0] !== "*") {
+    const paths = dsSegs.map(
+      (ds) => `'${base}/source_dataset=${ds}/**/*.parquet'`,
+    );
+    return {
+      pathSql: paths.length === 1 ? paths[0] : `[${paths.join(", ")}]`,
+      skipRegionWhere: false,
+    };
+  }
   return { pathSql: `'${base}/**/*.parquet'`, skipRegionWhere: false };
 }
 
@@ -536,27 +557,27 @@ async function queryDrugUtilization(
 ): Promise<unknown> {
   const rows = await dbAll(
     db,
-    `SELECT
-       LOWER(drug) AS drug,
-       COUNT(*) AS visit_count
-     FROM (
-       SELECT UNNEST(string_split(drugs_mentioned, ';')) AS drug
+    `WITH base AS (
+       SELECT drugs_mentioned
        FROM read_parquet(${pathSql}, hive_partitioning = false, union_by_name = true)
-       ${where} AND drugs_mentioned IS NOT NULL AND drugs_mentioned <> ''
+       ${where}
+     ),
+     total AS (SELECT COUNT(*) AS n FROM base),
+     top AS (
+       SELECT LOWER(drug) AS drug, COUNT(*) AS visit_count
+       FROM (SELECT UNNEST(string_split(drugs_mentioned, ';')) AS drug
+             FROM base WHERE drugs_mentioned IS NOT NULL AND drugs_mentioned <> '')
+       WHERE drug IS NOT NULL AND drug <> ''
+       GROUP BY LOWER(drug)
+       HAVING COUNT(*) >= 5
+       ORDER BY visit_count DESC
+       LIMIT ${topN}
      )
-     WHERE drug IS NOT NULL AND drug <> ''
-     GROUP BY LOWER(drug)
-     HAVING COUNT(*) >= 5
-     ORDER BY visit_count DESC
-     LIMIT ${topN}`,
+     SELECT top.drug, top.visit_count, total.n AS total_visits
+     FROM top, total`,
   );
 
-  const total = await dbAll(
-    db,
-    `SELECT COUNT(*) AS total FROM read_parquet(${pathSql}, hive_partitioning = false, union_by_name = true) ${where}`,
-  );
-  const totalVisits = (total[0]?.["total"] as number) ?? 0;
-
+  const totalVisits = (rows[0]?.["total_visits"] as number) ?? 0;
   return {
     top_drugs: rows.map((r) => ({
       drug: r["drug"],
@@ -701,21 +722,43 @@ async function queryCost(
   }));
 }
 
-// ── Check table has data ──────────────────────────────────────────────────────
+// ── Result cache (1 h TTL) ───────────────────────────────────────────────────
 
-async function checkHasData(
-  db: DuckDBConnection,
-  pathSql: string,
-): Promise<boolean> {
-  try {
-    const rows = await dbAll(
-      db,
-      `SELECT 1 FROM read_parquet(${pathSql}, union_by_name = true) LIMIT 1`,
-    );
-    return rows.length > 0;
-  } catch {
-    return false;
+const CACHE_TTL_MS = 60 * 60 * 1000;
+const _cache = new Map<string, { result: unknown; ts: number }>();
+
+function _cacheKey(input: ClaimsQueryInput): string {
+  return JSON.stringify([
+    [...input.datasets].sort(),
+    [...input.icd10_prefixes].sort(),
+    input.drug_names ? [...input.drug_names].sort() : null,
+    input.regions ? [...input.regions].sort() : null,
+    input.age_min ?? null,
+    input.age_max ?? null,
+    input.sex,
+    input.year_from ?? null,
+    input.year_to ?? null,
+    input.aggregation,
+    input.top_n,
+  ]);
+}
+
+function _cacheGet(key: string): unknown {
+  const e = _cache.get(key);
+  if (!e) return undefined;
+  if (Date.now() - e.ts > CACHE_TTL_MS) {
+    _cache.delete(key);
+    return undefined;
   }
+  return e.result;
+}
+
+function _cacheSet(key: string, result: unknown): void {
+  if (_cache.size >= 100) {
+    const oldest = [..._cache.entries()].sort(([, a], [, b]) => a.ts - b.ts)[0];
+    if (oldest) _cache.delete(oldest[0]);
+  }
+  _cache.set(key, { result, ts: Date.now() });
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
@@ -740,57 +783,44 @@ export async function handleClaimsQuery(
       "Sources: NAMCS/NHAMCS (CDC/NCHS), DataSUS SIH/SIA/SIM (Brazilian MOH). Design log #28.",
   );
 
+  const cacheKey = _cacheKey(input);
+  const cachedResults = _cacheGet(cacheKey);
+
   const db = await getDb();
   const { pathSql, skipRegionWhere } = parquetPaths(input);
-
-  const hasData = await withDbLock(() => checkHasData(db, pathSql));
-  if (!hasData) {
-    return {
-      content: JSON.stringify(
-        {
-          status: "no_data",
-          message:
-            "No Parquet files found in the Azure Blob container. " +
-            "Run the ETL scripts first:\n" +
-            "  python scripts/etl/etl_namcs.py --years 2022\n" +
-            "  python scripts/etl/etl_datasus_sih.py --uf SP --year 2022\n\n" +
-            "See scripts/etl/README.md for full setup.",
-        },
-        null,
-        2,
-      ),
-      audit,
-    };
-  }
-
   const where = buildWhere(input, skipRegionWhere);
   let results: unknown;
 
-  results = await withDbLock(async () => {
-    switch (input.aggregation) {
-      case "prevalence":
-      case "count":
-        return queryPrevalence(db, pathSql, where);
-      case "drug_utilization":
-        return queryDrugUtilization(db, pathSql, where, input.top_n);
-      case "demographics":
-        return queryDemographics(db, pathSql, where);
-      case "comorbidities":
-        return queryComorbidities(
-          db,
-          pathSql,
-          where,
-          input.icd10_prefixes,
-          input.top_n,
-        );
-      case "cost":
-        return queryCost(db, pathSql, where);
-      default:
-        throw new Error(
-          `Unknown aggregation type: ${(input as { aggregation: string }).aggregation}`,
-        );
-    }
-  });
+  if (cachedResults !== undefined) {
+    results = cachedResults;
+  } else {
+    results = await withDbLock(async () => {
+      switch (input.aggregation) {
+        case "prevalence":
+        case "count":
+          return queryPrevalence(db, pathSql, where);
+        case "drug_utilization":
+          return queryDrugUtilization(db, pathSql, where, input.top_n);
+        case "demographics":
+          return queryDemographics(db, pathSql, where);
+        case "comorbidities":
+          return queryComorbidities(
+            db,
+            pathSql,
+            where,
+            input.icd10_prefixes,
+            input.top_n,
+          );
+        case "cost":
+          return queryCost(db, pathSql, where);
+        default:
+          throw new Error(
+            `Unknown aggregation type: ${(input as { aggregation: string }).aggregation}`,
+          );
+      }
+    });
+    _cacheSet(cacheKey, results);
+  }
 
   return {
     content: JSON.stringify(

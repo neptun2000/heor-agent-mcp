@@ -257,19 +257,107 @@ function parquetPaths(input: ClaimsQueryInput): {
     return { pathSql: `[${paths.join(", ")}]`, skipRegionWhere: true };
   }
 
-  // Year-range partition pruning: build one glob per year so DuckDB skips
-  // all files outside the requested range without reading them from Blob Storage.
-  // ** matches zero-or-more path components, covering both flat (ny_sparcs) and
-  // nested (datasus region=XX/) directory structures.
+  // Year-range partition pruning. Two patterns per year cover both storage shapes:
+  //   *.parquet   — flat  (ny_sparcs, meps, mexico_egresos…): year/data.parquet
+  //   */*.parquet — nested (datasus): year/region=SP/data.parquet
+  // Avoids **, which requires at least one sub-directory and returns zero for
+  // flat-structure datasets when the year segment is already in the path prefix.
   if (yearRange) {
-    const paths = yearRange.map(
-      (y) => `'${base}/source_dataset=*/source_year=${y}/**/*.parquet'`,
-    );
+    const paths: string[] = [];
+    for (const y of yearRange) {
+      paths.push(`'${base}/source_dataset=*/source_year=${y}/*.parquet'`);
+      paths.push(`'${base}/source_dataset=*/source_year=${y}/*/*.parquet'`);
+    }
     return { pathSql: `[${paths.join(", ")}]`, skipRegionWhere: false };
   }
 
   return { pathSql: `'${base}/**/*.parquet'`, skipRegionWhere: false };
 }
+
+// ── NY SPARCS CCSR ↔ ICD-10 translation ──────────────────────────────────────
+// The public NY SPARCS Socrata export contains CCSR codes (e.g. END003) in the
+// primary_diag_icd column instead of raw ICD-10 codes. All other datasets store
+// ICD-10. This table maps the 3-char ICD-10 prefix to CCSR so the WHERE clause
+// can use the right code system per dataset.
+const ICD10_TO_CCSR: Record<string, string[]> = {
+  // Endocrine / metabolic
+  E10: ["END004"],
+  E11: ["END003"],
+  E12: ["END003"],
+  E13: ["END005"],
+  E66: ["END007"],
+  E78: ["END001"],
+  E03: ["END002"],
+  E05: ["END009"],
+  // Cardiovascular
+  I10: ["CIR011"],
+  I20: ["CIR009"],
+  I21: ["CIR008"],
+  I25: ["CIR002"],
+  I26: ["CIR018"],
+  I48: ["CIR013"],
+  I49: ["CIR014"],
+  I50: ["CIR019"],
+  I60: ["CIR020"],
+  I61: ["CIR012"],
+  I63: ["CIR007"],
+  I65: ["CIR010"],
+  I70: ["CIR001"],
+  I71: ["CIR015"],
+  I80: ["CIR016"],
+  I82: ["CIR017"],
+  // Respiratory
+  J10: ["RSP015"],
+  J12: ["RSP001"],
+  J13: ["RSP014"],
+  J15: ["RSP005"],
+  J18: ["RSP002"],
+  J44: ["RSP008"],
+  J45: ["RSP003"],
+  J96: ["RSP004"],
+  U07: ["RSP012"],
+  // GI / liver
+  K50: ["GIS011"],
+  K51: ["GIS012"],
+  K70: ["GIS009"],
+  K72: ["GIS007"],
+  K74: ["GIS008"],
+  K80: ["GIS006"],
+  K85: ["GIS014"],
+  K92: ["GIS004"],
+  // Renal / GU
+  N17: ["GEN007"],
+  N18: ["GEN008"],
+  N39: ["GEN003"],
+  N40: ["GEN004"],
+  // Oncology
+  C18: ["NEO004"],
+  C20: ["NEO005"],
+  C34: ["NEO010"],
+  C50: ["NEO011"],
+  C61: ["NEO015"],
+  C67: ["NEO017"],
+  C85: ["NEO027"],
+  C90: ["NEO022"],
+  C91: ["NEO023"],
+  // Neurological / psychiatric
+  F32: ["NVS004"],
+  F41: ["NVS012"],
+  G20: ["NVS001"],
+  G30: ["NVS005"],
+  G35: ["NVS002"],
+  G40: ["NVS003"],
+  // Musculoskeletal
+  M05: ["MUS007"],
+  M06: ["MUS006"],
+  M10: ["MUS009"],
+  M45: ["MUS008"],
+  // Infectious
+  A41: ["INF001"],
+  B20: ["INF003"],
+  // Injury
+  S72: ["INJ001"],
+};
 
 // ── WHERE clause builder (sanitised — all values come from Zod-validated input) ──
 
@@ -299,12 +387,44 @@ function buildWhere(input: ClaimsQueryInput, skipRegion = false): string {
   // Sex (enum — safe)
   if (input.sex !== "all") parts.push(`sex = '${input.sex}'`);
 
-  // ICD-10 prefix — sanitise to [A-Z0-9.] only before inlining
-  const icdParts = input.icd10_prefixes.map((p) => {
-    const safe = p.replace(/[^A-Za-z0-9.]/g, "").toUpperCase();
-    return `primary_diag_icd LIKE '${safe}%'`;
-  });
-  if (icdParts.length > 0) parts.push(`(${icdParts.join(" OR ")})`);
+  // ICD-10 prefix filter. NY SPARCS stores CCSR codes (e.g. END003) not ICD-10,
+  // so translate when ny_sparcs rows are in scope.
+  if (input.icd10_prefixes.length > 0) {
+    const nySparcsOnly =
+      active.length > 0 && active.every((d) => d === "ny_sparcs");
+    const nySparcsIncluded =
+      input.datasets.includes("all") || active.includes("ny_sparcs");
+    const otherIncluded =
+      input.datasets.includes("all") || active.some((d) => d !== "ny_sparcs");
+
+    const icdLikes = input.icd10_prefixes.map((p) => {
+      const safe = p.replace(/[^A-Za-z0-9.]/g, "").toUpperCase();
+      return `primary_diag_icd LIKE '${safe}%'`;
+    });
+    const ccsrCodes = [
+      ...new Set(
+        input.icd10_prefixes.flatMap((p) => {
+          const safe = p.replace(/[^A-Za-z0-9.]/g, "").toUpperCase();
+          return ICD10_TO_CCSR[safe] ?? ICD10_TO_CCSR[safe.slice(0, 3)] ?? [];
+        }),
+      ),
+    ];
+    const ccsrIn =
+      ccsrCodes.length > 0
+        ? `primary_diag_icd IN (${ccsrCodes.map((c) => `'${c}'`).join(",")})`
+        : null;
+
+    if (nySparcsOnly && ccsrIn) {
+      parts.push(ccsrIn);
+    } else if (nySparcsIncluded && otherIncluded && ccsrIn) {
+      parts.push(
+        `((source_dataset = 'ny_sparcs' AND ${ccsrIn})` +
+          ` OR (source_dataset != 'ny_sparcs' AND (${icdLikes.join(" OR ")})))`,
+      );
+    } else {
+      parts.push(`(${icdLikes.join(" OR ")})`);
+    }
+  }
 
   // Region filter — sanitise to [A-Za-z0-9 \-] only before inlining.
   // Skipped when path-based region filtering is active (datasus_sih).

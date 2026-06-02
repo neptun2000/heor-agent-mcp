@@ -27,7 +27,7 @@ const DATASET_VALUES = [
   "namcs", // NCHS National Ambulatory Medical Care Survey (physician office visits)
   "nhamcs_ed", // NCHS NHAMCS Emergency Department, 2011-2022, ~250K visits/yr
   "meps", // AHRQ Medical Expenditure Panel Survey, 2017-2023, ~500K events/yr with costs
-  "ny_sparcs", // NY State inpatient discharges, 2017-2024, ~2M/yr
+  "ny_sparcs", // NY State inpatient discharges, 2017-2022 + 2024 (no 2023), ~2M/yr
   "nhanes", // NCHS health examination survey, 1999-2021, ~10K persons/cycle
   "nhis", // NCHS health interview survey, 2016-2023, ~25K persons/yr
   // Latin America
@@ -386,13 +386,18 @@ function buildWhere(input: ClaimsQueryInput, skipRegion = false): string {
   const parts: string[] = [];
 
   // Dataset filter (values from enum — safe to inline)
+  // Map aliases (brazil_datasus → datasus_sih) so the WHERE matches the actual
+  // source_dataset column value written by the ETL.
   const active = input.datasets.includes("all")
     ? []
     : input.datasets.filter((d) => d !== "all");
-  if (active.length === 1) {
-    parts.push(`source_dataset = '${active[0]}'`);
-  } else if (active.length > 1) {
-    parts.push(`source_dataset IN (${active.map((d) => `'${d}'`).join(",")})`);
+  const activeStorage = [...new Set(active.map(storageDatasetName))];
+  if (activeStorage.length === 1) {
+    parts.push(`source_dataset = '${activeStorage[0]}'`);
+  } else if (activeStorage.length > 1) {
+    parts.push(
+      `source_dataset IN (${activeStorage.map((d) => `'${d}'`).join(",")})`,
+    );
   }
 
   // Year range (integers — safe to inline)
@@ -949,7 +954,7 @@ export const claimsQueryToolSchema = {
         minimum: 2000,
         maximum: 2030,
         description:
-          "meps: 2017-2023 | ny_sparcs: 2017-2024 | nhamcs_ed: 2011-2022 | nhanes: 1999-2021 | nhis: 2019-2023 | ecuador_inec: 2022-2023 | uruguay_eh: 2016-2024 | mexico_egresos: 2018-2025 | colombia_rips: 2018-2023 | brazil_datasus: 2018-2024 | namcs: 2018-2022",
+          "meps: 2017-2023 | ny_sparcs: 2017-2022, 2024 (no 2023) | nhamcs_ed: 2011-2022 | nhanes: 1999-2021 | nhis: 2019-2023 | ecuador_inec: 2022-2023 | uruguay_eh: 2016-2024 | mexico_egresos: 2018-2025 | colombia_rips: 2018-2023 | brazil_datasus/datasus_sih: 2018-2024 | namcs: 2018-2022",
       },
       year_to: { type: "integer", minimum: 2000, maximum: 2030 },
       aggregation: {

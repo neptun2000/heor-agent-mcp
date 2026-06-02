@@ -125,6 +125,7 @@ import {
   handleClaimsQuery,
   claimsQueryToolSchema,
 } from "./tools/claimsQuery.js";
+import { handleQueryAgent, queryAgentToolSchema } from "./tools/queryAgent.js";
 // mssql is loaded via dynamic require() inside claimsQuery.ts to avoid
 // bundling Node.js-only native modules — same pattern as applicationinsights
 import { randomUUID } from "node:crypto";
@@ -294,7 +295,7 @@ function createMcpServer(
       // data.claims_query is only registered when Azure Blob Storage is configured
       // (internal deployment only). Not exposed in the public npm package.
       ...(process.env.AZURE_STORAGE_CONNECTION_STRING
-        ? [claimsQueryToolSchema]
+        ? [claimsQueryToolSchema, queryAgentToolSchema]
         : []),
     ],
   }));
@@ -457,6 +458,32 @@ function createMcpServer(
                   typeof claimsResult.content === "string"
                     ? claimsResult.content
                     : JSON.stringify(claimsResult.content, null, 2),
+              },
+            ],
+          };
+          break;
+        }
+        case "data.query_agent": {
+          if (!process.env.AZURE_STORAGE_CONNECTION_STRING) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "data.query_agent is not available in this deployment.",
+                },
+              ],
+              isError: true,
+            };
+          }
+          const qaResult = await handleQueryAgent(args);
+          result = {
+            content: [
+              {
+                type: "text",
+                text:
+                  typeof qaResult.content === "string"
+                    ? qaResult.content
+                    : JSON.stringify(qaResult.content, null, 2),
               },
             ],
           };

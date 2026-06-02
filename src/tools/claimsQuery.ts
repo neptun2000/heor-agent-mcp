@@ -32,11 +32,12 @@ const DATASET_VALUES = [
   "nhis", // NCHS health interview survey, 2016-2023, ~25K persons/yr
   // Latin America
   "ecuador_inec", // Ecuador INEC hospital discharges, 2022-2023, ~1.1M/yr
-  "uruguay_eh", // Uruguay MSP egresos hospitalarios, 2013-2024, ~200K/yr
+  "uruguay_eh", // Uruguay Encuesta de Hogares household SURVEY — NO ICD codes; ICD queries return zero. Visit-frequency analysis only.
   "mexico_egresos", // Mexico DGIS egresos hospitalarios, 2018-2025, multi-million/yr
   "brazil_datasus", // Brazil DataSUS SIH inpatient, multiple years
   "chile_deis", // Chile DEIS egresos hospitalarios, 2001-2023, ~1.5M/yr
-  "colombia_rips", // Colombia RIPS health services, 2009-2023
+  "colombia_rips", // Colombia RIPS health services 2018-2023 — secondary_diags field sparse; comorbidity queries return empty
+  "argentina_ba", // Argentina Buenos Aires hospital discharges, 2016-2020
   // Legacy names kept for backward compat
   "datasus_sih",
   "datasus_sia",
@@ -64,7 +65,16 @@ const ClaimsQuerySchema = z.object({
   age_min: z.number().int().min(0).max(130).optional(),
   age_max: z.number().int().min(0).max(130).optional(),
   sex: z.enum(["male", "female", "all"]).default("all"),
-  year_from: z.number().int().min(2000).max(2030).optional(),
+  year_from: z
+    .number()
+    .int()
+    .min(2000)
+    .max(2030)
+    .optional()
+    .describe(
+      "Start year (inclusive). Always specify for comorbidities/drug_utilization on large datasets " +
+        "(colombia_rips, mexico_egresos) — unfiltered scans time out at 90s.",
+    ),
   year_to: z.number().int().min(2000).max(2030).optional(),
   aggregation: z
     .enum([
@@ -93,8 +103,44 @@ let _instance: DuckDBInstance | null = null;
 let _conn: DuckDBConnection | null = null;
 let _dbInitializing: Promise<DuckDBConnection> | null = null;
 
+// Serialize all DuckDB queries — concurrent large scans on the same in-process
+// DuckDB instance exhaust Azure App Service memory (1.75 GB limit) and crash.
+// The timeout rejects the caller after 90s but keeps the lock until the underlying
+// DuckDB query finishes — no orphaned concurrent scans, no OOM.
+const QUERY_TIMEOUT_MS = 90_000;
+let _queryQueue: Promise<unknown> = Promise.resolve();
+export function withDbLock<T>(fn: () => Promise<T>): Promise<T> {
+  const lockPromise = _queryQueue.then(() => fn());
+  _queryQueue = lockPromise.catch(() => {});
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () =>
+        reject(
+          new Error(
+            "DuckDB query timed out (90s). Add year_from/year_to to limit the scan, " +
+              "or reduce the date range.",
+          ),
+        ),
+      QUERY_TIMEOUT_MS,
+    );
+    lockPromise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e: unknown) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
 function coerceBigInt(v: unknown): unknown {
-  if (typeof v === "bigint") return Number(v);
+  if (typeof v === "bigint") {
+    if (v > BigInt(Number.MAX_SAFE_INTEGER)) return String(v);
+    return Number(v);
+  }
   return v;
 }
 
@@ -120,6 +166,9 @@ async function initDb(connStr: string): Promise<DuckDBConnection> {
     // already installed — ok
   }
   await conn.run("LOAD azure;");
+  // Cap memory to 1 GB — Azure App Service B2 has 1.75 GB total; leave headroom for Node.js
+  await conn.run("SET memory_limit = '1GB';");
+  await conn.run("SET threads = 2;");
   const safe = connStr.replace(/'/g, "''");
   await conn.run(`SET azure_storage_connection_string = '${safe}';`);
   return conn;
@@ -138,17 +187,37 @@ async function getDb(): Promise<DuckDBConnection> {
     );
   }
 
-  _dbInitializing = initDb(connStr).then((conn) => {
-    _conn = conn;
-    _dbInitializing = null;
-    return conn;
-  });
+  _dbInitializing = initDb(connStr)
+    .then((conn) => {
+      _conn = conn;
+      _dbInitializing = null;
+      return conn;
+    })
+    .catch((e: unknown) => {
+      _dbInitializing = null;
+      throw e;
+    });
   return _dbInitializing;
 }
 
 // ── Parquet path helpers ──────────────────────────────────────────────────────
 
 const DATASUS_NAMES = new Set(["datasus_sih", "brazil_datasus"]);
+
+// Build explicit year list for partition pruning. Querying year_from=2021,year_to=2023
+// produces paths like source_year=2021/**, source_year=2022/**, source_year=2023/**
+// so DuckDB never downloads files outside the requested range.
+function buildYearRange(
+  yearFrom: number | undefined,
+  yearTo: number | undefined,
+): number[] | null {
+  if (yearFrom === undefined && yearTo === undefined) return null;
+  const from = yearFrom ?? 2000;
+  const to = yearTo ?? 2030;
+  const span = to - from + 1;
+  if (span <= 0 || span > 50) return null;
+  return Array.from({ length: span }, (_, i) => from + i);
+}
 
 function parquetPaths(input: ClaimsQueryInput): {
   pathSql: string;
@@ -157,24 +226,46 @@ function parquetPaths(input: ClaimsQueryInput): {
   const container = process.env.AZURE_STORAGE_CONTAINER ?? "heor-claims";
   const base = `azure://${container}/claims_visits`;
 
-  // datasus_sih stores `region` as a Hive path segment, not a data column.
-  // With hive_partitioning=false that column is unavailable, so WHERE region='SP'
-  // always returns zero rows. When querying datasus_sih exclusively with a
-  // region filter, use a globbed path that encodes the region in the directory.
   const active = input.datasets.includes("all")
     ? []
     : input.datasets.filter((d) => d !== "all");
   const isDatasusOnly =
     active.length > 0 && active.every((d) => DATASUS_NAMES.has(d));
 
-  if (isDatasusOnly && input.regions && input.regions.length > 0) {
-    const pathList = input.regions
-      .map((r) => {
-        const safeR = r.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
-        return `'${base}/source_dataset=datasus_sih/*/region=${safeR}/*.parquet'`;
-      })
-      .join(", ");
-    return { pathSql: `[${pathList}]`, skipRegionWhere: true };
+  const yearRange = buildYearRange(input.year_from, input.year_to);
+
+  // datasus_sih stores `region` as a Hive path segment, not a data column.
+  // With hive_partitioning=false that column is unavailable, so WHERE region='SP'
+  // always returns zero rows. Use path-based filtering whenever regions are requested.
+  if (
+    (isDatasusOnly || input.datasets.includes("all")) &&
+    input.regions != null &&
+    input.regions.length > 0
+  ) {
+    const paths: string[] = [];
+    for (const r of input.regions) {
+      const safeR = r.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+      const yearSegs = yearRange
+        ? yearRange.map((y) => `source_year=${y}`)
+        : ["*"];
+      for (const yearSeg of yearSegs) {
+        paths.push(
+          `'${base}/source_dataset=datasus_sih/${yearSeg}/region=${safeR}/*.parquet'`,
+        );
+      }
+    }
+    return { pathSql: `[${paths.join(", ")}]`, skipRegionWhere: true };
+  }
+
+  // Year-range partition pruning: build one glob per year so DuckDB skips
+  // all files outside the requested range without reading them from Blob Storage.
+  // ** matches zero-or-more path components, covering both flat (ny_sparcs) and
+  // nested (datasus region=XX/) directory structures.
+  if (yearRange) {
+    const paths = yearRange.map(
+      (y) => `'${base}/source_dataset=*/source_year=${y}/**/*.parquet'`,
+    );
+    return { pathSql: `[${paths.join(", ")}]`, skipRegionWhere: false };
   }
 
   return { pathSql: `'${base}/**/*.parquet'`, skipRegionWhere: false };
@@ -237,7 +328,7 @@ function buildWhere(input: ClaimsQueryInput, skipRegion = false): string {
     parts.push(`(${drugParts.join(" OR ")})`);
   }
 
-  return parts.length > 0 ? `WHERE ${parts.join(" AND ")}` : "";
+  return parts.length > 0 ? `WHERE ${parts.join(" AND ")}` : "WHERE 1=1";
 }
 
 // Exclusion prefixes for comorbidities (exclude the queried condition itself)
@@ -532,7 +623,7 @@ export async function handleClaimsQuery(
   const db = await getDb();
   const { pathSql, skipRegionWhere } = parquetPaths(input);
 
-  const hasData = await checkHasData(db, pathSql);
+  const hasData = await withDbLock(() => checkHasData(db, pathSql));
   if (!hasData) {
     return {
       content: JSON.stringify(
@@ -555,30 +646,31 @@ export async function handleClaimsQuery(
   const where = buildWhere(input, skipRegionWhere);
   let results: unknown;
 
-  switch (input.aggregation) {
-    case "prevalence":
-    case "count":
-      results = await queryPrevalence(db, pathSql, where);
-      break;
-    case "drug_utilization":
-      results = await queryDrugUtilization(db, pathSql, where, input.top_n);
-      break;
-    case "demographics":
-      results = await queryDemographics(db, pathSql, where);
-      break;
-    case "comorbidities":
-      results = await queryComorbidities(
-        db,
-        pathSql,
-        where,
-        input.icd10_prefixes,
-        input.top_n,
-      );
-      break;
-    case "cost":
-      results = await queryCost(db, pathSql, where);
-      break;
-  }
+  results = await withDbLock(async () => {
+    switch (input.aggregation) {
+      case "prevalence":
+      case "count":
+        return queryPrevalence(db, pathSql, where);
+      case "drug_utilization":
+        return queryDrugUtilization(db, pathSql, where, input.top_n);
+      case "demographics":
+        return queryDemographics(db, pathSql, where);
+      case "comorbidities":
+        return queryComorbidities(
+          db,
+          pathSql,
+          where,
+          input.icd10_prefixes,
+          input.top_n,
+        );
+      case "cost":
+        return queryCost(db, pathSql, where);
+      default:
+        throw new Error(
+          `Unknown aggregation type: ${(input as { aggregation: string }).aggregation}`,
+        );
+    }
+  });
 
   return {
     content: JSON.stringify(
@@ -607,7 +699,7 @@ export async function handleClaimsQuery(
           "ny_sparcs: New York State inpatient discharges only, cost in USD (total_cost_local).",
           "brazil_datasus: inpatient admissions (datasus_sih), cost in BRL (total_cost_local).",
           "nhanes/nhis: visit_type='survey_examination', one row per person per cycle, not per visit.",
-          "uruguay_eh: age is group midpoint (not exact age), no cost data.",
+          "uruguay_eh (2016-2024): age is group midpoint (not exact age), no cost data.",
           "Counts < 5 are suppressed per NCHS disclosure rules.",
         ],
       },
@@ -627,9 +719,9 @@ export const claimsQueryToolSchema = {
     "US datasets: meps (expenditure survey, 2017-2023, costs in USD), namcs (physician office visits), " +
     "nhamcs_ed (ED visits 2011-2022), ny_sparcs (NY inpatient 2017-2024, costs in USD), " +
     "nhanes (health examination survey 1999-2021, person-level), nhis (health interview survey 2016-2023). " +
-    "Latin America: ecuador_inec (hospital discharges 2022-2023), uruguay_eh (2013-2024), " +
-    "mexico_egresos (2018-2025), brazil_datasus (inpatient, costs in BRL), " +
-    "chile_deis (2001-2023), colombia_rips (health services 2009-2023). " +
+    "Latin America: ecuador_inec (hospital discharges 2022-2023), uruguay_eh (2016-2024), " +
+    "mexico_egresos (2018-2025), brazil_datasus (inpatient 2018-2024, costs in BRL), " +
+    "colombia_rips (health services 2018-2023). " +
     "Common schema: age_years, sex, country_code, region, visit_type, primary_diag_icd, " +
     "secondary_diags (semicolon-separated ICD-10), drugs_mentioned (semicolon-separated names), " +
     "visit_weight, total_cost_local, local_currency, source_dataset, source_year. " +
@@ -701,7 +793,7 @@ export const claimsQueryToolSchema = {
         minimum: 2000,
         maximum: 2030,
         description:
-          "meps: 2017-2023 | ny_sparcs: 2017-2024 | nhamcs_ed: 2011-2022 | nhanes: 1999-2021 | nhis: 2016-2023 | ecuador_inec: 2022-2023 | uruguay_eh: 2013-2024 | mexico_egresos: 2018-2025 | chile_deis: 2001-2023 | colombia_rips: 2009-2023 | brazil_datasus: 2018-2021",
+          "meps: 2017-2023 | ny_sparcs: 2017-2024 | nhamcs_ed: 2011-2022 | nhanes: 1999-2021 | nhis: 2019-2023 | ecuador_inec: 2022-2023 | uruguay_eh: 2016-2024 | mexico_egresos: 2018-2025 | colombia_rips: 2018-2023 | brazil_datasus: 2018-2024 | namcs: 2018-2022",
       },
       year_to: { type: "integer", minimum: 2000, maximum: 2030 },
       aggregation: {

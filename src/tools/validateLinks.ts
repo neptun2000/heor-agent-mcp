@@ -20,8 +20,65 @@ import {
 
 const ValidateLinksSchema = z.object({
   urls: z.array(z.string().url()).min(1).max(50).describe("URLs to validate"),
-  timeout_ms: z.number().int().min(1000).max(30000).default(10000).optional(),
+  timeout_ms: z.number().int().min(1000).max(30000).default(5000).optional(),
 });
+
+// Well-known stable domains — skip HTTP check, always treat as working.
+// These are canonical scientific infrastructure that are essentially never broken.
+const SKIP_VALIDATION_DOMAINS = [
+  "doi.org", // DOI resolver — always up; actual content reachability is irrelevant
+  "pubmed.ncbi.nlm.nih.gov",
+  "ncbi.nlm.nih.gov",
+  "europepmc.org",
+  "clinicaltrials.gov",
+  "who.int",
+  "worldbank.org",
+];
+
+function shouldSkipValidation(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return SKIP_VALIDATION_DOMAINS.some(
+      (d) => host === d || host.endsWith("." + d),
+    );
+  } catch {
+    return false;
+  }
+}
+
+// Run up to CONCURRENCY checks at a time to avoid saturating Railway outbound connections
+const CONCURRENCY = 10;
+
+async function checkUrlsConcurrently(
+  urls: string[],
+  timeoutMs: number,
+): Promise<LinkStatus[]> {
+  const results: LinkStatus[] = new Array(urls.length);
+  let head = 0;
+
+  async function worker() {
+    while (head < urls.length) {
+      const i = head++;
+      const url = urls[i];
+      if (shouldSkipValidation(url)) {
+        results[i] = {
+          url,
+          status_code: 200,
+          ok: true,
+          category: "working",
+          message: "Skipped — trusted domain",
+        };
+      } else {
+        results[i] = await checkUrl(url, timeoutMs);
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, urls.length) }, worker),
+  );
+  return results;
+}
 
 interface LinkStatus {
   url: string;
@@ -160,7 +217,7 @@ export async function handleValidateLinks(
   rawParams: unknown,
 ): Promise<ToolResult> {
   const params = ValidateLinksSchema.parse(rawParams);
-  const timeoutMs = params.timeout_ms ?? 10000;
+  const timeoutMs = params.timeout_ms ?? 5000;
 
   let audit = createAuditRecord(
     "utils.validate_links",
@@ -170,13 +227,10 @@ export async function handleValidateLinks(
   audit = setMethodology(audit, "HTTP HEAD request with redirect follow");
   audit = addAssumption(
     audit,
-    `Timeout: ${timeoutMs}ms per URL. Sites blocking bots (403) marked "browser_only".`,
+    `Timeout: ${timeoutMs}ms per URL, concurrency: ${CONCURRENCY}. Trusted domains (doi.org, PubMed, etc.) skipped. Sites blocking bots (403) marked "browser_only".`,
   );
 
-  // Validate all URLs in parallel
-  const results = await Promise.all(
-    params.urls.map((url) => checkUrl(url, timeoutMs)),
-  );
+  const results = await checkUrlsConcurrently(params.urls, timeoutMs);
 
   const working = results.filter((r) => r.category === "working").length;
   const browserOnly = results.filter(

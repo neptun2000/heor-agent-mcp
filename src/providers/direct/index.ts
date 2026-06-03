@@ -69,15 +69,7 @@ import {
 import { buildSourceSelectionTable } from "../../sources/registry.js";
 
 function getAllSources(): DataSource[] {
-  const base: DataSource[] = [
-    "pubmed",
-    "clinicaltrials",
-    "biorxiv",
-    "chembl",
-    "wiley",
-  ];
-  if (process.env.ELSEVIER_API_KEY) base.push("embase");
-  return base;
+  return ["pubmed", "clinicaltrials", "biorxiv", "chembl", "wiley", "embase"];
 }
 
 const FETCHERS: Record<

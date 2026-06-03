@@ -1,4 +1,14 @@
 #!/usr/bin/env node
+import { setGlobalDispatcher, Agent } from "undici";
+
+setGlobalDispatcher(
+  new Agent({
+    keepAliveTimeout: 30_000, // keep connections alive 30s
+    keepAliveMaxTimeout: 60_000, // max 60s
+    connections: 20, // pool up to 20 connections per origin
+  }),
+);
+
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -455,10 +465,7 @@ function createMcpServer(
               isError: true,
             };
           }
-          const claimsResult = await handleClaimsQuery(
-            args,
-            requestSignal,
-          );
+          const claimsResult = await handleClaimsQuery(args, requestSignal);
           result = {
             content: [
               {

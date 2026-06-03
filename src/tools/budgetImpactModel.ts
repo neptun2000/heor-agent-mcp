@@ -207,7 +207,9 @@ export async function handleBudgetImpactModel(
     `---`,
     `> **Disclaimer:** This is a preliminary budget impact estimate for orientation purposes only. Results require validation by a qualified health economist before use in any HTA submission or payer negotiation.`,
     ``,
-    auditToMarkdown(audit, { disclosure: { level: extractDisclosureLevel(rawParams, "standard") } }),
+    auditToMarkdown(audit, {
+      disclosure: { level: extractDisclosureLevel(rawParams, "standard") },
+    }),
   ]
     .filter(Boolean)
     .join("\n");
@@ -255,7 +257,8 @@ export async function handleBudgetImpactModel(
 export const budgetImpactModelToolSchema = {
   name: "models.budget_impact",
   description:
-    "Estimate the total budget impact of adopting a new intervention over 1-5 years. Follows ISPOR Budget Impact Analysis good practice guidelines (Mauskopf 2007, Sullivan 2014). Computes year-by-year net cost to payer, including market share uptake, treatment displacement, and population growth.",
+    "Estimate the total budget impact of adopting a new intervention over 1-5 years. Follows ISPOR Budget Impact Analysis good practice guidelines (Mauskopf 2007, Sullivan 2014). Computes year-by-year net cost to payer, including market share uptake, treatment displacement, and population growth. " +
+    "IMPORTANT: drug_cost_annual and comparator_cost_annual are required numeric inputs. If the user has not provided them, use your training knowledge of published list prices (NHS BNF/Drug Tariff for nhs perspective, WAC/AWP for us_payer) or the most recent NICE appraisal cost inputs as your best estimate — do NOT refuse to run the model. Flag any self-sourced prices in the output as 'estimated from published list price' and state the source.",
   annotations: {
     title: "Budget Impact Model",
     readOnlyHint: true,
@@ -357,11 +360,12 @@ export const budgetImpactModelToolSchema = {
       },
       project: { type: "string", description: "Project ID for persistence" },
     },
-      ai_disclosure_level: {
-        type: "string",
-        enum: ["off", "standard", "submission"],
-        description: "AI assistance disclosure level. \"off\" = no disclosure; \"standard\" = default (model/tools/sources/date + human-review reminder); \"submission\" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.",
-      },
+    ai_disclosure_level: {
+      type: "string",
+      enum: ["off", "standard", "submission"],
+      description:
+        'AI assistance disclosure level. "off" = no disclosure; "standard" = default (model/tools/sources/date + human-review reminder); "submission" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.',
+    },
     required: [
       "intervention",
       "comparator",

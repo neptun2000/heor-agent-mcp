@@ -157,10 +157,13 @@ export class DirectProvider implements IProvider {
       google_scholar: "SERPAPI_KEY",
     };
     for (const [src, envVar] of Object.entries(enterpriseKeys)) {
+      // embase key may be injected per-request from the web tier even when not in env
+      const hasInjectedKey = src === "embase" && !!params._elsevier_api_key;
       if (
         sources.includes(src as DataSource) &&
         !process.env[envVar] &&
-        !proxyActive
+        !proxyActive &&
+        !hasInjectedKey
       ) {
         audit = addWarning(
           audit,

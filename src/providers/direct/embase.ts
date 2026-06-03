@@ -1,21 +1,23 @@
 import type { LiteratureResult } from "../types.js";
 
-const BASE = "https://api.elsevier.com/content/search/embase";
+// EMBASE records are indexed in Scopus and accessed via the Scopus Search API
+// with dbId=embase. The standalone /content/search/embase endpoint returns 404.
+const BASE = "https://api.elsevier.com/content/search/scopus";
 
-interface ElsevierEntry {
+interface ScopusEntry {
   "dc:title"?: string;
   "dc:creator"?: string;
+  "prism:publicationName"?: string;
   "prism:coverDate"?: string;
   "dc:description"?: string;
-  "prism:url"?: string;
   "prism:doi"?: string;
-  pii?: string;
   subtypeDescription?: string;
+  link?: Array<{ "@ref": string; "@href": string }>;
 }
 
-interface ElsevierResponse {
+interface ScopusResponse {
   "search-results"?: {
-    entry?: ElsevierEntry[];
+    entry?: ScopusEntry[];
     "opensearch:totalResults"?: string;
   };
 }
@@ -27,35 +29,44 @@ export async function fetchEmbase(
   const apiKey = process.env.ELSEVIER_API_KEY;
   if (!apiKey) return [];
 
+  const instToken = process.env.ELSEVIER_INST_TOKEN;
+  const headers: Record<string, string> = {
+    "X-ELS-APIKey": apiKey,
+    Accept: "application/json",
+  };
+  if (instToken) headers["X-ELS-Insttoken"] = instToken;
+
   try {
-    const url = `${BASE}?query=${encodeURIComponent(query)}&count=${maxResults}&field=title,creator,coverDate,description,url,doi,pii,subtypeDescription`;
-    const res = await fetch(url, {
-      headers: {
-        "X-ELS-APIKey": apiKey,
-        Accept: "application/json",
-      },
+    const params = new URLSearchParams({
+      query,
+      count: String(maxResults),
+      dbId: "embase",
+      field: "title,creator,publicationName,coverDate,description,doi,subtypeDescription,link",
+    });
+    const res = await fetch(`${BASE}?${params}`, {
+      headers,
       signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) return [];
 
-    const data = (await res.json()) as ElsevierResponse;
+    const data = (await res.json()) as ScopusResponse;
     const entries = data["search-results"]?.entry ?? [];
 
     return entries
       .filter((e) => e["dc:title"])
       .map((e, i) => {
         const doi = e["prism:doi"];
-        const pii = e["pii"];
-        const id = doi ?? pii ?? `embase_${i}`;
+        const scopusLink = e.link?.find((l) => l["@ref"] === "scopus")?.["@href"];
+        const url = doi ? `https://doi.org/${doi}` : (scopusLink ?? "");
         return {
-          id: `embase_${id}`,
+          id: `embase_${doi ?? scopusLink ?? i}`,
           source: "embase" as const,
           title: e["dc:title"] ?? "",
           authors: e["dc:creator"] ? [e["dc:creator"]] : [],
           date: e["prism:coverDate"] ?? "",
           study_type: mapSubtype(e["subtypeDescription"]),
           abstract: e["dc:description"] ?? "",
-          url: doi ? `https://doi.org/${doi}` : (e["prism:url"] ?? ""),
+          url,
         };
       });
   } catch {

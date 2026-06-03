@@ -49,7 +49,10 @@ export async function fetchEmbase(
       headers,
       signal: AbortSignal.timeout(15_000),
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`Scopus API ${res.status}: ${body.slice(0, 200)}`);
+    }
 
     const data = (await res.json()) as ScopusResponse;
     const entries = data["search-results"]?.entry ?? [];

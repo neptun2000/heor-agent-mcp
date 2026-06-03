@@ -913,18 +913,6 @@ export async function handleClaimsQuery(
           sex: input.sex,
         },
         results,
-        data_notes: [
-          "Survey data (meps, namcs, nhamcs_ed, nhanes, nhis): visit_weight = sampling weight for national estimates. Apply when computing population-level rates.",
-          "Census data (ny_sparcs, ecuador_inec, uruguay_eh, mexico_egresos, brazil_datasus, chile_deis): record count = actual events, visit_weight is null.",
-          "meps: US nationwide, covers inpatient/ER/office/prescriptions, has cost in USD (total_cost_local).",
-          "ny_sparcs: NY State inpatient discharges, cost in USD. CODING NOTE: public Socrata export uses CCSR codes — the tool auto-translates your ICD-10 prefixes (e.g. E11→END003) so always pass ICD-10, never CCSR directly.",
-          "brazil_datasus: inpatient admissions (datasus_sih), cost in BRL. CODING NOTE: T2D (E11) rarely coded as principal diagnosis — complications coded under complication ICD (e.g. N18, I63) with E11 as secondary. Use data.query_agent for Brazil T2D burden, not direct E11 count.",
-          "colombia_rips: secondary_diags field sparse — comorbidity queries return empty.",
-          "mexico_egresos: secondary_diags not populated — comorbidity queries return empty.",
-          "nhanes/nhis: visit_type='survey_examination', one row per person per cycle, not per visit.",
-          "uruguay_eh: household survey — NO ICD codes; ICD queries return zero. Visit-frequency analysis only.",
-          "Counts < 5 are suppressed per NCHS disclosure rules.",
-        ],
       },
       null,
       2,
@@ -938,14 +926,16 @@ export async function handleClaimsQuery(
 export const claimsQueryToolSchema = {
   name: "data.claims_query",
   description:
-    "Query real-world claims and survey data across 12 datasets spanning the US and Latin America. " +
-    "US datasets: meps (expenditure survey, 2017-2023, costs in USD), namcs (physician office visits), " +
+    "Query real-world claims and survey data across 14 datasets spanning the US and Latin America. " +
+    "US datasets: meps (expenditure survey, 2017-2023, costs in USD), namcs (physician office visits 2018-2022), " +
     "nhamcs_ed (ED visits 2011-2022), ny_sparcs (NY inpatient 2017-2024, costs in USD), " +
-    "nhanes (health examination survey 1999-2021, person-level), nhis (health interview survey 2016-2023). " +
-    "Latin America: ecuador_inec (hospital discharges 2022-2023), uruguay_eh (2016-2024), " +
+    "nhanes (health examination survey 1999-2021, person-level), nhis (health interview survey 2019-2023), " +
+    "wa_chars (Washington State inpatient+observation 2016-2024, ~700K/yr, ICD-10-CM primary only). " +
+    "Latin America: ecuador_inec (hospital discharges 2022-2023), uruguay_eh (2013-2024), " +
     "mexico_egresos (2018-2025), brazil_datasus (inpatient 2018-2024, costs in BRL), " +
     "chile_deis (hospital discharges 2018-2024, ~1.6M/yr), " +
-    "colombia_rips (health services 2018-2023). " +
+    "colombia_rips (health services 2018-2023), " +
+    "argentina_ba (Buenos Aires province inpatient 2016-2020). " +
     "Common schema: age_years, sex, country_code, region, visit_type, primary_diag_icd (ICD-10), " +
     "secondary_diags (semicolon-separated ICD-10), drugs_mentioned (semicolon-separated names), " +
     "visit_weight, total_cost_local, local_currency, source_dataset, source_year. " +
@@ -986,6 +976,8 @@ export const claimsQueryToolSchema = {
             "brazil_datasus",
             "chile_deis",
             "colombia_rips",
+            "wa_chars",
+            "argentina_deis",
             "datasus_sih",
             "datasus_sia",
             "datasus_sim",

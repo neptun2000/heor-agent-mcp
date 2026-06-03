@@ -69,7 +69,8 @@ import {
 import { buildSourceSelectionTable } from "../../sources/registry.js";
 
 function getAllSources(): DataSource[] {
-  return ["pubmed", "clinicaltrials", "biorxiv", "chembl", "wiley", "embase"];
+  // embase is fetched directly by the Azure web tier (Elsevier blocks Railway IPs)
+  return ["pubmed", "clinicaltrials", "biorxiv", "chembl", "wiley"];
 }
 
 const FETCHERS: Record<

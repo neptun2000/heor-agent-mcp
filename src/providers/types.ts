@@ -78,6 +78,7 @@ export interface LiteratureSearchParams {
   output_format?: OutputFormat;
   project?: string;
   runs?: number;
+  _elsevier_api_key?: string;
 }
 
 export interface CEModelParams {

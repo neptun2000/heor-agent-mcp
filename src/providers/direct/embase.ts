@@ -25,8 +25,9 @@ interface ScopusResponse {
 export async function fetchEmbase(
   query: string,
   maxResults: number,
+  injectedApiKey?: string,
 ): Promise<LiteratureResult[]> {
-  const apiKey = process.env.ELSEVIER_API_KEY;
+  const apiKey = injectedApiKey ?? process.env.ELSEVIER_API_KEY;
   if (!apiKey) return [];
 
   const instToken = process.env.ELSEVIER_INST_TOKEN;
@@ -41,7 +42,8 @@ export async function fetchEmbase(
       query,
       count: String(maxResults),
       dbId: "embase",
-      field: "title,creator,publicationName,coverDate,description,doi,subtypeDescription,link",
+      field:
+        "title,creator,publicationName,coverDate,description,doi,subtypeDescription,link",
     });
     const res = await fetch(`${BASE}?${params}`, {
       headers,
@@ -56,7 +58,9 @@ export async function fetchEmbase(
       .filter((e) => e["dc:title"])
       .map((e, i) => {
         const doi = e["prism:doi"];
-        const scopusLink = e.link?.find((l) => l["@ref"] === "scopus")?.["@href"];
+        const scopusLink = e.link?.find((l) => l["@ref"] === "scopus")?.[
+          "@href"
+        ];
         const url = doi ? `https://doi.org/${doi}` : (scopusLink ?? "");
         return {
           id: `embase_${doi ?? scopusLink ?? i}`,

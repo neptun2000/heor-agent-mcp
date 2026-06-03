@@ -180,7 +180,14 @@ export class DirectProvider implements IProvider {
       const fetchPromises = sources.map(async (source) => {
         const start = Date.now();
         try {
-          const results = await FETCHERS[source](params.query, maxPerSource);
+          const results =
+            source === "embase" && params._elsevier_api_key
+              ? await fetchEmbase(
+                  params.query,
+                  maxPerSource,
+                  params._elsevier_api_key,
+                )
+              : await FETCHERS[source](params.query, maxPerSource);
           const filtered = params.date_from
             ? results.filter((r) => !r.date || r.date >= params.date_from!)
             : results;

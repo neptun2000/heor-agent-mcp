@@ -167,6 +167,13 @@ function resolveSourceAliases(params: unknown): unknown {
 export async function handleLiteratureSearch(
   rawParams: unknown,
 ): Promise<ToolResult> {
+  const elsevierApiKey =
+    typeof rawParams === "object" && rawParams !== null
+      ? ((rawParams as Record<string, unknown>)._elsevier_api_key as
+          | string
+          | undefined)
+      : undefined;
+
   const aliased = resolveSourceAliases(rawParams);
   const result = LiteratureSearchSchema.safeParse(aliased);
   if (!result.success) {
@@ -196,7 +203,10 @@ export async function handleLiteratureSearch(
     throw new Error(messages.join("\n"));
   }
   const provider = createProvider();
-  return provider.searchLiterature(result.data);
+  return provider.searchLiterature({
+    ...result.data,
+    _elsevier_api_key: elsevierApiKey,
+  });
 }
 
 export const literatureSearchToolSchema = {

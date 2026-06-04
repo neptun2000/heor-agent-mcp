@@ -69,6 +69,25 @@ describe("htaDossierToolSchema — MFN fields", () => {
   });
 });
 
+import { governanceSelfCheckToolSchema } from "../../src/tools/governanceSelfCheck.js";
+
+describe("governance.self_check schema discoverability", () => {
+  it("exposes mode, workflow_description, probes, audit_record, ai_disclosure_level in inputSchema", () => {
+    const props = governanceSelfCheckToolSchema.inputSchema
+      .properties as Record<string, unknown>;
+    for (const key of [
+      "mode",
+      "workflow_description",
+      "context",
+      "probes",
+      "audit_record",
+      "ai_disclosure_level",
+    ]) {
+      expect(props[key]).toBeDefined();
+    }
+  });
+});
+
 describe("htaDossierToolSchema — pipe-in fields from other tools", () => {
   it("exposes pv_classification (pipe from pv_classify)", () => {
     expect(props(htaDossierToolSchema)).toHaveProperty("pv_classification");

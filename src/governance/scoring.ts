@@ -1,4 +1,6 @@
 // heor-agent-mcp/src/governance/scoring.ts
+import type { AuditRecord } from "../audit/types.js";
+
 export type Rag = "green" | "amber" | "red" | "insufficient";
 export type ProbeAnswer = "yes" | "no" | "partial" | null | undefined;
 export type UseCase =
@@ -61,4 +63,42 @@ export function aggregateVerdict(rags: Rag[], useCase: UseCase): string {
       : "Adequate with gaps — resolve ambers before use";
   }
   return "Strong governance posture";
+}
+
+export interface DerivedProbes {
+  transparency: ProbeAnswer;
+  /** citation_validation can be a fully-scored Rag when provably absent (no sources → "red"). */
+  citation_validation: ProbeAnswer | Rag;
+  auditability: ProbeAnswer;
+}
+
+/**
+ * Honestly derive ONLY the dimensions a trace can evidence (1, 2, 6).
+ * Human-oversight, PHI, and bias cannot be proven from a trace → caller leaves them null.
+ */
+export function deriveFromAudit(audit: AuditRecord): DerivedProbes {
+  const hasCore = Boolean(audit.tool && audit.timestamp);
+
+  const transparency: ProbeAnswer = hasCore
+    ? audit.methodology && audit.methodology.trim().length > 0
+      ? "yes"
+      : "partial"
+    : null;
+
+  const calledValidate = audit.tools_called.some(
+    (t) => t.name === "utils.validate_links" || t.name === "validate_links",
+  );
+  const hasSources = audit.sources_queried.length > 0;
+  const citation_validation: ProbeAnswer | Rag =
+    calledValidate && hasSources ? "yes" : hasSources ? "partial" : "red";
+
+  const auditability: ProbeAnswer =
+    audit.timestamp &&
+    (audit.tools_called.length > 0 || audit.sources_queried.length > 0)
+      ? "yes"
+      : audit.timestamp
+        ? "partial"
+        : null;
+
+  return { transparency, citation_validation, auditability };
 }

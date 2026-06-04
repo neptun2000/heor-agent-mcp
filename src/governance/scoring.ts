@@ -67,8 +67,7 @@ export function aggregateVerdict(rags: Rag[], useCase: UseCase): string {
 
 export interface DerivedProbes {
   transparency: ProbeAnswer;
-  /** citation_validation can be a fully-scored Rag when provably absent (no sources → "red"). */
-  citation_validation: ProbeAnswer | Rag;
+  citation_validation: ProbeAnswer;
   auditability: ProbeAnswer;
 }
 
@@ -89,8 +88,8 @@ export function deriveFromAudit(audit: AuditRecord): DerivedProbes {
     (t) => t.name === "utils.validate_links" || t.name === "validate_links",
   );
   const hasSources = audit.sources_queried.length > 0;
-  const citation_validation: ProbeAnswer | Rag =
-    calledValidate && hasSources ? "yes" : hasSources ? "partial" : "red";
+  const citation_validation: ProbeAnswer =
+    calledValidate && hasSources ? "yes" : hasSources ? "partial" : "no";
 
   const auditability: ProbeAnswer =
     audit.timestamp &&

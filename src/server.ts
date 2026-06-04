@@ -133,6 +133,11 @@ import {
   regulatoryStatusCheckToolSchema,
 } from "./tools/regulatoryStatusCheck.js";
 import {
+  governanceSelfCheckHandler,
+  governanceSelfCheckSchema,
+  governanceSelfCheckToolSchema,
+} from "./tools/governanceSelfCheck.js";
+import {
   handleClaimsQuery,
   claimsQueryToolSchema,
 } from "./tools/claimsQuery.js";
@@ -304,6 +309,7 @@ function createMcpServer(
       evidenceClinicalScaleToolSchema,
       evidenceUnmetNeedToolSchema,
       regulatoryStatusCheckToolSchema,
+      governanceSelfCheckToolSchema,
       // data.claims_query is only registered when Azure Blob Storage is configured
       // (internal deployment only). Not exposed in the public npm package.
       ...(process.env.AZURE_STORAGE_CONNECTION_STRING
@@ -434,6 +440,27 @@ function createMcpServer(
           result = {
             content: [
               { type: "text", text: JSON.stringify(unmetResult, null, 2) },
+            ],
+          };
+          break;
+        }
+        case "governance.self_check": {
+          const parsed = governanceSelfCheckSchema.safeParse(args);
+          if (!parsed.success) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Validation error: ${parsed.error.issues.map((i) => i.message).join("; ")}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+          const govResult = await governanceSelfCheckHandler(parsed.data);
+          result = {
+            content: [
+              { type: "text", text: JSON.stringify(govResult, null, 2) },
             ],
           };
           break;

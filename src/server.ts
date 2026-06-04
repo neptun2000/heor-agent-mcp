@@ -458,11 +458,10 @@ function createMcpServer(
             };
           }
           const govResult = await governanceSelfCheckHandler(parsed.data);
-          result = {
-            content: [
-              { type: "text", text: JSON.stringify(govResult, null, 2) },
-            ],
-          };
+          // Post-switch (below) wraps result.content into the MCP text block and
+          // JSON-stringifies it when it's an object. Pass the payload object
+          // directly — wrapping it in a content array here would double-wrap.
+          result = { content: govResult };
           break;
         }
         case "regulatory.status_check": {

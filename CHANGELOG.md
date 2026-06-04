@@ -2,6 +2,24 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.14.0 (2026-06-04) — Feature: GenAI Governance Self-Check (`governance.self_check`)
+
+Adds a new tool that scores an AI-assisted HTA/HEOR workflow against six governance dimensions, each traced to the **verified** ELEVATE-GenAI reporting domains (ISPOR Working Group on Generative AI; Fleurence RL et al., Value Health 2025;28(11):1611–1625). Companion to design log #34 and the "Risk Register → Reference Implementation" responsible-GenAI initiative.
+
+### New
+
+- **`governance.self_check` tool** — six dimensions (transparency, citation validation, human-in-the-loop, PHI/data handling, bias & equity, auditability), each footnoted to the verified ELEVATE-GenAI domains (10 domains extracted from the published checklist). Two input modes:
+  - `describe` — free-text `workflow_description` + structured probes. A blank/omitted probe scores **`insufficient`**, never a pass (silence ≠ Green).
+  - `audit_record` — pass a prior HEORAgent `AuditRecord` to auto-derive transparency / citation validation / auditability from the real trace (human-oversight / PHI / bias remain `insufficient` unless probed).
+- **Deterministic scoring** — Red/Amber/Green/Insufficient per dimension, `use_case`-gated aggregate verdict ("any Red blocks submission-ready"; no gameable composite score). Pure scoring core in `src/governance/{crosswalk,scoring}.ts`; renderer in `src/formatters/governanceMarkdown.ts`.
+- Emits a pipeable `governance_summary` and carries its own ELEVATE disclosure block (reuses `src/formatters/disclosure.ts`).
+- Web tier routes governance keywords ("governance", "ELEVATE", "responsible AI", …) to the Azure `smart` tier (in-tenant inference). Preflight guard gains `anyOf` support so an empty call returns conversational guidance, not a ZodError.
+- Tool count 30 → 31.
+
+### Fixed
+
+- Version manifests realigned: `server.json`, `.well-known/mcp/server-card.json`, and `web/lib/openApiSpec.ts:MCP_API_VERSION` were stale at 1.11.3 (missed during the v1.12.0/v1.13.0 releases) — all now synced to 1.14.0.
+
 ## v1.13.0 (2026-05-28) — Feature: AI Transparency Disclosure (ISPOR ELEVATE-GenAI aligned)
 
 Adds a structured AI-assistance disclosure block to tool outputs, aligned with the ISPOR ELEVATE-GenAI reporting guidelines (Fleurence RL et al., Value Health 2025;28(11):1611–1625).

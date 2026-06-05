@@ -204,4 +204,74 @@ describe("handleCostEffectivenessModel", () => {
       expect(result.audit.methodology).toMatch(/Markov/i);
     });
   });
+
+  // ── Utility-defaulting disclosure (silent-fabrication bug fix) ──────────────
+  // When utility_inputs is omitted the model falls back to 0.75/0.70 generic
+  // placeholders. The ICER is then built on invented numbers.  The tool MUST
+  // surface a loud, unmissable warning so no user mistakes these for validated,
+  // indication-specific values.
+  describe("utility_inputs defaulting disclosure", () => {
+    const paramsNoUtility = {
+      intervention: "drugA",
+      comparator: "SoC",
+      indication: "oncology",
+      time_horizon: "10yr",
+      perspective: "nhs",
+      clinical_inputs: { efficacy_delta: 0.4 },
+      cost_inputs: { drug_cost_annual: 50000, comparator_cost_annual: 10000 },
+      // utility_inputs intentionally omitted
+    };
+
+    it("emits UTILITY VALUES DEFAULTED warning in visible output when utility_inputs absent", async () => {
+      const result = await handleCostEffectivenessModel(paramsNoUtility);
+      const content = result.content as string;
+      expect(content).toContain("UTILITY VALUES DEFAULTED");
+    });
+
+    it("warning contains both default values (0.75 / 0.7)", async () => {
+      const result = await handleCostEffectivenessModel(paramsNoUtility);
+      const content = result.content as string;
+      expect(content).toContain("0.75");
+      expect(content).toContain("0.7");
+    });
+
+    it("warning appears near ICER headline (before Base Case Summary section)", async () => {
+      const result = await handleCostEffectivenessModel(paramsNoUtility);
+      const content = result.content as string;
+      const warnIdx = content.indexOf("UTILITY VALUES DEFAULTED");
+      const baseCaseIdx = content.indexOf("### Base Case Summary");
+      expect(warnIdx).toBeGreaterThan(-1);
+      expect(baseCaseIdx).toBeGreaterThan(-1);
+      // The warning must appear before the Base Case Summary table
+      expect(warnIdx).toBeLessThan(baseCaseIdx);
+    });
+
+    it("records the defaulting in audit.warnings (not just assumptions)", async () => {
+      const result = await handleCostEffectivenessModel(paramsNoUtility);
+      const hasWarning = result.audit.warnings.some((w: string) =>
+        w.includes("UTILITY VALUES DEFAULTED"),
+      );
+      expect(hasWarning).toBe(true);
+    });
+
+    it("ICER result line itself carries INDICATIVE ONLY caveat", async () => {
+      const result = await handleCostEffectivenessModel(paramsNoUtility);
+      const content = result.content as string;
+      expect(content).toContain("INDICATIVE ONLY");
+    });
+
+    it("does NOT emit the DEFAULTED warning when utility_inputs are supplied", async () => {
+      const result = await handleCostEffectivenessModel(validParams); // validParams has utility_inputs
+      const content = result.content as string;
+      expect(content).not.toContain("UTILITY VALUES DEFAULTED");
+    });
+
+    it("does NOT record DEFAULTED warning in audit when utility_inputs are supplied", async () => {
+      const result = await handleCostEffectivenessModel(validParams);
+      const hasDefaultedWarning = result.audit.warnings.some((w: string) =>
+        w.includes("UTILITY VALUES DEFAULTED"),
+      );
+      expect(hasDefaultedWarning).toBe(false);
+    });
+  });
 });

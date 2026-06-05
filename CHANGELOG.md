@@ -2,6 +2,21 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.14.1 (2026-06-05) — Fixes: dispatch double-wrap, EMBASE query, fabricated-utility disclosure
+
+Bug-hunt pass after several user-found production issues. The common thread: failures that live in the integration/runtime layer (server dispatch, real external APIs, defaulted inputs) which unit tests structurally miss. Adds guards so these classes are now caught automatically.
+
+### Fixed
+
+- **Server-dispatch double-wrap (5 tools).** `regulatory.status_check`, `evidence.unmet_need`, `evidence.clinical_scale`, `data.claims_query`, `data.query_agent` set `result = { content: [{type,text}] }`, which the post-switch JSON-stringified a second time — the LLM received a stringified envelope instead of the payload. Now `result = { content: <payload> }` (single wrap), matching `governance.self_check`. Same class fixed there in v1.14.0.
+- **EMBASE query 400 (MCP-side).** `providers/direct/embase.ts` sent the raw query to Scopus, which rejects parentheses/bare boolean operators (`400 "Error translating query"`), and then swallowed the error into an empty result. Now sanitizes the query to a flat term list (mirrors the web fix) and propagates the error to the PRISMA audit instead of silently returning `[]`.
+- **Fabricated utility values now loudly disclosed.** `cost_effectiveness_model` defaulted `qaly_on_treatment=0.75 / qaly_comparator=0.7` when `utility_inputs` was omitted (the common case), producing a real-looking QALY ICER from placeholders with only a buried note. Now emits a prominent ⚠️ "UTILITY VALUES DEFAULTED — INDICATIVE ONLY" warning next to the ICER headline and in the Warnings section.
+
+### Added (test guards)
+
+- **`tests/serverDispatchShape.test.ts`** — fails CI if any dispatch case re-introduces the `result = { content: [` double-wrap pattern.
+- Web **`__tests__/webMcpSchemaParity.test.ts`** — fails if `web/lib/tools.ts` omits a functional parameter the MCP `inputSchema` exposes (caught `cost_effectiveness_model` `survival_inputs`/`scenarios`/`run_owsa`, `hta_dossier` ×6 JCA/severity params, `survival_fitting` `event_data`, + `knowledge_search`/`budget_impact_model`/`jca_pico_scope` drift — all now added to the web tool definitions).
+
 ## v1.14.0 (2026-06-04) — Feature: GenAI Governance Self-Check (`governance.self_check`)
 
 Adds a new tool that scores an AI-assisted HTA/HEOR workflow against six governance dimensions, each traced to the **verified** ELEVATE-GenAI reporting domains (ISPOR Working Group on Generative AI; Fleurence RL et al., Value Health 2025;28(11):1611–1625). Companion to design log #34 and the "Risk Register → Reference Implementation" responsible-GenAI initiative.

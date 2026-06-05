@@ -420,7 +420,8 @@ function createMcpServer(
           const text = await evidenceClinicalScaleHandler(
             parsed.data as EvidenceClinicalScaleParams,
           );
-          result = { content: [{ type: "text", text }] };
+          // content is wrapped once by the post-switch — pass the string directly.
+          result = { content: text };
           break;
         }
         case "evidence.unmet_need": {
@@ -437,11 +438,8 @@ function createMcpServer(
             };
           }
           const unmetResult = await evidenceUnmetNeedHandler(parsed.data);
-          result = {
-            content: [
-              { type: "text", text: JSON.stringify(unmetResult, null, 2) },
-            ],
-          };
+          // content is wrapped + JSON-stringified once by the post-switch.
+          result = { content: unmetResult };
           break;
         }
         case "governance.self_check": {
@@ -466,17 +464,8 @@ function createMcpServer(
         }
         case "regulatory.status_check": {
           const regResult = await handleRegulatoryStatusCheck(args);
-          result = {
-            content: [
-              {
-                type: "text",
-                text:
-                  typeof regResult.content === "string"
-                    ? regResult.content
-                    : JSON.stringify(regResult.content, null, 2),
-              },
-            ],
-          };
+          // content (string or object) is wrapped once by the post-switch.
+          result = { content: regResult.content };
           break;
         }
         case "data.claims_query": {
@@ -492,17 +481,8 @@ function createMcpServer(
             };
           }
           const claimsResult = await handleClaimsQuery(args, requestSignal);
-          result = {
-            content: [
-              {
-                type: "text",
-                text:
-                  typeof claimsResult.content === "string"
-                    ? claimsResult.content
-                    : JSON.stringify(claimsResult.content, null, 2),
-              },
-            ],
-          };
+          // content (string or object) is wrapped once by the post-switch.
+          result = { content: claimsResult.content };
           break;
         }
         case "data.query_agent": {
@@ -518,17 +498,8 @@ function createMcpServer(
             };
           }
           const qaResult = await handleQueryAgent(args, requestSignal);
-          result = {
-            content: [
-              {
-                type: "text",
-                text:
-                  typeof qaResult.content === "string"
-                    ? qaResult.content
-                    : JSON.stringify(qaResult.content, null, 2),
-              },
-            ],
-          };
+          // content (string or object) is wrapped once by the post-switch.
+          result = { content: qaResult.content };
           break;
         }
         default:

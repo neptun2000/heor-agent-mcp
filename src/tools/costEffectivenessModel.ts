@@ -151,6 +151,7 @@ import {
 import {
   createAuditRecord,
   addAssumption,
+  addWarning,
   setMethodology,
 } from "../audit/builder.js";
 import { auditToMarkdown } from "../formatters/markdown.js";
@@ -397,11 +398,19 @@ export async function handleCostEffectivenessModel(
   );
   audit = addAssumption(audit, `Perspective: ${params.perspective}`);
   audit = addAssumption(audit, `Markov cycle length: 1 year`);
+
+  // Detect missing utility_inputs: the model defaults to generic 0.75/0.70
+  // placeholders. These are NOT indication-specific and produce a fabricated
+  // ICER. Surface a loud warning — in both the audit and the visible output —
+  // so the result is never mistaken for a validated estimate.
+  const UTILITY_DEFAULTED_WARNING =
+    "UTILITY VALUES DEFAULTED (qaly_on_treatment=0.75, qaly_comparator=0.7)" +
+    " — these are generic placeholders, NOT indication-specific." +
+    " The QALY-denominated ICER below is INDICATIVE ONLY and must not be" +
+    " used for submission. Supply utility_inputs for a valid estimate.";
+
   if (!params.utility_inputs) {
-    audit = addAssumption(
-      audit,
-      `QALY estimate derived from efficacy delta (utility inputs not provided) — use with caution`,
-    );
+    audit = addWarning(audit, UTILITY_DEFAULTED_WARNING);
   }
 
   // --- Base case ---
@@ -767,13 +776,28 @@ export async function handleCostEffectivenessModel(
     mfnSection.push("");
   }
 
+  // Build the utility-defaulting warning block for inline output.
+  // Placed immediately after the ICER headline so it's impossible to miss.
+  const utilityDefaultedBlock: string[] = !params.utility_inputs
+    ? [
+        `> ⚠️ **UTILITY VALUES DEFAULTED (qaly_on_treatment=0.75, qaly_comparator=0.7)** — these are generic placeholders, NOT indication-specific. The QALY-denominated ICER below is **INDICATIVE ONLY** and must not be used for submission. Supply \`utility_inputs\` for a valid estimate.`,
+        ``,
+      ]
+    : [];
+
+  // Annotate the ICER value line itself when utilities were defaulted.
+  const icerHeadline = !params.utility_inputs
+    ? `**${symbol}${icerFormatted} per QALY gained** *(INDICATIVE ONLY — utility values defaulted)*`
+    : `**${symbol}${icerFormatted} per QALY gained**`;
+
   const textLines = [
     `## Cost-Effectiveness Analysis: ${params.intervention} vs ${params.comparator}`,
     `**Indication:** ${params.indication} | **Perspective:** ${params.perspective.toUpperCase()} | **Horizon:** ${params.time_horizon}`,
     ``,
     `### ICER Result`,
-    `**${symbol}${icerFormatted} per QALY gained**`,
+    icerHeadline,
     ``,
+    ...utilityDefaultedBlock,
     `**Interpretation:** ${interpretation}`,
     ``,
     `### Base Case Summary`,
@@ -801,7 +825,9 @@ export async function handleCostEffectivenessModel(
     `---`,
     `> ⚠️ **Disclaimer:** This is a preliminary model for orientation purposes only. Results require validation by a qualified health economist before use in any HTA submission or payer negotiation.`,
     ``,
-    auditToMarkdown(audit, { disclosure: { level: extractDisclosureLevel(rawParams, "standard") } }),
+    auditToMarkdown(audit, {
+      disclosure: { level: extractDisclosureLevel(rawParams, "standard") },
+    }),
   ].join("\n");
 
   if (params.project) {
@@ -1049,11 +1075,12 @@ export const costEffectivenessModelToolSchema = {
           "Summary metric for the ICER numerator. 'qaly' (default, NICE reference case), 'evlyg' (equal value life-years gained — CMS IRA-compatible; CMS prohibits QALYs in Medicare IRA drug price negotiations per §1194(e)(2)), or 'both' to report both side-by-side.",
       },
     },
-      ai_disclosure_level: {
-        type: "string",
-        enum: ["off", "standard", "submission"],
-        description: "AI assistance disclosure level. \"off\" = no disclosure; \"standard\" = default (model/tools/sources/date + human-review reminder); \"submission\" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.",
-      },
+    ai_disclosure_level: {
+      type: "string",
+      enum: ["off", "standard", "submission"],
+      description:
+        'AI assistance disclosure level. "off" = no disclosure; "standard" = default (model/tools/sources/date + human-review reminder); "submission" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.',
+    },
     required: [
       "intervention",
       "comparator",

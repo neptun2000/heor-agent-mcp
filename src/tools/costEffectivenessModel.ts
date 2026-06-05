@@ -147,6 +147,7 @@ import {
   buildMarkovParamsFromCE,
   runMarkovAndComputeICER,
   getTimeHorizonYears,
+  MARKOV_STRUCTURAL_ASSUMPTIONS,
 } from "../models/modelUtils.js";
 import {
   createAuditRecord,
@@ -399,6 +400,18 @@ export async function handleCostEffectivenessModel(
   audit = addAssumption(audit, `Perspective: ${params.perspective}`);
   audit = addAssumption(audit, `Markov cycle length: 1 year`);
 
+  // C3: Wire Markov structural assumptions into the audit trail.
+  // MARKOV_STRUCTURAL_ASSUMPTIONS lives in modelUtils.ts (pure computation
+  // module) and documents the three baked-in simplifications that drive
+  // every Markov-based ICER. Only emit them for the Markov engine — PartSA
+  // uses explicit survival_inputs supplied by the caller, so these
+  // transition-probability heuristics do not apply there.
+  if (modelType === "markov") {
+    for (const s of MARKOV_STRUCTURAL_ASSUMPTIONS) {
+      audit = addAssumption(audit, s);
+    }
+  }
+
   // Detect missing utility_inputs: the model defaults to generic 0.75/0.70
   // placeholders. These are NOT indication-specific and produce a fabricated
   // ICER. Surface a loud warning — in both the audit and the visible output —
@@ -428,6 +441,29 @@ export async function handleCostEffectivenessModel(
 
   if (modelType === "partsa" && params.survival_inputs) {
     const si = params.survival_inputs;
+
+    // C2: Warn loudly when any survival sub-field was omitted and defaulted.
+    // These default values (os=24, pfs=12, os_comparator=18, pfs_comparator=9)
+    // are invented placeholders with no clinical basis. The resulting ICER is
+    // INDICATIVE ONLY and must not be used for submission.
+    const defaultedFields: string[] = [];
+    if (si.os_median_months === undefined)
+      defaultedFields.push("os_median_months=24");
+    if (si.pfs_median_months === undefined)
+      defaultedFields.push("pfs_median_months=12");
+    if (si.os_median_months_comparator === undefined)
+      defaultedFields.push("os_median_months_comparator=18");
+    if (si.pfs_median_months_comparator === undefined)
+      defaultedFields.push("pfs_median_months_comparator=9");
+    if (defaultedFields.length > 0) {
+      const SURVIVAL_DEFAULTED_WARNING =
+        `SURVIVAL INPUTS DEFAULTED (${defaultedFields.join(", ")})` +
+        " — these are invented placeholders, NOT clinically or trial-derived." +
+        " The PartSA ICER below is INDICATIVE ONLY and must not be" +
+        " used for submission. Supply all four survival_inputs fields for a valid estimate.";
+      audit = addWarning(audit, SURVIVAL_DEFAULTED_WARNING);
+    }
+
     const partSAResult = runPartSA({
       intervention_survival: {
         os_median_months: si.os_median_months ?? 24,
@@ -1074,12 +1110,12 @@ export const costEffectivenessModelToolSchema = {
         description:
           "Summary metric for the ICER numerator. 'qaly' (default, NICE reference case), 'evlyg' (equal value life-years gained — CMS IRA-compatible; CMS prohibits QALYs in Medicare IRA drug price negotiations per §1194(e)(2)), or 'both' to report both side-by-side.",
       },
-    },
-    ai_disclosure_level: {
-      type: "string",
-      enum: ["off", "standard", "submission"],
-      description:
-        'AI assistance disclosure level. "off" = no disclosure; "standard" = default (model/tools/sources/date + human-review reminder); "submission" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.',
+      ai_disclosure_level: {
+        type: "string",
+        enum: ["off", "standard", "submission"],
+        description:
+          'AI assistance disclosure level. "off" = no disclosure; "standard" = default (model/tools/sources/date + human-review reminder); "submission" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.',
+      },
     },
     required: [
       "intervention",

@@ -9,6 +9,43 @@ import { runMarkovModel } from "./markov.js";
 
 const DISCOUNT_RATE = 0.035;
 
+/**
+ * Structural assumptions baked into `buildMarkovParamsFromCE`.
+ *
+ * These are simplified illustrative defaults used when no indication-specific
+ * epidemiological data are supplied. They materially drive every Markov-based
+ * ICER produced by this tool. They MUST be replaced with indication-specific
+ * values before the model is used for any regulatory submission, HTA dossier,
+ * or payer negotiation.
+ *
+ * Callers (e.g. costEffectivenessModel.ts) should surface all three strings
+ * via `addAssumption` so they appear in the audit trail and visible output.
+ *
+ * Rationale for exporting rather than calling addAssumption here:
+ * modelUtils is a pure computation module with no audit dependency — it has
+ * no access to an AuditRecord instance. The caller owns the audit lifecycle
+ * and is the correct place to wire these strings in.
+ */
+export const MARKOV_STRUCTURAL_ASSUMPTIONS: readonly string[] = [
+  "STRUCTURAL ASSUMPTION (illustrative, not epidemiologically derived): " +
+    "Background annual mortality fixed at 2% (0.02). " +
+    "This is a generic placeholder. Replace with indication-specific life-table " +
+    "mortality for submission use.",
+
+  "STRUCTURAL ASSUMPTION (illustrative, not epidemiologically derived): " +
+    "Annual probability of staying on intervention derived as " +
+    "0.5 + efficacy_delta × 0.5 — a heuristic mapping from the unitless " +
+    "efficacy_delta input to a Markov transition probability with no " +
+    "epidemiological basis. Replace with a clinical-trial-derived " +
+    "treatment-discontinuation rate for submission use.",
+
+  "STRUCTURAL ASSUMPTION (illustrative, not epidemiologically derived): " +
+    "Comparator retention set to 70% of intervention retention " +
+    "(baselineProbStayOn = probStayOnIntervention × 0.7) — an arbitrary scalar " +
+    "with no indication-specific basis. Replace with trial-observed or " +
+    "registry-derived comparator discontinuation data for submission use.",
+] as const;
+
 export function getTimeHorizonYears(
   horizon: CEModelParams["time_horizon"],
 ): number {

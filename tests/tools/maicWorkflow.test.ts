@@ -171,7 +171,7 @@ describe("maic_workflow — phase orchestration", () => {
     expect(screenIdx).toBeGreaterThan(litIdx);
   });
 
-  it("Phase 4: runs risk_of_bias + evidence_network after screening", async () => {
+  it("Phase 4: runs evidence_network after screening; does NOT auto-run risk_of_bias", async () => {
     const { deps, calls } = makeStubDeps();
     await runMaicWorkflow(
       {
@@ -184,17 +184,14 @@ describe("maic_workflow — phase orchestration", () => {
     const screenIdx = calls.findIndex((c) => c.name === "screenAbstracts");
     const robIdx = calls.findIndex((c) => c.name === "riskOfBias");
     const netIdx = calls.findIndex((c) => c.name === "evidenceNetwork");
-    expect(robIdx).toBeGreaterThan(screenIdx);
+    // RoB is NOT auto-run — it previously passed fabricated "<drug>_trial"
+    // study stubs, producing a misleading RoB table for studies that don't exist.
+    expect(robIdx).toBe(-1);
     expect(netIdx).toBeGreaterThan(screenIdx);
   });
 
-  it("a Phase 4 failure does not abort the whole pipeline", async () => {
-    // RoB might fail when screened studies have no usable structure.
-    // The workflow must catch and report it, not throw.
-    const failingRob = async () => {
-      throw new Error("no studies usable for RoB");
-    };
-    const { deps } = makeStubDeps({ riskOfBias: failingRob });
+  it("§5 reports RoB is not auto-assessed (never fabricates a RoB table)", async () => {
+    const { deps, calls } = makeStubDeps();
     const r = await runMaicWorkflow(
       {
         intervention: "x",
@@ -203,10 +200,9 @@ describe("maic_workflow — phase orchestration", () => {
       },
       deps,
     );
+    expect(calls.find((c) => c.name === "riskOfBias")).toBeUndefined();
     expect(String(r.content)).toMatch(/risk of bias/i);
-    expect(String(r.content)).toMatch(
-      /no studies usable for RoB|skipped|error/i,
-    );
+    expect(String(r.content)).toMatch(/not auto-assessed/i);
   });
 });
 

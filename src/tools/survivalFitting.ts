@@ -214,7 +214,11 @@ export async function handleSurvivalFitting(
   }
 
   const text =
-    formatResult(result, params.endpoint) + "\n" + auditToMarkdown(audit, { disclosure: { level: extractDisclosureLevel(rawParams, "standard") } });
+    formatResult(result, params.endpoint) +
+    "\n" +
+    auditToMarkdown(audit, {
+      disclosure: { level: extractDisclosureLevel(rawParams, "standard") },
+    });
   return { content: text, audit };
 }
 
@@ -284,15 +288,16 @@ export const survivalFittingToolSchema = {
       },
       output_format: { type: "string", enum: ["text", "json"] },
       project: { type: "string", description: "Project ID for persistence" },
-    },
-    // Caller supplies EXACTLY ONE of event_data / km_data — enforced at
-    // runtime by the Zod .refine() above. Top-level `required` left
-    // empty so the JSON Schema doesn't falsely demand both.
+      // Caller supplies EXACTLY ONE of event_data / km_data — enforced at
+      // runtime by the Zod .refine() above. Top-level `required` left
+      // empty so the JSON Schema doesn't falsely demand both.
       ai_disclosure_level: {
         type: "string",
         enum: ["off", "standard", "submission"],
-        description: "AI assistance disclosure level. \"off\" = no disclosure; \"standard\" = default (model/tools/sources/date + human-review reminder); \"submission\" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.",
+        description:
+          'AI assistance disclosure level. "off" = no disclosure; "standard" = default (model/tools/sources/date + human-review reminder); "submission" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.',
       },
+    },
     required: [],
   },
 };

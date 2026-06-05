@@ -1757,12 +1757,12 @@ export const htaDossierPrepToolSchema = {
           },
         },
       },
-    },
-    ai_disclosure_level: {
-      type: "string",
-      enum: ["off", "standard", "submission"],
-      description:
-        'AI assistance disclosure level. "off" = no disclosure; "standard" = default (model/tools/sources/date + human-review reminder); "submission" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.',
+      ai_disclosure_level: {
+        type: "string",
+        enum: ["off", "standard", "submission"],
+        description:
+          'AI assistance disclosure level. "off" = no disclosure; "standard" = default (model/tools/sources/date + human-review reminder); "submission" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.',
+      },
     },
     required: ["hta_body", "submission_type", "drug_name", "indication"],
   },

@@ -8,7 +8,7 @@
  *   Phase 1 (parallel): itc_feasibility + broad literature_search
  *   Phase 2 (parallel): per-trial literature_searches (if trial names given)
  *   Phase 3 (sequential): screen_abstracts on combined search results
- *   Phase 4 (parallel): risk_of_bias + evidence_network on screened set
+ *   Phase 4: evidence_network on screened set (risk_of_bias NOT auto-run — needs named trials)
  *
  * The tool STOPS SHORT of running MAIC/Bucher itself — those need IPD or
  * structured trial-level effect estimates that the search results don't
@@ -123,7 +123,7 @@ export async function runMaicWorkflow(
   );
   audit = setMethodology(
     audit,
-    "MAIC orchestration: itc_feasibility (Cope 2014, NICE DSU TSD 18) → parallel literature_search (broad + per-trial) → screen_abstracts (PICO) → risk_of_bias (RoB 2/ROBINS-I) + evidence_network in parallel. Stops short of running MAIC/Bucher itself — those require IPD or trial-level effect estimates the search cannot supply.",
+    "MAIC orchestration: itc_feasibility (Cope 2014, NICE DSU TSD 18) → parallel literature_search (broad + per-trial) → screen_abstracts (PICO) → evidence_network. Does NOT auto-run risk_of_bias (RoB needs named trials with title+abstract; §5 directs the user to run risk_of_bias on the screened trials) and stops short of running MAIC/Bucher itself — those require IPD or trial-level effect estimates the search cannot supply.",
   );
 
   // ---- Phase 1: feasibility + broad search (parallel) ----
@@ -189,30 +189,19 @@ export async function runMaicWorkflow(
     }),
   );
 
-  // ---- Phase 4: RoB + network (parallel) ----
-  const [robResult, netResult] = await Promise.all([
-    safeRun(() =>
-      deps.riskOfBias({
-        studies: [
-          {
-            study_id: `${input.intervention}_trial`,
-            study_type: "rct",
-          },
-          {
-            study_id: `${input.comparator}_trial`,
-            study_type: "rct",
-          },
-        ],
-      }),
-    ),
-    safeRun(() =>
-      deps.evidenceNetwork({
-        studies_text: allLitText,
-        intervention: input.intervention,
-        comparator: input.comparator,
-      }),
-    ),
-  ]);
+  // ---- Phase 4: evidence_network only ----
+  // Risk of bias is intentionally NOT auto-run here. RoB 2 / ROBINS-I require
+  // NAMED trials (title + abstract), which a discovery search cannot reliably
+  // supply. Previously this passed fabricated `"<drug>_trial"` study stubs to
+  // risk_of_bias — producing a misleading RoB table for studies that don't
+  // exist. The user runs risk_of_bias separately on the screened trials (see §5).
+  const netResult = await safeRun(() =>
+    deps.evidenceNetwork({
+      studies_text: allLitText,
+      intervention: input.intervention,
+      comparator: input.comparator,
+    }),
+  );
 
   // Surface phase failures into the audit record so the user knows what was skipped
   if (!feasResult.ok)
@@ -227,8 +216,6 @@ export async function runMaicWorkflow(
       audit,
       `screen_abstracts skipped: ${screenResult.error}`,
     );
-  if (!robResult.ok)
-    audit = addWarning(audit, `risk_of_bias skipped: ${robResult.error}`);
   if (!netResult.ok)
     audit = addWarning(audit, `evidence_network skipped: ${netResult.error}`);
 
@@ -244,7 +231,7 @@ export async function runMaicWorkflow(
   );
   lines.push("");
   lines.push(
-    `**Pipeline:** ITC feasibility → parallel literature search (broad + ${trialQueries.length} trial-specific) → PICO screening → RoB + evidence network.`,
+    `**Pipeline:** ITC feasibility → parallel literature search (broad + ${trialQueries.length} trial-specific) → PICO screening → evidence network. (Risk of bias is not auto-run — see §5.)`,
   );
   lines.push("");
 
@@ -286,7 +273,10 @@ export async function runMaicWorkflow(
 
   lines.push("## 5. Risk of Bias");
   lines.push(
-    robResult.ok ? asText(robResult.value) : `*(skipped: ${robResult.error})*`,
+    "⚠️ Risk of bias is **not auto-assessed** by this workflow — RoB 2 / ROBINS-I " +
+      "require named trials (title + abstract), which a discovery search cannot " +
+      "reliably supply. Identify the included trials from the screening output (§3), " +
+      "then run the `risk_of_bias` tool on them directly (title, abstract, study_type per trial).",
   );
   lines.push("");
 
@@ -351,7 +341,11 @@ export async function runMaicWorkflow(
   }
   lines.push("");
 
-  lines.push(auditToMarkdown(audit, { disclosure: { level: extractDisclosureLevel(rawInput, "submission") } }));
+  lines.push(
+    auditToMarkdown(audit, {
+      disclosure: { level: extractDisclosureLevel(rawInput, "submission") },
+    }),
+  );
 
   return { content: lines.join("\n"), audit };
 }
@@ -388,7 +382,7 @@ export async function handleMaicWorkflow(
 export const maicWorkflowToolSchema = {
   name: "workflow.maic",
   description:
-    "Run the canonical MAIC discovery+screening pipeline in one call: ITC feasibility + parallel literature_search (broad + per-trial) + PICO screening + risk_of_bias + evidence_network. Stops short of running MAIC/Bucher itself (those require IPD or trial-level effect estimates). Produces a structured 9-section report with explicit Next Steps. Use this as a one-shot orchestrator instead of asking Claude/ChatGPT to chain the underlying tools manually.",
+    "Run the canonical MAIC discovery+screening pipeline in one call: ITC feasibility + parallel literature_search (broad + per-trial) + PICO screening + evidence_network. Does NOT auto-run risk_of_bias (it needs named trials; the report directs you to run risk_of_bias on the screened set) and stops short of running MAIC/Bucher itself (those require IPD or trial-level effect estimates). Produces a structured 9-section report with explicit Next Steps. Use this as a one-shot orchestrator instead of asking Claude/ChatGPT to chain the underlying tools manually.",
   annotations: {
     title: "MAIC Workflow Orchestrator",
     readOnlyHint: true,
@@ -446,11 +440,12 @@ export const maicWorkflowToolSchema = {
         default: 2,
       },
     },
-      ai_disclosure_level: {
-        type: "string",
-        enum: ["off", "standard", "submission"],
-        description: "AI assistance disclosure level. \"off\" = no disclosure; \"standard\" = default (model/tools/sources/date + human-review reminder); \"submission\" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.",
-      },
+    ai_disclosure_level: {
+      type: "string",
+      enum: ["off", "standard", "submission"],
+      description:
+        'AI assistance disclosure level. "off" = no disclosure; "standard" = default (model/tools/sources/date + human-review reminder); "submission" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.',
+    },
     required: ["intervention", "comparator", "indication"],
   },
 } as const;

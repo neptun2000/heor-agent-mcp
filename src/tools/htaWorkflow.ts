@@ -860,7 +860,11 @@ export async function runHtaWorkflow(
 
   lines.push(`## Audit`);
   lines.push("");
-  lines.push(auditToMarkdown(audit, { disclosure: { level: extractDisclosureLevel(rawInput, "submission") } }));
+  lines.push(
+    auditToMarkdown(audit, {
+      disclosure: { level: extractDisclosureLevel(rawInput, "submission") },
+    }),
+  );
 
   return {
     content: lines.join("\n"),
@@ -1058,12 +1062,13 @@ export const htaWorkflowToolSchema = {
           },
         },
       },
-    },
       ai_disclosure_level: {
         type: "string",
         enum: ["off", "standard", "submission"],
-        description: "AI assistance disclosure level. \"off\" = no disclosure; \"standard\" = default (model/tools/sources/date + human-review reminder); \"submission\" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.",
+        description:
+          'AI assistance disclosure level. "off" = no disclosure; "standard" = default (model/tools/sources/date + human-review reminder); "submission" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.',
       },
+    },
     required: ["drug", "indication"],
   },
 } as const;

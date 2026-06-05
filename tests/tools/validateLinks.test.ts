@@ -45,4 +45,44 @@ describe("handleValidateLinks", () => {
     expect(result.audit).toBeDefined();
     expect(result.audit.tool).toBe("utils.validate_links");
   });
+
+  it("marks known HTA 401/407 bot blocks as browser_only", async () => {
+    const originalFetch = global.fetch;
+    try {
+      global.fetch = jest
+        .fn()
+        .mockResolvedValueOnce({
+          status: 401,
+          ok: false,
+          statusText: "Unauthorized",
+          url: "https://www.aifa.gov.it/example",
+        })
+        .mockResolvedValueOnce({
+          status: 407,
+          ok: false,
+          statusText: "Proxy Authentication Required",
+          url: "https://www.tlv.se/example",
+        });
+
+      const result = await handleValidateLinks({
+        urls: [
+          "https://www.aifa.gov.it/example",
+          "https://www.tlv.se/example",
+        ],
+        timeout_ms: 1000,
+      });
+      const content = result.content as {
+        summary: { browser_only: number; broken: number };
+        results: Array<{ category: string }>;
+      };
+      expect(content.summary.browser_only).toBe(2);
+      expect(content.summary.broken).toBe(0);
+      expect(content.results.map((r) => r.category)).toEqual([
+        "browser_only",
+        "browser_only",
+      ]);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
 });

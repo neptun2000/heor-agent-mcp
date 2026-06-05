@@ -93,12 +93,43 @@ describe("fetchPubMed", () => {
     expect(results).toEqual([]);
   });
 
-  it("returns empty array on fetch error", async () => {
+  it("propagates fetch errors", async () => {
     (global.fetch as jest.Mock)
       .mockReset()
       .mockRejectedValueOnce(new Error("Network error"));
-    const results = await fetchPubMed("semaglutide", 20);
-    expect(results).toEqual([]);
+    await expect(fetchPubMed("semaglutide", 20)).rejects.toThrow(
+      "Network error",
+    );
+  });
+
+  it("throws on PubMed esearch rate limits", async () => {
+    (global.fetch as jest.Mock)
+      .mockReset()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        text: async () => "too many requests",
+      });
+    await expect(fetchPubMed("semaglutide", 20)).rejects.toThrow(
+      /PubMed esearch API 429/,
+    );
+  });
+
+  it("throws on PubMed esummary rate limits", async () => {
+    (global.fetch as jest.Mock)
+      .mockReset()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockEsearchResponse,
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        text: async () => "too many requests",
+      });
+    await expect(fetchPubMed("semaglutide", 20)).rejects.toThrow(
+      /PubMed esummary API 429/,
+    );
   });
 
   it("parses abstracts from efetch response", async () => {

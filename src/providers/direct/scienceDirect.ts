@@ -1,4 +1,5 @@
 import type { LiteratureResult } from "../types.js";
+import { cleanScopusQuery } from "./embase.js";
 
 const BASE = "https://api.elsevier.com/content/search/sciencedirect";
 
@@ -28,42 +29,45 @@ export async function fetchScienceDirect(
   const apiKey = process.env.ELSEVIER_API_KEY;
   if (!apiKey) return [];
 
-  try {
-    const url = `${BASE}?query=${encodeURIComponent(query)}&count=${maxResults}`;
-    const res = await fetch(url, {
-      headers: {
-        "X-ELS-APIKey": apiKey,
-        Accept: "application/json",
-      },
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!res.ok) return [];
-
-    const data = (await res.json()) as ElsevierResponse;
-    const entries = data["search-results"]?.entry ?? [];
-
-    return entries
-      .filter((e) => e["dc:title"])
-      .map((e, i) => {
-        const doi = e["prism:doi"];
-        const pii = e["pii"];
-        const id = doi ?? pii ?? `sd_${i}`;
-        return {
-          id: `sciencedirect_${id}`,
-          source: "sciencedirect" as const,
-          title: e["dc:title"] ?? "",
-          authors: e["dc:creator"] ? [e["dc:creator"]] : [],
-          date: e["prism:coverDate"] ?? "",
-          study_type: "unknown",
-          abstract:
-            e["dc:description"] ??
-            (e["prism:publicationName"]
-              ? `Published in ${e["prism:publicationName"]}`
-              : ""),
-          url: doi ? `https://doi.org/${doi}` : (e["prism:url"] ?? ""),
-        };
-      });
-  } catch {
-    return [];
+  const { cleaned: cleanedQuery } = cleanScopusQuery(query);
+  const params = new URLSearchParams({
+    query: cleanedQuery,
+    count: String(maxResults),
+  });
+  const res = await fetch(`${BASE}?${params}`, {
+    headers: {
+      "X-ELS-APIKey": apiKey,
+      Accept: "application/json",
+    },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`ScienceDirect API ${res.status}: ${body.slice(0, 200)}`);
   }
+
+  const data = (await res.json()) as ElsevierResponse;
+  const entries = data["search-results"]?.entry ?? [];
+
+  return entries
+    .filter((e) => e["dc:title"])
+    .map((e, i) => {
+      const doi = e["prism:doi"];
+      const pii = e["pii"];
+      const id = doi ?? pii ?? `sd_${i}`;
+      return {
+        id: `sciencedirect_${id}`,
+        source: "sciencedirect" as const,
+        title: e["dc:title"] ?? "",
+        authors: e["dc:creator"] ? [e["dc:creator"]] : [],
+        date: e["prism:coverDate"] ?? "",
+        study_type: "unknown",
+        abstract:
+          e["dc:description"] ??
+          (e["prism:publicationName"]
+            ? `Published in ${e["prism:publicationName"]}`
+            : ""),
+        url: doi ? `https://doi.org/${doi}` : (e["prism:url"] ?? ""),
+      };
+    });
 }

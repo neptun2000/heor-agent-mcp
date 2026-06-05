@@ -40,32 +40,36 @@ export async function fetchWhoGho(
   query: string,
   maxResults: number,
 ): Promise<LiteratureResult[]> {
-  try {
-    const indicator = findIndicator(query);
-    const url = `${BASE}/${indicator}?$filter=TimeDim ge '2018'&$top=${maxResults}&$orderby=TimeDim desc`;
-    const res = await fetch(url, {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!res.ok) return [];
-
-    const data = (await res.json()) as GHOResponse;
-    const values = data.value ?? [];
-
-    return values
-      .filter((v) => v.NumericValue !== null)
-      .slice(0, maxResults)
-      .map((v, i) => ({
-        id: `who_gho_${indicator}_${v.SpatialDim}_${v.TimeDim}_${i}`,
-        source: "who_gho" as const,
-        title: `${indicator}: ${v.SpatialDim} (${v.TimeDim})`,
-        authors: ["World Health Organization"],
-        date: v.TimeDim ?? "",
-        study_type: "registry",
-        abstract: `Value: ${v.NumericValue}${v.Dim1 ? ` | Dimension: ${v.Dim1}` : ""} | Country: ${v.SpatialDim} | Year: ${v.TimeDim}`,
-        url: `https://www.who.int/data/gho/data/indicators/indicator-details/GHO/${indicator}`,
-      }));
-  } catch {
-    return [];
+  const indicator = findIndicator(query);
+  const params = new URLSearchParams({
+    $filter: "TimeDim ge '2018'",
+    $top: String(maxResults),
+    $orderby: "TimeDim desc",
+  });
+  const url = `${BASE}/${indicator}?${params}`;
+  const res = await fetch(url, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`WHO GHO API ${res.status}: ${body.slice(0, 200)}`);
   }
+
+  const data = (await res.json()) as GHOResponse;
+  const values = data.value ?? [];
+
+  return values
+    .filter((v) => v.NumericValue !== null)
+    .slice(0, maxResults)
+    .map((v, i) => ({
+      id: `who_gho_${indicator}_${v.SpatialDim}_${v.TimeDim}_${i}`,
+      source: "who_gho" as const,
+      title: `${indicator}: ${v.SpatialDim} (${v.TimeDim})`,
+      authors: ["World Health Organization"],
+      date: v.TimeDim ?? "",
+      study_type: "registry",
+      abstract: `Value: ${v.NumericValue}${v.Dim1 ? ` | Dimension: ${v.Dim1}` : ""} | Country: ${v.SpatialDim} | Year: ${v.TimeDim}`,
+      url: `https://www.who.int/data/gho/data/indicators/indicator-details/GHO/${indicator}`,
+    }));
 }

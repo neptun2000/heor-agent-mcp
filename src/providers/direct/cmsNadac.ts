@@ -22,17 +22,30 @@ export async function fetchCmsNadac(
   query: string,
   maxResults: number,
 ): Promise<LiteratureResult[]> {
-  try {
-    // The CMS data-api supports filter syntax
-    const url = `${BASE}/${NADAC_DATASET_ID}/data?filter[NDC Description][condition][path]=NDC Description&filter[NDC Description][condition][operator]=CONTAINS&filter[NDC Description][condition][value]=${encodeURIComponent(query.toUpperCase())}&size=${Math.min(maxResults, 100)}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-    if (!res.ok) return getFallback(query, maxResults);
+  // The CMS data-api supports filter syntax. Use URLSearchParams because the
+  // JSONAPI filter key itself contains spaces and brackets.
+  const params = new URLSearchParams({
+    "filter[NDC Description][condition][path]": "NDC Description",
+    "filter[NDC Description][condition][operator]": "CONTAINS",
+    "filter[NDC Description][condition][value]": query.toUpperCase(),
+    size: String(Math.min(maxResults, 100)),
+  });
+  const url = `${BASE}/${NADAC_DATASET_ID}/data?${params}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`CMS NADAC API ${res.status}: ${body.slice(0, 200)}`);
+  }
 
-    const data = (await res.json()) as NadacRow[];
-    if (!Array.isArray(data) || data.length === 0)
-      return getFallback(query, maxResults);
+  const data = (await res.json()) as NadacRow[];
+  if (!Array.isArray(data) || data.length === 0)
+    return getFallback(query, maxResults);
 
-    return data.slice(0, maxResults).map((row, i) => ({
+  return data.slice(0, maxResults).map((row, i) => {
+    const resultParams = new URLSearchParams({
+      "filter[NDC]": row["NDC"] ?? "",
+    });
+    return {
       id: `cms_nadac_${row["NDC"] ?? i}`,
       source: "cms_nadac" as const,
       title: `${row["NDC Description"] ?? "Unknown drug"} — NADAC $${row["NADAC Per Unit"] ?? "N/A"}/${row["Pricing Unit"] ?? "unit"}`,
@@ -48,11 +61,9 @@ export async function fetchCmsNadac(
         `OTC: ${row["OTC"] ?? "N"}`,
         `Effective: ${row["Effective Date"] ?? ""}`,
       ].join(" | "),
-      url: `https://data.cms.gov/dataset/dfa2ab14-06c2-4b99-9f0e-215a6713b5f2/data?filter[NDC]=${row["NDC"] ?? ""}`,
-    }));
-  } catch {
-    return getFallback(query, maxResults);
-  }
+      url: `https://data.cms.gov/dataset/dfa2ab14-06c2-4b99-9f0e-215a6713b5f2/data?${resultParams}`,
+    };
+  });
 }
 
 function getFallback(query: string, maxResults: number): LiteratureResult[] {

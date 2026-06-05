@@ -63,6 +63,11 @@ describe("DirectProvider.searchLiterature", () => {
       sources: ["pubmed"],
     });
     expect(result.audit.warnings.length).toBeGreaterThan(0);
+    const pubmedSource = result.audit.sources_queried.find(
+      (source) => source.source === "pubmed",
+    );
+    expect(pubmedSource?.status).toBe("failed");
+    expect(pubmedSource?.error).toContain("fail");
   });
 
   it("warns when embase requested but no API key", async () => {

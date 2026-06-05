@@ -1,13 +1,30 @@
 import { fetchPurpleBook } from "../../../src/providers/direct/purpleBook.js";
 
 describe("fetchPurpleBook", () => {
-  it("returns fallback results on fetch error", async () => {
+  it("throws on openFDA API errors so the dispatcher can record failure", async () => {
     const orig = global.fetch;
-    global.fetch = jest.fn().mockRejectedValue(new Error("network error"));
-    const results = await fetchPurpleBook("adalimumab", 5);
-    expect(results.length).toBeGreaterThan(0);
-    expect(results[0].source).toBe("purple_book");
-    expect(results[0].url).toContain("purplebooksearch.fda.gov");
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      text: async () => "rate limit",
+    });
+    await expect(fetchPurpleBook("adalimumab", 5)).rejects.toThrow(
+      /FDA Purple Book API 429/,
+    );
+    global.fetch = orig;
+  });
+
+  it("strips quotes before embedding query text in openFDA Lucene fields", async () => {
+    const orig = global.fetch;
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ results: [] }),
+    });
+    await fetchPurpleBook('adalimumab"evil"', 5);
+    const url = new URL((global.fetch as jest.Mock).mock.calls[0][0]);
+    const search = url.searchParams.get("search") ?? "";
+    expect(search).not.toContain('adalimumab"evil"');
+    expect(search).toContain('openfda.brand_name:"adalimumab evil"');
     global.fetch = orig;
   });
 

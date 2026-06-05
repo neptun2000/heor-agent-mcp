@@ -1,4 +1,7 @@
-import { fetchBiorxiv } from "../../../src/providers/direct/biorxiv.js";
+import {
+  extractBiorxivKeywords,
+  fetchBiorxiv,
+} from "../../../src/providers/direct/biorxiv.js";
 
 const mockResponse = {
   collection: [
@@ -34,11 +37,38 @@ describe("fetchBiorxiv", () => {
     expect(results[0].url).toContain("10.1101");
   });
 
-  it("returns empty array on error", async () => {
+  it("tokenizes boolean/grouped queries into searchable keywords", () => {
+    expect(
+      extractBiorxivKeywords("tirzepatide (obesity OR overweight)"),
+    ).toEqual(["tirzepatide", "obesity", "overweight"]);
+  });
+
+  it("matches boolean/grouped queries by any significant keyword", async () => {
+    const results = await fetchBiorxiv(
+      "tirzepatide (obesity OR overweight)",
+      20,
+    );
+    expect(results).toHaveLength(1);
+    expect(results[0].title).toContain("obesity");
+  });
+
+  it("throws on API errors so the dispatcher can record failure", async () => {
+    (global.fetch as jest.Mock)
+      .mockReset()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        text: async () => "rate limit",
+      });
+    await expect(fetchBiorxiv("semaglutide", 20)).rejects.toThrow(
+      /bioRxiv API 429/,
+    );
+  });
+
+  it("propagates fetch errors", async () => {
     (global.fetch as jest.Mock)
       .mockReset()
       .mockRejectedValueOnce(new Error("fail"));
-    const results = await fetchBiorxiv("semaglutide", 20);
-    expect(results).toEqual([]);
+    await expect(fetchBiorxiv("semaglutide", 20)).rejects.toThrow("fail");
   });
 });

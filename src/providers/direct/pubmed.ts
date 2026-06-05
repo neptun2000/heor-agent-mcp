@@ -31,63 +31,65 @@ export async function fetchPubMed(
   query: string,
   maxResults: number,
 ): Promise<LiteratureResult[]> {
-  try {
-    const searchUrl = `${BASE}/esearch.fcgi?db=pubmed&term=${encodeURIComponent(query)}&retmax=${maxResults}&retmode=json`;
-    const searchRes = await fetch(searchUrl, {
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!searchRes.ok) return [];
-
-    const searchData = (await searchRes.json()) as {
-      esearchresult: { idlist: string[] };
-    };
-    const ids = searchData.esearchresult.idlist;
-    if (ids.length === 0) return [];
-
-    const summaryUrl = `${BASE}/esummary.fcgi?db=pubmed&id=${ids.join(",")}&retmode=json`;
-    const summaryRes = await fetch(summaryUrl, {
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!summaryRes.ok) return [];
-
-    const summaryData = (await summaryRes.json()) as {
-      result: { uids: string[]; [key: string]: unknown };
-    };
-
-    // Fetch abstracts via efetch; if it fails, proceed with empty abstracts
-    let abstracts = new Map<string, string>();
-    try {
-      const efetchUrl = `${BASE}/efetch.fcgi?db=pubmed&id=${ids.join(",")}&rettype=abstract&retmode=xml`;
-      const efetchRes = await fetch(efetchUrl, {
-        signal: AbortSignal.timeout(15_000),
-      });
-      if (efetchRes.ok) {
-        const efetchXml = await efetchRes.text();
-        abstracts = parseAbstractsFromXml(efetchXml);
-      }
-    } catch {
-      // proceed with empty abstracts
-    }
-
-    return summaryData.result.uids.map((uid) => {
-      const doc = summaryData.result[uid] as {
-        title: string;
-        authors: { name: string }[];
-        pubdate: string;
-        elocationid: string;
-      };
-      return {
-        id: `pubmed_${uid}`,
-        source: "pubmed" as const,
-        title: doc.title ?? "",
-        authors: (doc.authors ?? []).map((a) => a.name),
-        date: doc.pubdate ?? "",
-        study_type: "unknown",
-        abstract: abstracts.get(uid) ?? "",
-        url: `https://pubmed.ncbi.nlm.nih.gov/${uid}/`,
-      };
-    });
-  } catch {
-    return [];
+  const searchUrl = `${BASE}/esearch.fcgi?db=pubmed&term=${encodeURIComponent(query)}&retmax=${maxResults}&retmode=json`;
+  const searchRes = await fetch(searchUrl, {
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!searchRes.ok) {
+    const body = await searchRes.text().catch(() => "");
+    throw new Error(`PubMed esearch API ${searchRes.status}: ${body.slice(0, 200)}`);
   }
+
+  const searchData = (await searchRes.json()) as {
+    esearchresult: { idlist: string[] };
+  };
+  const ids = searchData.esearchresult.idlist;
+  if (ids.length === 0) return [];
+
+  const summaryUrl = `${BASE}/esummary.fcgi?db=pubmed&id=${ids.join(",")}&retmode=json`;
+  const summaryRes = await fetch(summaryUrl, {
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!summaryRes.ok) {
+    const body = await summaryRes.text().catch(() => "");
+    throw new Error(`PubMed esummary API ${summaryRes.status}: ${body.slice(0, 200)}`);
+  }
+
+  const summaryData = (await summaryRes.json()) as {
+    result: { uids: string[]; [key: string]: unknown };
+  };
+
+  // Fetch abstracts via efetch; if it fails, proceed with empty abstracts
+  let abstracts = new Map<string, string>();
+  try {
+    const efetchUrl = `${BASE}/efetch.fcgi?db=pubmed&id=${ids.join(",")}&rettype=abstract&retmode=xml`;
+    const efetchRes = await fetch(efetchUrl, {
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (efetchRes.ok) {
+      const efetchXml = await efetchRes.text();
+      abstracts = parseAbstractsFromXml(efetchXml);
+    }
+  } catch {
+    // proceed with empty abstracts
+  }
+
+  return summaryData.result.uids.map((uid) => {
+    const doc = summaryData.result[uid] as {
+      title: string;
+      authors: { name: string }[];
+      pubdate: string;
+      elocationid: string;
+    };
+    return {
+      id: `pubmed_${uid}`,
+      source: "pubmed" as const,
+      title: doc.title ?? "",
+      authors: (doc.authors ?? []).map((a) => a.name),
+      date: doc.pubdate ?? "",
+      study_type: "unknown",
+      abstract: abstracts.get(uid) ?? "",
+      url: `https://pubmed.ncbi.nlm.nih.gov/${uid}/`,
+    };
+  });
 }

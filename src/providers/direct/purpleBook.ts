@@ -25,45 +25,46 @@ export async function fetchPurpleBook(
   query: string,
   maxResults: number,
 ): Promise<LiteratureResult[]> {
-  try {
-    // Filter for biologics (BLA applications)
-    const searchQuery = `(openfda.application_number:BLA*+AND+(openfda.brand_name:"${query}"+openfda.generic_name:"${query}"))`;
-    const url = `${BASE}?search=${encodeURIComponent(searchQuery)}&limit=${Math.min(maxResults, 100)}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-    if (!res.ok) return getPurpleBookFallback(query, maxResults);
-
-    const data = (await res.json()) as LabelResponse;
-    if (!data.results || data.results.length === 0)
-      return getPurpleBookFallback(query, maxResults);
-
-    return data.results.slice(0, maxResults).map((r, i) => {
-      const brand = r.openfda?.brand_name?.[0] ?? "Unknown";
-      const generic = r.openfda?.generic_name?.[0] ?? "";
-      const manuf = r.openfda?.manufacturer_name?.[0] ?? "Unknown";
-      const appNum = r.openfda?.application_number?.[0] ?? "N/A";
-      return {
-        id: `purple_book_${r.id ?? i}`,
-        source: "purple_book" as const,
-        title: `${brand} (${generic}) — ${appNum}`,
-        authors: [manuf],
-        date: r.effective_time ?? "",
-        study_type: "regulatory",
-        abstract: [
-          `BLA Application: ${appNum}`,
-          `Manufacturer: ${manuf}`,
-          `Brand: ${brand} | Generic: ${generic}`,
-          r.indications_and_usage?.[0]
-            ? `Indications: ${r.indications_and_usage[0].slice(0, 300)}`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(" | "),
-        url: `https://purplebooksearch.fda.gov/search?query=${encodeURIComponent(brand)}`,
-      };
-    });
-  } catch {
-    return getPurpleBookFallback(query, maxResults);
+  // Filter for biologics (BLA applications). Strip quotes before embedding
+  // free text inside openFDA Lucene quoted field values.
+  const safeQuery = query.replace(/"/g, " ").trim();
+  const searchQuery = `(openfda.application_number:BLA*+AND+(openfda.brand_name:"${safeQuery}"+openfda.generic_name:"${safeQuery}"))`;
+  const url = `${BASE}?search=${encodeURIComponent(searchQuery)}&limit=${Math.min(maxResults, 100)}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`FDA Purple Book API ${res.status}: ${body.slice(0, 200)}`);
   }
+
+  const data = (await res.json()) as LabelResponse;
+  if (!data.results || data.results.length === 0)
+    return getPurpleBookFallback(query, maxResults);
+
+  return data.results.slice(0, maxResults).map((r, i) => {
+    const brand = r.openfda?.brand_name?.[0] ?? "Unknown";
+    const generic = r.openfda?.generic_name?.[0] ?? "";
+    const manuf = r.openfda?.manufacturer_name?.[0] ?? "Unknown";
+    const appNum = r.openfda?.application_number?.[0] ?? "N/A";
+    return {
+      id: `purple_book_${r.id ?? i}`,
+      source: "purple_book" as const,
+      title: `${brand} (${generic}) — ${appNum}`,
+      authors: [manuf],
+      date: r.effective_time ?? "",
+      study_type: "regulatory",
+      abstract: [
+        `BLA Application: ${appNum}`,
+        `Manufacturer: ${manuf}`,
+        `Brand: ${brand} | Generic: ${generic}`,
+        r.indications_and_usage?.[0]
+          ? `Indications: ${r.indications_and_usage[0].slice(0, 300)}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" | "),
+      url: `https://purplebooksearch.fda.gov/search?query=${encodeURIComponent(brand)}`,
+    };
+  });
 }
 
 function getPurpleBookFallback(

@@ -26,38 +26,45 @@ export async function fetchGoogleScholar(
   const apiKey = process.env.SERPAPI_KEY;
   if (!apiKey) return [];
 
-  try {
-    const url = `${BASE}?engine=google_scholar&q=${encodeURIComponent(query)}&num=${Math.min(maxResults, 20)}&api_key=${apiKey}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-    if (!res.ok) return [];
-    const data = (await res.json()) as SerpApiResponse;
-    if (data.error || !data.organic_results) return [];
-
-    return data.organic_results.slice(0, maxResults).map((r, i) => {
-      const authors = r.publication_info?.authors?.map((a) => a.name) ?? [];
-      const pubSummary = r.publication_info?.summary ?? "";
-      // pub summary often: "A Smith, B Jones - Journal Name, 2023 - publisher.com"
-      const yearMatch = pubSummary.match(/\b(19|20)\d{2}\b/);
-      return {
-        id: `gscholar_${r.result_id ?? i}`,
-        source: "google_scholar" as const,
-        title: r.title ?? "Untitled",
-        authors,
-        date: yearMatch ? yearMatch[0] : "",
-        study_type: "unknown",
-        abstract: [
-          r.snippet ?? "",
-          pubSummary ? `Publication: ${pubSummary}` : null,
-          r.inline_links?.cited_by?.total
-            ? `Cited by: ${r.inline_links.cited_by.total}`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(" | "),
-        url: r.link ?? "",
-      };
-    });
-  } catch {
-    return [];
+  const params = new URLSearchParams({
+    engine: "google_scholar",
+    q: query,
+    num: String(Math.min(maxResults, 20)),
+    api_key: apiKey,
+  });
+  const res = await fetch(`${BASE}?${params}`, {
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`SerpAPI ${res.status}: ${body.slice(0, 200)}`);
   }
+  const data = (await res.json()) as SerpApiResponse;
+  if (data.error) throw new Error(`SerpAPI error: ${data.error}`);
+  if (!data.organic_results) return [];
+
+  return data.organic_results.slice(0, maxResults).map((r, i) => {
+    const authors = r.publication_info?.authors?.map((a) => a.name) ?? [];
+    const pubSummary = r.publication_info?.summary ?? "";
+    // pub summary often: "A Smith, B Jones - Journal Name, 2023 - publisher.com"
+    const yearMatch = pubSummary.match(/\b(19|20)\d{2}\b/);
+    return {
+      id: `gscholar_${r.result_id ?? i}`,
+      source: "google_scholar" as const,
+      title: r.title ?? "Untitled",
+      authors,
+      date: yearMatch ? yearMatch[0] : "",
+      study_type: "unknown",
+      abstract: [
+        r.snippet ?? "",
+        pubSummary ? `Publication: ${pubSummary}` : null,
+        r.inline_links?.cited_by?.total
+          ? `Cited by: ${r.inline_links.cited_by.total}`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" | "),
+      url: r.link ?? "",
+    };
+  });
 }

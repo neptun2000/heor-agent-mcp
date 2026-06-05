@@ -1,11 +1,23 @@
 import { fetchWhoGho } from "../../../src/providers/direct/whoGho.js";
 
 describe("fetchWhoGho", () => {
-  it("returns empty array on fetch error", async () => {
+  it("propagates fetch errors", async () => {
     const originalFetch = global.fetch;
     global.fetch = jest.fn().mockRejectedValue(new Error("network error"));
-    const results = await fetchWhoGho("mortality", 5);
-    expect(results).toEqual([]);
+    await expect(fetchWhoGho("mortality", 5)).rejects.toThrow("network error");
+    global.fetch = originalFetch;
+  });
+
+  it("throws on WHO API errors so the dispatcher can record failure", async () => {
+    const originalFetch = global.fetch;
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      text: async () => "rate limit",
+    });
+    await expect(fetchWhoGho("mortality", 5)).rejects.toThrow(
+      /WHO GHO API 429/,
+    );
     global.fetch = originalFetch;
   });
 
@@ -33,6 +45,9 @@ describe("fetchWhoGho", () => {
       }),
     });
     const results = await fetchWhoGho("life expectancy", 10);
+    const url = new URL((global.fetch as jest.Mock).mock.calls[0][0]);
+    expect(url.searchParams.get("$filter")).toBe("TimeDim ge '2018'");
+    expect(url.searchParams.get("$orderby")).toBe("TimeDim desc");
     expect(results).toHaveLength(2);
     expect(results[0].source).toBe("who_gho");
     expect(results[0].abstract).toContain("81.2");

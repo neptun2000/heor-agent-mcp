@@ -13,7 +13,7 @@ import {
  * Validates links BEFORE presenting them to users so we never
  * mislead with broken references.
  *
- * Handles sites that block automated requests (return 403):
+ * Handles sites that block automated requests (return 401/403/407):
  *   - CADTH, HAS, and some others block bots but work in browsers
  *   - These are marked "browser_only" instead of "broken"
  */
@@ -122,22 +122,24 @@ function isSafeUrl(rawUrl: string): boolean {
 
 // Domains known to block bots but work in browsers
 const BROWSER_ONLY_DOMAINS = [
+  "aifa.gov.it",
   "cda-amc.ca",
   "cadth.ca",
   "has-sante.fr",
   "pbs.gov.au",
   "cochranelibrary.com",
   "ispor.org", // presentations-database search returns 200 but times out on bot requests
+  "tlv.se",
 ];
 
 function categorize(url: string, status: number): LinkStatus["category"] {
   if (status >= 200 && status < 400) return "working";
-  if (status === 403) {
+  if (status === 401 || status === 403 || status === 407) {
     const host = new URL(url).hostname;
     if (BROWSER_ONLY_DOMAINS.some((d) => host.includes(d))) {
       return "browser_only";
     }
-    return "broken";
+    return status === 403 ? "broken" : "error";
   }
   if (status === 404 || status === 410) return "broken";
   if (status === 429 || status === 503) return "rate_limited";
@@ -227,7 +229,7 @@ export async function handleValidateLinks(
   audit = setMethodology(audit, "HTTP HEAD request with redirect follow");
   audit = addAssumption(
     audit,
-    `Timeout: ${timeoutMs}ms per URL, concurrency: ${CONCURRENCY}. Trusted domains (doi.org, PubMed, etc.) skipped. Sites blocking bots (403) marked "browser_only".`,
+    `Timeout: ${timeoutMs}ms per URL, concurrency: ${CONCURRENCY}. Trusted domains (doi.org, PubMed, etc.) skipped. Sites blocking bots (401/403/407) marked "browser_only".`,
   );
 
   const results = await checkUrlsConcurrently(params.urls, timeoutMs);
@@ -277,7 +279,7 @@ export async function handleValidateLinks(
   }
   if (browserOnly > 0) {
     lines.push(
-      `> **Note:** ${browserOnly} link(s) return 403 to automated requests but work in browsers. These are safe to present.`,
+      `> **Note:** ${browserOnly} link(s) return 401/403/407 to automated requests but work in browsers. These are safe to present.`,
     );
   }
   if (rateLimited > 0) {
@@ -305,7 +307,7 @@ export async function handleValidateLinks(
 export const validateLinksToolSchema = {
   name: "utils.validate_links",
   description:
-    "Validate URLs by making HEAD requests and checking HTTP status codes. Returns categorization: working (200), browser_only (403 from bot-blocking sites that work in browsers), broken (404/410), or timeout/error. ALWAYS use this before presenting reference links to users — broken links destroy trust. Pass all URLs you plan to cite.",
+    "Validate URLs by making HEAD requests and checking HTTP status codes. Returns categorization: working (200), browser_only (401/403/407 from bot-blocking sites that work in browsers), broken (404/410), or timeout/error. ALWAYS use this before presenting reference links to users — broken links destroy trust. Pass all URLs you plan to cite.",
   annotations: {
     title: "Validate Reference Links",
     readOnlyHint: true,

@@ -2,6 +2,20 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.14.2 (2026-06-05) — Bug-hunt second pass: external-API hardening + anti-fabrication
+
+Second pass of the cross-tool audit (design log #36), split between Claude (tools/models) and Codex (providers/external-API). All changes are MCP-server-side; the web tool surface is unchanged (stays at API version 1.14.1).
+
+### Fixed — anti-fabrication (tools/models)
+
+- **`workflow.maic` no longer fabricates studies.** It passed mechanically-named `"<drug>_trial"` stubs to `risk_of_bias`, producing a RoB table for studies that don't exist. RoB is no longer auto-run; §5 now directs the user to run `risk_of_bias` on the actual screened trials.
+- **`cost_effectiveness_model` discloses placeholder inputs.** Loud ⚠️ "INDICATIVE ONLY" warning when PartSA survival medians are defaulted (24/12/18/9 months); Markov structural assumptions (2% mortality, the `efficacy_delta`→transition formula, the 0.7× comparator scalar) are now disclosed as illustrative assumptions instead of being invisible.
+- **`ai_disclosure_level` is now discoverable.** It was placed outside `inputSchema.properties` in `survival_fitting`, `hta_workflow`, `hta_dossier`, `cost_effectiveness_model`, so external MCP clients couldn't see it. Moved inside `properties`; guarded by `tests/schemas/aiDisclosurePlacement.test.ts`.
+
+### Fixed — external-API hardening (providers)
+
+- Sanitize/encode requests and stop silently swallowing non-2xx across the live-API fetchers: `scienceDirect` (Scopus-400 + throw), `purpleBook` (Lucene quote injection), `biorxiv` (boolean-query tokenizer + first-page note), `cmsNadac`/`whoGho` (URL-encode filter keys), `pubmed`/`googleScholar` (surface 429/`{error}` instead of returning `[]`). Thrown errors now record `status:"failed"` + an audit warning via the dispatcher. `validateLinks`: AIFA/TLV added to browser-only; HTA 401/407 treated like 403 bot-blocks.
+
 ## v1.14.1 (2026-06-05) — Fixes: dispatch double-wrap, EMBASE query, fabricated-utility disclosure
 
 Bug-hunt pass after several user-found production issues. The common thread: failures that live in the integration/runtime layer (server dispatch, real external APIs, defaulted inputs) which unit tests structurally miss. Adds guards so these classes are now caught automatically.

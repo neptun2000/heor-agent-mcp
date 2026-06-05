@@ -118,6 +118,12 @@ const HtaWorkflowSchema = z
       .describe(
         "Skip the cost-effectiveness model phase (e.g., when the dossier is clinical-only).",
       ),
+    require_real_ce_inputs: z
+      .boolean()
+      .default(false)
+      .describe(
+        "When true, SKIP the cost-effectiveness phase unless ce_inputs supplies real drug/comparator costs + an effect measure — rather than running it on fabricated defaults (drug £1000, efficacy_delta 0.25) and emitting an authoritative-looking placeholder ICER. Default false runs CE but loudly flags any defaulted-input ICER as placeholder/not-submission-grade. Design log #35.",
+      ),
     unmet_need_inputs: z
       .object({
         disease_burden: z
@@ -608,68 +614,115 @@ export async function runHtaWorkflow(
   let ceSummaryText = "";
   if (!input.skip_ce_model) {
     const ce = input.ce_inputs ?? {};
-    const ceRes = await safeRun(() =>
-      deps.costEffectivenessModel({
-        intervention: input.drug,
-        comparator: "standard of care",
-        indication: input.indication,
-        time_horizon: "lifetime",
-        perspective: input.perspective,
-        clinical_inputs: {
-          efficacy_delta: ce.efficacy_delta ?? 0.25,
-        },
-        cost_inputs: {
-          drug_cost_annual: ce.drug_cost_annual ?? 1000,
-          comparator_cost_annual: ce.comparator_cost_annual ?? 0,
-          ae_cost: ce.ae_cost ?? 0,
-          admin_cost: ce.admin_cost ?? 0,
-        },
-        // CE model requires BOTH qaly fields when utility_inputs is set
-        // (costEffectivenessModel.ts:33). Only build the object when both are
-        // supplied — otherwise silently fall through to QALY-from-efficacy-delta.
-        utility_inputs:
-          ce.qaly_on_treatment !== undefined && ce.qaly_comparator !== undefined
-            ? {
-                qaly_on_treatment: ce.qaly_on_treatment,
-                qaly_comparator: ce.qaly_comparator,
-              }
-            : undefined,
-        psa_iterations: 1000,
-        run_psa: true,
-        output_format: "json",
-      }),
-    );
-    if (ceRes.ok) {
-      const ceContent = (ceRes.value as { content?: unknown }).content;
-      if (typeof ceContent === "string") {
-        try {
-          ceResults = JSON.parse(ceContent);
-        } catch {
-          ceResults = ceContent;
-        }
-      } else {
-        ceResults = ceContent;
-      }
-      if (
-        isRecord(ceResults) &&
-        isRecord((ceResults as { base_case?: unknown }).base_case)
-      ) {
-        const bc = (ceResults as { base_case: Record<string, unknown> })
-          .base_case;
-        const icer = bc.icer;
-        if (typeof icer === "number") {
-          ceSummaryText = `Deterministic ICER: ${input.perspective === "nhs" ? "£" : "$"}${Math.round(icer).toLocaleString()} per QALY.`;
-        }
-      }
-      audit = addAssumption(
-        audit,
-        `Phase 4 (cost_effectiveness_model) ran 1000-iteration PSA. ${ceSummaryText}`,
+
+    // Design log #35: detect which economic inputs the caller OMITTED. The CE
+    // call below defaults missing values (drug_cost £1000, efficacy_delta 0.25),
+    // so without this guard the workflow emits an authoritative-looking ICER from
+    // fabricated inputs. Never present that as real.
+    const defaultedInputs: string[] = [];
+    if (ce.drug_cost_annual === undefined)
+      defaultedInputs.push("drug_cost_annual");
+    if (ce.comparator_cost_annual === undefined)
+      defaultedInputs.push("comparator_cost_annual");
+    const hasEffect =
+      ce.efficacy_delta !== undefined ||
+      (ce.qaly_on_treatment !== undefined && ce.qaly_comparator !== undefined);
+    if (!hasEffect)
+      defaultedInputs.push(
+        "effect (efficacy_delta / qaly_on_treatment+qaly_comparator)",
       );
-    } else {
+    const ceIsPlaceholder = defaultedInputs.length > 0;
+
+    if (input.require_real_ce_inputs && ceIsPlaceholder) {
+      // Refuse to fabricate: skip the CE phase entirely with guidance.
       audit = addWarning(
         audit,
-        `Phase 4 (cost_effectiveness_model) failed: ${ceRes.error}. hta_dossier Economic Evidence Summary will be flagged as gap.`,
+        `Phase 4 (cost_effectiveness_model) SKIPPED — require_real_ce_inputs=true and these ` +
+          `economic inputs were not supplied: ${defaultedInputs.join(", ")}. ` +
+          `Provide ce_inputs (real drug/comparator costs + an effect measure) for a valid ICER.`,
       );
+      ceResults = undefined;
+      phaseTimings.cost_effectiveness_model = Date.now() - tCe;
+    } else {
+      const ceRes = await safeRun(() =>
+        deps.costEffectivenessModel({
+          intervention: input.drug,
+          comparator: "standard of care",
+          indication: input.indication,
+          time_horizon: "lifetime",
+          perspective: input.perspective,
+          clinical_inputs: {
+            efficacy_delta: ce.efficacy_delta ?? 0.25,
+          },
+          cost_inputs: {
+            drug_cost_annual: ce.drug_cost_annual ?? 1000,
+            comparator_cost_annual: ce.comparator_cost_annual ?? 0,
+            ae_cost: ce.ae_cost ?? 0,
+            admin_cost: ce.admin_cost ?? 0,
+          },
+          // CE model requires BOTH qaly fields when utility_inputs is set
+          // (costEffectivenessModel.ts:33). Only build the object when both are
+          // supplied — otherwise silently fall through to QALY-from-efficacy-delta.
+          utility_inputs:
+            ce.qaly_on_treatment !== undefined &&
+            ce.qaly_comparator !== undefined
+              ? {
+                  qaly_on_treatment: ce.qaly_on_treatment,
+                  qaly_comparator: ce.qaly_comparator,
+                }
+              : undefined,
+          psa_iterations: 1000,
+          run_psa: true,
+          output_format: "json",
+        }),
+      );
+      if (ceRes.ok) {
+        const ceContent = (ceRes.value as { content?: unknown }).content;
+        if (typeof ceContent === "string") {
+          try {
+            ceResults = JSON.parse(ceContent);
+          } catch {
+            ceResults = ceContent;
+          }
+        } else {
+          ceResults = ceContent;
+        }
+        if (
+          isRecord(ceResults) &&
+          isRecord((ceResults as { base_case?: unknown }).base_case)
+        ) {
+          const bc = (ceResults as { base_case: Record<string, unknown> })
+            .base_case;
+          const icer = bc.icer;
+          if (typeof icer === "number") {
+            const placeholderPrefix = ceIsPlaceholder
+              ? `⚠️ PLACEHOLDER ICER — derived from DEFAULTED inputs (${defaultedInputs.join(", ")}); NOT VALID FOR SUBMISSION. Supply ce_inputs for a real estimate. `
+              : "";
+            ceSummaryText = `${placeholderPrefix}Deterministic ICER: ${input.perspective === "nhs" ? "£" : "$"}${Math.round(icer).toLocaleString()} per QALY.`;
+          }
+        }
+        if (ceIsPlaceholder && isRecord(ceResults)) {
+          // Tag so hta_dossier renders the placeholder banner, not a clean ICER.
+          ceResults = {
+            ...(ceResults as Record<string, unknown>),
+            _placeholder: true,
+            _defaulted_inputs: defaultedInputs,
+          };
+          audit = addWarning(
+            audit,
+            `Phase 4 ICER derived from DEFAULTED economic inputs (${defaultedInputs.join(", ")}) — placeholder only, not submission-grade. Supply ce_inputs for a real estimate.`,
+          );
+        }
+        audit = addAssumption(
+          audit,
+          `Phase 4 (cost_effectiveness_model) ran 1000-iteration PSA. ${ceSummaryText}`,
+        );
+      } else {
+        audit = addWarning(
+          audit,
+          `Phase 4 (cost_effectiveness_model) failed: ${ceRes.error}. hta_dossier Economic Evidence Summary will be flagged as gap.`,
+        );
+      }
     }
   } else {
     audit = addAssumption(
@@ -1033,6 +1086,12 @@ export const htaWorkflowToolSchema = {
         default: false,
         description:
           "Skip the cost-effectiveness model phase (e.g., for clinical-only dossiers).",
+      },
+      require_real_ce_inputs: {
+        type: "boolean",
+        default: false,
+        description:
+          "When true, SKIP the cost-effectiveness phase unless ce_inputs supplies real drug/comparator costs + an effect measure, instead of running it on fabricated defaults and emitting a placeholder ICER. Default false runs CE but loudly flags any defaulted-input ICER as placeholder/not-submission-grade. Design log #35.",
       },
       auto_check_regulatory: {
         type: "boolean",

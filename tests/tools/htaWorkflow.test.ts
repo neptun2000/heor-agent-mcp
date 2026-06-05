@@ -196,6 +196,42 @@ describe("hta_workflow — pipeline sequencing", () => {
   });
 });
 
+// ---- Design log #35: placeholder economic inputs ----------------------
+
+describe("hta_workflow — design log #35: placeholder economic inputs", () => {
+  it("flags a PLACEHOLDER ICER when ce_inputs are omitted (default)", async () => {
+    const r = await run({ drug: "drugX", indication: "Y" });
+    expect(r.content).toMatch(/PLACEHOLDER ICER/i);
+    expect(r.content).toMatch(/drug_cost_annual/);
+  });
+
+  it("SKIPS the CE phase when require_real_ce_inputs=true and inputs are missing", async () => {
+    const r = await run({
+      drug: "drugX",
+      indication: "Y",
+      require_real_ce_inputs: true,
+    });
+    expect(r.content).toMatch(/SKIPPED/);
+    expect(r.content).toMatch(/require_real_ce_inputs/);
+    // never presents a fabricated ICER
+    expect(r.content).not.toMatch(/Deterministic ICER/);
+  });
+
+  it("does NOT flag placeholder when real ce_inputs are supplied", async () => {
+    const r = await run({
+      drug: "drugX",
+      indication: "Y",
+      ce_inputs: {
+        drug_cost_annual: 12000,
+        comparator_cost_annual: 3000,
+        efficacy_delta: 0.3,
+      },
+    });
+    expect(r.content).not.toMatch(/PLACEHOLDER ICER/i);
+    expect(r.content).toMatch(/Deterministic ICER/);
+  });
+});
+
 // ---- Fault tolerance ---------------------------------------------------
 
 describe("hta_workflow — fault tolerance (safe-run)", () => {

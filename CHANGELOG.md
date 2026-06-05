@@ -2,6 +2,15 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.14.3 (2026-06-05) — Close-out: hta_workflow placeholder guard (#35) + live-API smoke
+
+Closes the remaining tracked follow-ups from design log #36.
+
+### Added
+
+- **`hta_workflow` no longer presents fabricated economics as real (design log #35).** Phase 4 now detects which `ce_inputs` the caller omitted (drug/comparator cost, effect measure). By default it still runs the CE model but **loudly flags the ICER as `⚠️ PLACEHOLDER … NOT VALID FOR SUBMISSION`** (in `ceSummaryText`, an audit warning, and a `_placeholder` tag on `model_results` for the dossier) instead of emitting an authoritative-looking number from defaults (drug £1000, efficacy_delta 0.25). New **`require_real_ce_inputs`** flag (default false) makes it **skip the CE phase entirely** with guidance when real inputs aren't supplied. Exposed in the web tool definition; web↔MCP parity fixture updated.
+- **`scripts/smoke/live-api-smoke.mjs`** — opt-in smoke that drives a live MCP `literature.search` with an edge-case parenthesized/boolean query and asserts the hardened fetchers return results or surface an explicit error (never a silent empty). Verified against live Azure MCP.
+
 ## v1.14.2 (2026-06-05) — Bug-hunt second pass: external-API hardening + anti-fabrication
 
 Second pass of the cross-tool audit (design log #36), split between Claude (tools/models) and Codex (providers/external-API). All changes are MCP-server-side; the web tool surface is unchanged (stays at API version 1.14.1).

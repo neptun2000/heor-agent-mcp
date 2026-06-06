@@ -6,12 +6,13 @@
  * Keep this file as orchestration-only; all prose generation lives in gvdSections.ts.
  */
 import type { DossierParams } from "../../providers/types.js";
-import {
-  generateGvdSection,
-  type GvdSectionParams,
-} from "./gvdSections.js";
+import { generateGvdSection, type GvdSectionParams } from "./gvdSections.js";
 import { generateMarketPathways } from "./gvdMarketBranches.js";
-import { buildGvdEvidencePack, type GvdEvidencePack } from "./gvdEvidencePack.js";
+import {
+  buildGvdEvidencePack,
+  type GvdEvidencePack,
+} from "./gvdEvidencePack.js";
+import { extractEconomicSummary } from "./economicSummary.js";
 
 const GVD_SECTIONS = [
   "Executive Summary",
@@ -41,7 +42,10 @@ export interface GvdRouterResult {
  */
 export function routeGvdSections(params: DossierParams): GvdRouterResult {
   const gvdParams = mapDossierToGvdParams(params);
-  const marketPathways = generateMarketPathways(gvdParams.drug, gvdParams.indication);
+  const marketPathways = generateMarketPathways(
+    gvdParams.drug,
+    gvdParams.indication,
+  );
 
   const lines: string[] = [];
   const gaps: string[] = [];
@@ -65,16 +69,10 @@ export function routeGvdSections(params: DossierParams): GvdRouterResult {
 // ─── Param mapping ────────────────────────────────────────────────────────────
 
 function mapDossierToGvdParams(params: DossierParams): GvdSectionParams {
-  // Extract ICER and BIM from model_results when provided
-  let economic_icer: number | undefined;
-  let economic_currency: string | undefined;
-  let economic_bim_year3: number | undefined;
-
-  if (params.model_results) {
-    economic_icer = params.model_results.base_case?.icer;
-    // currency isn't directly on CEModelResult; default to USD
-    economic_currency = "USD";
-  }
+  // Extract ICER, currency, and placeholder flags from model_results when
+  // provided. Design log #37: the _placeholder / _defaulted_inputs guard set
+  // by hta_workflow (design log #35) must survive into the GVD prose.
+  const econ = extractEconomicSummary(params.model_results);
 
   return {
     drug: params.drug_name,
@@ -82,9 +80,11 @@ function mapDossierToGvdParams(params: DossierParams): GvdSectionParams {
     evidence_summary: params.evidence_summary,
     rob_results: params.rob_results,
     unmet_need_summary: params.unmet_need_summary,
-    economic_icer,
-    economic_currency,
-    economic_bim_year3,
+    economic_icer: econ.icer,
+    economic_currency: econ.currency,
+    economic_bim_year3: undefined,
+    economic_placeholder: econ.placeholder,
+    economic_defaulted_inputs: econ.defaultedInputs,
     // comparators come from picos if provided
     comparators: extractComparators(params),
     product_description: undefined,

@@ -11,6 +11,10 @@
  */
 import type { LiteratureResult } from "../../providers/types.js";
 import { generateMarketPathways } from "./gvdMarketBranches.js";
+import {
+  renderPlaceholderBanner,
+  type EconomicSummary,
+} from "./economicSummary.js";
 
 export interface GvdSectionParams {
   drug: string;
@@ -21,6 +25,10 @@ export interface GvdSectionParams {
   economic_icer?: number;
   economic_currency?: string;
   economic_bim_year3?: number;
+  /** Design log #37: true when economic_icer came from DEFAULTED inputs (placeholder, not submission-grade). */
+  economic_placeholder?: boolean;
+  /** Design log #37: the inputs that were defaulted, for the placeholder banner. */
+  economic_defaulted_inputs?: string[];
   comparators?: string[];
   product_description?: string;
   safety_ae_table?: string;
@@ -81,7 +89,9 @@ function generateExecutiveSummary(params: GvdSectionParams): GvdSectionResult {
   const { drug, indication } = params;
   const economicLine =
     params.economic_icer != null
-      ? `The deterministic ICER is ${params.economic_currency ?? "USD"} ${params.economic_icer}/QALY.`
+      ? params.economic_placeholder
+        ? `⚠️ ICER is a PLACEHOLDER from defaulted inputs — not submission-grade; see Section 9.`
+        : `The deterministic ICER is ${params.economic_currency ?? "USD"} ${params.economic_icer}/QALY.`
       : "Economic model results are pending — see Section 9.";
 
   const socLine =
@@ -103,9 +113,7 @@ function generateExecutiveSummary(params: GvdSectionParams): GvdSectionResult {
   return { content, status: "complete" };
 }
 
-function generateDiseaseBackground(
-  params: GvdSectionParams,
-): GvdSectionResult {
+function generateDiseaseBackground(params: GvdSectionParams): GvdSectionResult {
   const { indication } = params;
   const evidenceBlock = formatEvidenceSummary(params.evidence_summary);
 
@@ -235,13 +243,28 @@ function generateHealthEconomicSummary(
 ): GvdSectionResult {
   if (params.economic_icer != null) {
     const currency = params.economic_currency ?? "USD";
+
+    // Design log #37: a placeholder ICER (defaulted inputs) must NOT be rendered
+    // as authoritative cost-effectiveness prose — emit the shared banner + gap.
+    if (params.economic_placeholder) {
+      const econ: EconomicSummary = {
+        icer: params.economic_icer,
+        currency,
+        placeholder: true,
+        defaultedInputs: params.economic_defaulted_inputs ?? [],
+      };
+      return { content: renderPlaceholderBanner(econ), status: "missing" };
+    }
+
     const bim =
       params.economic_bim_year3 != null
         ? `Year-3 net budget impact: ${currency} ${params.economic_bim_year3.toLocaleString()}.`
         : "Year-3 budget impact data not provided.";
 
     const content = [
-      `**${params.drug}** is estimated to be cost-effective at **${currency} ${params.economic_icer.toLocaleString()}/QALY** (deterministic ICER).`,
+      // Design log #37: state the ICER; do NOT assert cost-effectiveness — that
+      // requires a WTP-threshold comparison this renderer does not have.
+      `**${params.drug}** has a deterministic ICER of **${currency} ${params.economic_icer.toLocaleString()}/QALY**. Compare against the relevant willingness-to-pay threshold to draw a cost-effectiveness conclusion.`,
       "",
       `Probabilistic sensitivity analysis (PSA) and cost-effectiveness acceptability curves (CEAC) are provided in the full economic model output (pipe \`cost_effectiveness_model\` results here). ${bim}`,
       "",
@@ -270,9 +293,7 @@ function generatePatientReportedOutcomes(
   return { content, status: "partial" };
 }
 
-function generatePolicyEnvironment(
-  params: GvdSectionParams,
-): GvdSectionResult {
+function generatePolicyEnvironment(params: GvdSectionParams): GvdSectionResult {
   const { drug, indication } = params;
   const pathways = generateMarketPathways(drug, indication);
 

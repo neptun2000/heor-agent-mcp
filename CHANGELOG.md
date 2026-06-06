@@ -2,6 +2,18 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.14.4 (2026-06-06) — Placeholder ICER now propagates into dossier prose (#37)
+
+Completes the design-log #35 guard: the `_placeholder` tag set by `hta_workflow` survives Zod (`CEModelResultSchema` is `.passthrough()`) but the dossier renderers were silently discarding it. Two defects fixed + one overclaim.
+
+### Fixed
+
+- **GVD path no longer renders a placeholder ICER as authoritative prose.** `hta_dossier({hta_body:"gvd"})` printed defaulted ICERs as clean *"estimated to be cost-effective at X/QALY"* in both the Executive Summary and Section 9 (Health Economic Summary), `status:"complete"`, no warning. The `_placeholder`/`_defaulted_inputs` flags now flow through `gvdSectionRouter` into the section generators → a `⚠️ PLACEHOLDER ICER — NOT VALID FOR SUBMISSION` banner with `status:"missing"` (listed under Gap Analysis).
+- **NICE / EMA / FDA / IQWiG / HAS now render piped `model_results`.** `buildSection` never received `model_results`, so the "Economic Evidence Summary" section always said *"Economic model results not provided"* — a real, valid piped ICER was silently dropped for all five bodies. It now renders the ICER (placeholder-aware: banner + gap when flagged).
+- **Removed an unsupported cost-effectiveness claim.** Section 9 asserted *cost-effectiveness* from the ICER alone with no willingness-to-pay-threshold comparison. Reworded to *"has a deterministic ICER of X/QALY. Compare against the relevant WTP threshold to draw a cost-effectiveness conclusion."*
+
+New shared `src/tools/htaDossier/economicSummary.ts` (`extractEconomicSummary` + `renderPlaceholderBanner`) keeps the GVD and NICE-family paths consistent. +6 regression tests; full suite 1249 passing.
+
 ## v1.14.3 (2026-06-05) — Close-out: hta_workflow placeholder guard (#35) + live-API smoke
 
 Closes the remaining tracked follow-ups from design log #36.

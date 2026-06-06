@@ -23,6 +23,10 @@ import {
   type CountryIso2,
 } from "../data/mfnBasket.js";
 import { routeGvdSections } from "./htaDossier/gvdSectionRouter.js";
+import {
+  extractEconomicSummary,
+  renderPlaceholderBanner,
+} from "./htaDossier/economicSummary.js";
 import { caseInsensitiveEnum } from "../util/caseInsensitive.js";
 
 const DossierSchema = z.object({
@@ -694,6 +698,7 @@ function buildSection(
   drugName: string,
   indication: string,
   evidenceSummary?: string | LiteratureResult[],
+  modelResults?: unknown,
 ): { content: string; status: "complete" | "partial" | "missing" } {
   const evidence =
     typeof evidenceSummary === "string"
@@ -732,11 +737,28 @@ function buildSection(
             content: `⚠️ Clinical evidence not provided. Pipe output from literature.search to populate this section.`,
             status: "missing",
           };
-    case "Economic Evidence Summary":
+    case "Economic Evidence Summary": {
+      // Design log #37: render the piped model_results (was silently ignored).
+      // Placeholder ICERs (defaulted inputs) get the shared banner + gap status,
+      // never a clean cost-effective claim.
+      const econ = extractEconomicSummary(modelResults);
+      if (econ.icer == null) {
+        return {
+          content: `⚠️ Economic model results not provided. Run models.cost_effectiveness and pipe results here.`,
+          status: "missing",
+        };
+      }
+      if (econ.placeholder) {
+        return { content: renderPlaceholderBanner(econ), status: "missing" };
+      }
       return {
-        content: `⚠️ Economic model results not provided. Run models.cost_effectiveness and pipe results here.`,
-        status: "missing",
+        content:
+          `Deterministic ICER: **${econ.currency} ${econ.icer.toLocaleString()}/QALY**. ` +
+          `Compare against the relevant willingness-to-pay threshold to draw a cost-effectiveness conclusion. ` +
+          `Pipe the full \`cost_effectiveness_model\` output (PSA, CEAC, OWSA) for probabilistic results.`,
+        status: "complete",
       };
+    }
     default:
       return {
         content: `⚠️ ${name} — populate with submission-specific content.`,
@@ -1395,6 +1417,7 @@ export async function handleHtaDossierPrep(
       params.drug_name,
       params.indication,
       params.evidence_summary,
+      params.model_results,
     );
     lines.push(`### ${sectionName}`);
     // Inject unmet_need_summary into the "Unmet Need" section for NICE

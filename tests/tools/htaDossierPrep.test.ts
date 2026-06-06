@@ -566,3 +566,37 @@ describe("handleHtaDossierPrep — design log #26 regulatory_landscape", () => {
     expect(txt).toContain("Source");
   });
 });
+
+// ─── Design log #37: model_results in NICE-family Economic Evidence Summary ───
+describe("handleHtaDossierPrep — design log #37: economic evidence summary", () => {
+  it("renders a real piped ICER in the NICE Economic Evidence Summary", async () => {
+    const r = await handleHtaDossierPrep({
+      ...baseParams,
+      model_results: { base_case: { icer: 30000 } },
+    });
+    const txt = r.content as string;
+    expect(txt).toMatch(/30[,.]?000/);
+    expect(txt).not.toMatch(/Economic model results not provided/);
+  });
+
+  it("renders a PLACEHOLDER banner (not a clean ICER) when _placeholder is set", async () => {
+    const r = await handleHtaDossierPrep({
+      ...baseParams,
+      model_results: {
+        base_case: { icer: 0 },
+        _placeholder: true,
+        _defaulted_inputs: ["drug_cost_annual", "efficacy_delta"],
+      },
+    });
+    const txt = r.content as string;
+    expect(txt).toMatch(/PLACEHOLDER ICER/i);
+    expect(txt).toMatch(/drug_cost_annual/);
+    expect(txt).not.toMatch(/(?:is|be) cost-effective/i);
+  });
+
+  it("still says 'not provided' when no model_results are piped", async () => {
+    const r = await handleHtaDossierPrep({ ...baseParams });
+    const txt = r.content as string;
+    expect(txt).toMatch(/Economic model results not provided/);
+  });
+});

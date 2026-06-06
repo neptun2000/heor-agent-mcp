@@ -175,6 +175,49 @@ describe("generateGvdSection — Section 9: Health Economic Summary", () => {
     expect(content).toContain("⚠️");
     expect(status).toBe("missing");
   });
+
+  // ─── Design log #37: placeholder ICER propagation ──────────────────────
+  it("does NOT claim cost-effectiveness for a real ICER (no WTP threshold)", () => {
+    const { content, status } = generateGvdSection("Health Economic Summary", {
+      drug: "examplivir",
+      indication: "chronic hepatitis B",
+      economic_icer: 22000,
+      economic_currency: "GBP",
+    });
+    expect(content).not.toMatch(/(?:is|be) cost-effective/i);
+    expect(content).toMatch(/22[,.]?000/);
+    expect(status).toBe("complete");
+  });
+
+  it("renders a PLACEHOLDER banner + gap status when economic_placeholder is set", () => {
+    const { content, status } = generateGvdSection("Health Economic Summary", {
+      drug: "examplivir",
+      indication: "chronic hepatitis B",
+      economic_icer: 0,
+      economic_currency: "GBP",
+      economic_placeholder: true,
+      economic_defaulted_inputs: ["drug_cost_annual", "efficacy_delta"],
+    });
+    expect(content).toMatch(/PLACEHOLDER ICER/i);
+    expect(content).toMatch(/drug_cost_annual/);
+    expect(content).not.toMatch(/(?:is|be) cost-effective/i);
+    expect(status).toBe("missing");
+  });
+});
+
+describe("generateGvdSection — Executive Summary: design log #37", () => {
+  it("flags the economic line as placeholder rather than asserting a clean ICER", () => {
+    const { content } = generateGvdSection("Executive Summary", {
+      drug: "examplivir",
+      indication: "chronic hepatitis B",
+      economic_icer: 0,
+      economic_currency: "GBP",
+      economic_placeholder: true,
+      economic_defaulted_inputs: ["drug_cost_annual"],
+    });
+    expect(content).toMatch(/placeholder/i);
+    expect(content).not.toMatch(/The deterministic ICER is GBP 0\/QALY\./);
+  });
 });
 
 describe("generateGvdSection — Section 11: Policy Environment", () => {

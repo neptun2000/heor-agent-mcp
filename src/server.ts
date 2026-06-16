@@ -147,6 +147,11 @@ import {
   htaReviewSimulationToolSchema,
 } from "./tools/htaReviewSimulation.js";
 import {
+  handleLivingReview,
+  livingReviewSchema,
+  livingReviewToolSchema,
+} from "./tools/livingReview.js";
+import {
   handleClaimsQuery,
   claimsQueryToolSchema,
 } from "./tools/claimsQuery.js";
@@ -328,6 +333,7 @@ function createMcpServer(
       trialEnrollmentCriteriaToolSchema,
       governanceSelfCheckToolSchema,
       htaReviewSimulationToolSchema,
+      livingReviewToolSchema,
       // data.claims_query is internal-only. Require both storage credentials
       // and an explicit deployment flag so a public host cannot expose claims
       // data just because credentials were accidentally configured.
@@ -496,6 +502,23 @@ function createMcpServer(
           }
           const reviewResult = await htaReviewSimulationHandler(parsed.data);
           result = { content: reviewResult };
+          break;
+        }
+        case "literature.living_review": {
+          const parsed = livingReviewSchema.safeParse(args);
+          if (!parsed.success) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Validation error: ${parsed.error.issues.map((i) => i.message).join("; ")}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+          const livingResult = await handleLivingReview(parsed.data);
+          result = { content: livingResult };
           break;
         }
         case "regulatory.status_check": {

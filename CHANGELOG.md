@@ -2,6 +2,12 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.16.0 (2026-06-16) — literature.living_review (protocol-locked living SLR)
+
+### Added
+
+- **`literature.living_review` tool.** A stateless living systematic review. `init` locks a protocol and runs a baseline `literature.search`, returning the baseline records for the caller to persist; `refresh` takes the protocol + the caller's `previous_records`, re-runs the search, and returns the **delta** — new/dropped records, a deterministic **material-change** flag (a new RCT, ≥ threshold new records, or a conference late-breaker), a recommended downstream re-run list (`evidence_network` / `itc_feasibility`), and the next-refresh date from the chosen cadence (monthly/quarterly/half-yearly/annual/conference-adhoc). The MCP server holds **no state** — persistence + scheduling are host-owned (web-tier store + scheduler, a follow-up). Record identity = source `id` → normalised title+year; `recommended_downstream` is surfaced, never auto-fired (no silent schedule-triggered ITC). 13 tests. Design log #39.
+
 ## v1.15.1 (2026-06-16) — Public/internal claims-data separation (security)
 
 ### Security

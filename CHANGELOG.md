@@ -2,6 +2,16 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.15.1 (2026-06-16) — Public/internal claims-data separation (security)
+
+### Security
+
+- **Internal claims tools (`data.claims_query`, `data.query_agent`) are now fail-closed behind an explicit opt-in.** Previously they registered whenever `AZURE_STORAGE_CONNECTION_STRING` was present, so accidental credential presence on a public host could expose internal-only real-world claims / hospital-discharge datasets. They now require **both** `HEOR_ENABLE_INTERNAL_CLAIMS=true` **and** `AZURE_STORAGE_CONNECTION_STRING`; storage credentials alone are never sufficient (`internalClaimsEnabled()` gate + a `serverDispatchShape` source guard that prevents reverting to credential-only registration). The web tier mirrors the gate (public `toolDefinitions`, OpenAPI, ChatGPT adapter, and streaming chat exclude the claims tools unless the flag is set; landing-page examples + dataset table require `NEXT_PUBLIC_HEOR_ENABLE_INTERNAL_CLAIMS=true`; the public prompt swaps internal-claims guidance for public-source epidemiology). Design log #40.
+
+### Fixed
+
+- Dockerfile copies `.well-known` into the runtime image so the server card is served.
+
 ## v1.15.0 (2026-06-16) — hta.review_simulation (predict HTA clarification questions)
 
 ### Added

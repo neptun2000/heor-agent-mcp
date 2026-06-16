@@ -11,6 +11,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
+COPY .well-known ./.well-known
 
 ENV MCP_HTTP_PORT=8080
 EXPOSE 8080

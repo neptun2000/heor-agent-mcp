@@ -164,6 +164,13 @@ import {
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 
+function internalClaimsEnabled(): boolean {
+  return (
+    process.env.HEOR_ENABLE_INTERNAL_CLAIMS === "true" &&
+    !!process.env.AZURE_STORAGE_CONNECTION_STRING
+  );
+}
+
 // Pre-built HEOR workflow prompts for Claude Desktop slash-command discovery
 const HEOR_PROMPTS = [
   {
@@ -321,9 +328,10 @@ function createMcpServer(
       trialEnrollmentCriteriaToolSchema,
       governanceSelfCheckToolSchema,
       htaReviewSimulationToolSchema,
-      // data.claims_query is only registered when Azure Blob Storage is configured
-      // (internal deployment only). Not exposed in the public npm package.
-      ...(process.env.AZURE_STORAGE_CONNECTION_STRING
+      // data.claims_query is internal-only. Require both storage credentials
+      // and an explicit deployment flag so a public host cannot expose claims
+      // data just because credentials were accidentally configured.
+      ...(internalClaimsEnabled()
         ? [claimsQueryToolSchema, queryAgentToolSchema]
         : []),
     ],
@@ -503,7 +511,7 @@ function createMcpServer(
           break;
         }
         case "data.claims_query": {
-          if (!process.env.AZURE_STORAGE_CONNECTION_STRING) {
+          if (!internalClaimsEnabled()) {
             return {
               content: [
                 {
@@ -520,7 +528,7 @@ function createMcpServer(
           break;
         }
         case "data.query_agent": {
-          if (!process.env.AZURE_STORAGE_CONNECTION_STRING) {
+          if (!internalClaimsEnabled()) {
             return {
               content: [
                 {

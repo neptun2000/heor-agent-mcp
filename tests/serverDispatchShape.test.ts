@@ -37,4 +37,15 @@ describe("server.ts dispatch shape — no double-wrap", () => {
     );
     expect(offending).toEqual([]);
   });
+
+  it("claims tools require explicit internal opt-in, not just storage credentials", () => {
+    expect(src).toContain("HEOR_ENABLE_INTERNAL_CLAIMS");
+    expect(src).toContain("function internalClaimsEnabled()");
+    expect(src).not.toMatch(
+      /\.\.\.\(process\.env\.AZURE_STORAGE_CONNECTION_STRING\s*\?/,
+    );
+    expect(src).not.toMatch(
+      /if \(!process\.env\.AZURE_STORAGE_CONNECTION_STRING\)/,
+    );
+  });
 });

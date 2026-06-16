@@ -142,6 +142,11 @@ import {
   governanceSelfCheckToolSchema,
 } from "./tools/governanceSelfCheck.js";
 import {
+  htaReviewSimulationHandler,
+  htaReviewSimulationSchema,
+  htaReviewSimulationToolSchema,
+} from "./tools/htaReviewSimulation.js";
+import {
   handleClaimsQuery,
   claimsQueryToolSchema,
 } from "./tools/claimsQuery.js";
@@ -315,6 +320,7 @@ function createMcpServer(
       regulatoryStatusCheckToolSchema,
       trialEnrollmentCriteriaToolSchema,
       governanceSelfCheckToolSchema,
+      htaReviewSimulationToolSchema,
       // data.claims_query is only registered when Azure Blob Storage is configured
       // (internal deployment only). Not exposed in the public npm package.
       ...(process.env.AZURE_STORAGE_CONNECTION_STRING
@@ -465,6 +471,23 @@ function createMcpServer(
           // JSON-stringifies it when it's an object. Pass the payload object
           // directly — wrapping it in a content array here would double-wrap.
           result = { content: govResult };
+          break;
+        }
+        case "hta.review_simulation": {
+          const parsed = htaReviewSimulationSchema.safeParse(args);
+          if (!parsed.success) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `Validation error: ${parsed.error.issues.map((i) => i.message).join("; ")}`,
+                },
+              ],
+              isError: true,
+            };
+          }
+          const reviewResult = await htaReviewSimulationHandler(parsed.data);
+          result = { content: reviewResult };
           break;
         }
         case "regulatory.status_check": {

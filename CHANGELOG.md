@@ -2,6 +2,12 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.15.0 (2026-06-16) — hta.review_simulation (predict HTA clarification questions)
+
+### Added
+
+- **`hta.review_simulation` tool.** Predicts the clarification questions an HTA body will ask about a dossier, *before* submission. Consumes an `hta.dossier` / `hta.workflow` output (`dossier_markdown`), structured `dossier_sections`, or just `{drug, indication, pico, model_results}` for a pre-mortem. A deterministic gap/risk scan over a **10-category taxonomy** (comparator choice, indirect comparison, survival extrapolation, clinical risk-of-bias, economic-model structure, utilities, decision uncertainty, subgroups, real-world evidence, innovation/added-benefit) returns **ranked anticipated questions** with rationale, severity (critical/standard/minor), what-the-committee-looks-for, and a suggested response. **v1 bodies: NICE EAG + G-BA/IQWiG** (FDA, HAS, EU JCA → v2). Precedent links are **whitelist-only** (verified `niceTaPrecedents.ts`) and never claim a question was historically asked — every question is labelled "anticipated". Fully deterministic (no LLM call; the calling chat model presents the output); carries an ISPOR ELEVATE-GenAI disclosure block (`submission` default). New `src/review/{clarificationTaxonomy,dossierScan}.ts` + `src/formatters/reviewMarkdown.ts` + `src/tools/htaReviewSimulation.ts`. Registered in `server.ts`; web UI wired (`tools.ts`, `mcpSession.ts` TOOL_NAME_MAP, schema-parity fixture). 24 new tests. Design log #38.
+
 ## v1.14.9 (2026-06-07) — trial.enrollment_criteria + provider error surfacing
 
 ### Added

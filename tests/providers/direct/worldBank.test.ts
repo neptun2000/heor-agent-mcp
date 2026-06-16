@@ -1,11 +1,14 @@
 import { fetchWorldBank } from "../../../src/providers/direct/worldBank.js";
 
 describe("fetchWorldBank", () => {
-  it("returns empty array on fetch error", async () => {
+  it("throws on API errors so the dispatcher can record failure", async () => {
     const originalFetch = global.fetch;
-    global.fetch = jest.fn().mockRejectedValue(new Error("network error"));
-    const results = await fetchWorldBank("gdp", 5);
-    expect(results).toEqual([]);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      text: async () => "service unavailable",
+    });
+    await expect(fetchWorldBank("gdp", 5)).rejects.toThrow(/\[WorldBank\] API 503/);
     global.fetch = originalFetch;
   });
 

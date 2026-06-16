@@ -13,12 +13,17 @@ describe("fetchCortellis", () => {
     expect(results).toEqual([]);
   });
 
-  it("returns empty array on fetch error when key is set", async () => {
+  it("throws on direct API errors when key is set", async () => {
     process.env.CORTELLIS_API_KEY = "test-key";
     const origFetch = global.fetch;
-    global.fetch = jest.fn().mockRejectedValue(new Error("fail"));
-    const results = await fetchCortellis("semaglutide", 5);
-    expect(results).toEqual([]);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: async () => "error",
+    });
+    await expect(fetchCortellis("semaglutide", 5)).rejects.toThrow(
+      /\[Cortellis\] API 500/,
+    );
     global.fetch = origFetch;
   });
 });

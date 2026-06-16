@@ -33,9 +33,16 @@ describe("fetchChembl", () => {
     expect(results[0].url).toContain("CHEMBL1234");
   });
 
-  it("returns empty array on error", async () => {
-    (global.fetch as jest.Mock).mockReset().mockRejectedValueOnce(new Error("fail"));
-    const results = await fetchChembl("semaglutide", 20);
-    expect(results).toEqual([]);
+  it("throws on API errors so the dispatcher can record failure", async () => {
+    (global.fetch as jest.Mock)
+      .mockReset()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: async () => "server error",
+      });
+    await expect(fetchChembl("semaglutide", 20)).rejects.toThrow(
+      /\[ChEMBL\] API 500/,
+    );
   });
 });

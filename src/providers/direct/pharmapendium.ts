@@ -21,41 +21,45 @@ export async function fetchPharmapendium(
   query: string,
   maxResults: number,
 ): Promise<LiteratureResult[]> {
-  // Try institutional/enterprise proxy first if configured
   if (getProxyUrl()) {
-    const proxyResults = await fetchViaProxy(
-      "pharmapendium",
-      query,
-      maxResults,
-    );
-    if (proxyResults.length > 0) return proxyResults;
+    try {
+      const proxyResults = await fetchViaProxy(
+        "pharmapendium",
+        query,
+        maxResults,
+      );
+      if (proxyResults.length > 0) return proxyResults;
+    } catch {
+      // Proxy unreachable — fall through to direct API when key is set.
+    }
   }
 
-  // Fall back to direct API call if key is set
   const apiKey = process.env.PHARMAPENDIUM_API_KEY;
   if (!apiKey) return [];
 
-  try {
-    const url = `${BASE}?query=${encodeURIComponent(query)}&count=${maxResults}`;
-    const res = await fetch(url, {
-      headers: { "X-ELS-APIKey": apiKey, Accept: "application/json" },
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!res.ok) return [];
-    const data = (await res.json()) as PharmapendiumResponse;
-    const results = data.results ?? [];
-
-    return results.slice(0, maxResults).map((r, i) => ({
-      id: `pharmapendium_${r.id ?? i}`,
-      source: "pharmapendium" as const,
-      title: `${r.drugName ?? "Unknown"} — ${r.category ?? "Regulatory data"}`,
-      authors: [r.source ?? "Pharmapendium"],
-      date: r.date ?? "",
-      study_type: "regulatory",
-      abstract: r.summary ?? "",
-      url: "https://www.pharmapendium.com/",
-    }));
-  } catch {
-    return [];
+  // No try/catch on direct API — let errors propagate so the dispatcher records status:"failed".
+  const url = `${BASE}?query=${encodeURIComponent(query)}&count=${maxResults}`;
+  const res = await fetch(url, {
+    headers: { "X-ELS-APIKey": apiKey, Accept: "application/json" },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(
+      `[Pharmapendium] API ${res.status}: ${body.slice(0, 200)}`,
+    );
   }
+  const data = (await res.json()) as PharmapendiumResponse;
+  const results = data.results ?? [];
+
+  return results.slice(0, maxResults).map((r, i) => ({
+    id: `pharmapendium_${r.id ?? i}`,
+    source: "pharmapendium" as const,
+    title: `${r.drugName ?? "Unknown"} — ${r.category ?? "Regulatory data"}`,
+    authors: [r.source ?? "Pharmapendium"],
+    date: r.date ?? "",
+    study_type: "regulatory",
+    abstract: r.summary ?? "",
+    url: "https://www.pharmapendium.com/",
+  }));
 }

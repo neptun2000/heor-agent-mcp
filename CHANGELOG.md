@@ -2,6 +2,54 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.14.9 (2026-06-07) — trial.enrollment_criteria + provider error surfacing
+
+### Added
+
+- **`trial.enrollment_criteria` tool.** Fetches enrollment/eligibility criteria for any clinical trial from ClinicalTrials.gov by NCT number. Returns structured inclusion/exclusion split, primary outcomes, study design, and audit block. Use before building any trial-vs-real-world population gap analysis. Registered in server.ts; web UI wired (tools.ts, mcpSession.ts TOOL_NAME_MAP, systemPrompt.ts mandatory-call rule).
+
+### Fixed
+
+- **12 literature/data providers now surface HTTP errors instead of silently returning [].** `allOfUs`, `chembl`, `citeline`, `clinicalTrials`, `cochrane`, `cortellis`, `oecd`, `orangeBook`, `pharmapendium`, `proxyClient`, `wiley`, `worldBank` previously returned empty arrays on any non-2xx response, making failures indistinguishable from "no results" in the PRISMA audit trail. All now throw a named error (`[Provider] API ${status}: ...`) with **no outer `catch { return [] }`** so the dispatcher (`providers/direct/index.ts`) records `status:"failed"` in the audit. Enterprise fetchers that use an optional localhost proxy (`cochrane`, `citeline`, `cortellis`, `pharmapendium`) catch proxy failures only to fall through to the direct API when a key is set.
+
+### Tooling
+
+- Web drift-guard tests updated to tool count 32 (was 31).
+- `mcpInputSchemaKeys.json` fixture extended with `trial_enrollment_criteria: ["nct_id"]`.
+- Version strings synced to 1.14.9 across `server.json`, `.well-known/mcp/server-card.json`, `package-lock.json`, `web/lib/openApiSpec.ts`.
+
+Tests: `npm run build`; `npm test -- --runInBand` (130 suites, 1283 tests).
+
+## v1.14.8 (2026-06-06) — Multi-country claims summary fast path
+
+### Fixed
+
+- **Population-sizing summaries now cover Mexico DGIS, Chile DEIS, and NY SPARCS, not only Brazil DataSUS.** `data.claims_query` uses the compact `claims_visits_summary` layer for single-dataset `prevalence`/`count` requests on `datasus_sih`, `mexico_egresos`, `chile_deis`, and `ny_sparcs`, then falls back to raw parquet if a requested summary is unavailable.
+- **NY SPARCS ICD queries use ICD-10 prefixes directly.** The raw ETL already normalises SPARCS CCSR categories to representative ICD-10 prefixes, so `data.claims_query({ datasets:["ny_sparcs"], icd10_prefixes:["E11"] })` no longer translates back to obsolete CCSR codes such as `END003`.
+- **NY SPARCS 2023 is treated as known-missing.** The summary path prunes only loaded years (`2017-2022`, `2024`), so multi-year NY requests can return available years instead of failing on an empty 2023 glob.
+- **`data.query_agent` now routes Chile (`CL`) to `chile_deis` and keeps US inpatient sizing on summary-backed NY SPARCS primary data.** This avoids bundling MEPS into the same raw scan, which could defeat the summary fast path or hit missing-year globs.
+- **MAIC workflow keeps the historical “Next Steps” heading text while retaining the stricter required-tool-call guidance.** This restores the existing output contract without changing the workflow behavior.
+
+### Added
+
+- **Generic flat-claims summary builder.** `scripts/etl/build_claims_primary_diag_summary.py` builds and uploads compact `primary_diag_counts.parquet` files for `mexico_egresos`, `chile_deis`, and `ny_sparcs` using parallel dataset-year workers.
+
+Tests: `npm run build`; `npm test -- --runInBand` (129 suites, 1262 tests).
+
+## v1.14.6 (2026-06-06) — DATASUS nationwide query fast path
+
+### Fixed
+
+- **Brazil DataSUS SIH population-sizing queries no longer time out on nationwide multi-year scans.** `data.claims_query` now uses a compact `datasus_sih` diagnosis-count summary layer for `prevalence`/`count` requests and falls back to raw parquet if the summary layer is unavailable. The raw fallback still keeps DATASUS nested `source_year/region` paths separate from flat datasets to avoid DuckDB empty-glob IO errors.
+- **`data.query_agent` keeps output parseable while telling the model when live claims data succeeded.** Live-data confirmations and presentation instructions now live inside JSON fields instead of a non-JSON preamble, preventing downstream parsers from seeing different shapes while still blocking fabricated "DataSUS unavailable" fallbacks.
+
+### Added
+
+- **Parallel DATASUS summary map-reduce builder.** `scripts/etl/build_datasus_sih_summary.py` maps each `year x UF` raw parquet partition, reduces counts by `source_year`, `region`, `primary_diag_icd`, `sex`, and `age_years`, and uploads one compact summary parquet per year under `claims_visits_summary/source_dataset=datasus_sih/`.
+- Uploaded 2018-2024 DataSUS SIH summary parquet files to Azure Blob Storage and verified the failing Brazil T2D 2019-2022 query returns live counts with `execution.source = "datasus_summary"`.
+
+Tests: `npm run build`; `npm test -- --runInBand` (129 suites, 1254 tests).
+
 ## v1.14.4 (2026-06-06) — Placeholder ICER now propagates into dossier prose (#37)
 
 Completes the design-log #35 guard: the `_placeholder` tag set by `hta_workflow` survives Zod (`CEModelResultSchema` is `.passthrough()`) but the dossier renderers were silently discarding it. Two defects fixed + one overclaim.

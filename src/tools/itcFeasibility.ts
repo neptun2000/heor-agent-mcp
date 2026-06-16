@@ -116,7 +116,8 @@ function decide(p: FeasibilityParams): FeasibilityOutput {
           "Head-to-head RCT evidence is available — direct comparison is preferred over any ITC method.",
         exchangeability:
           "Not applicable — direct comparison bypasses the exchangeability assumption.",
-        homogeneity: "Assess within-trial; heterogeneity across H2H trials via standard meta-analysis if multiple.",
+        homogeneity:
+          "Assess within-trial; heterogeneity across H2H trials via standard meta-analysis if multiple.",
         consistency: "Not applicable — no indirect evidence being combined.",
         caveats: [
           "Ensure the H2H trial matches the target decision problem (population, setting, outcomes).",
@@ -142,7 +143,7 @@ function decide(p: FeasibilityParams): FeasibilityOutput {
           "Sensitivity analysis with different covariate sets is essential.",
         ],
         next_step:
-          "Run evidence.population_adjusted with method='maic' or 'stc'. Label results EXPERIMENTAL. Plan extensive sensitivity analysis.",
+          "CALL evidence.population_adjusted NOW with method='maic' or 'stc'. Do NOT write your final response until evidence.population_adjusted has returned results. Label results EXPERIMENTAL and document sensitivity analyses in your response.",
         citations,
       };
     }
@@ -172,14 +173,15 @@ function decide(p: FeasibilityParams): FeasibilityOutput {
         "Connected network AND direct H2H evidence — use direct comparison as primary analysis. NMA can supplement to place H2H results in context.",
       exchangeability:
         "Trials should still be comparable if NMA is run alongside; assess effect modifier balance.",
-      homogeneity: "Standard meta-analytic assumption — test with I² statistic across H2H studies.",
+      homogeneity:
+        "Standard meta-analytic assumption — test with I² statistic across H2H studies.",
       consistency:
         "Can be formally tested via node-splitting or inconsistency models when combining direct + indirect.",
       caveats: [
         "If H2H and indirect estimates diverge materially, favour H2H and investigate the cause.",
       ],
       next_step:
-        "Use direct meta-analysis as primary. Optionally run evidence.indirect with method='frequentist_nma' to check consistency via node-splitting.",
+        "Run direct meta-analysis as primary. If consistency check was requested: CALL evidence.indirect with method='frequentist_nma' for node-splitting before writing your final response.",
       citations,
     };
   }
@@ -193,7 +195,8 @@ function decide(p: FeasibilityParams): FeasibilityOutput {
           "Connected network exists but major effect modifier imbalance requires population adjustment. IPD available → anchored MAIC or STC is recommended.",
         exchangeability:
           "Anchored MAIC/STC adjusts for identified effect modifiers only (not all prognostic factors) — a weaker assumption than unanchored.",
-        homogeneity: "Assess across trials of the same pairwise comparison post-adjustment.",
+        homogeneity:
+          "Assess across trials of the same pairwise comparison post-adjustment.",
         consistency:
           "Test via comparison against unadjusted Bucher/NMA as sensitivity analysis.",
         caveats: [
@@ -202,7 +205,7 @@ function decide(p: FeasibilityParams): FeasibilityOutput {
           "Both require that ALL effect modifiers be identified and measured.",
         ],
         next_step:
-          "Run evidence.population_adjusted with method='maic' (or 'stc'). Report ESS, balance diagnostics, and compare to unadjusted evidence.indirect as sensitivity.",
+          "CALL evidence.population_adjusted NOW with method='maic' (or 'stc'). Do NOT write your final response until evidence.population_adjusted has returned results. Report ESS, balance diagnostics, and compare to unadjusted evidence.indirect as sensitivity in your response.",
         citations,
       };
     }
@@ -220,7 +223,7 @@ function decide(p: FeasibilityParams): FeasibilityOutput {
         "If neither is possible, report results with explicit caveats and consider the comparison EXPERIMENTAL.",
       ],
       next_step:
-        "Commission external ML-NMR analysis, OR run evidence.indirect with documented caveats, OR pursue subgroup analysis if data permit.",
+        "If proceeding despite imbalance: CALL evidence.indirect with method='frequentist_nma' NOW with explicit caveats documented in your response. Commission external ML-NMR if aggregate covariate data are available. Do NOT write final results until the tool call returns.",
       citations,
     };
   }
@@ -268,7 +271,7 @@ function decide(p: FeasibilityParams): FeasibilityOutput {
         "Document the network diagram (see evidence.network tool).",
       ],
       next_step:
-        "Run evidence.indirect with method='frequentist_nma'. Report I², Cochran Q, and consistency diagnostics.",
+        "CALL evidence.indirect NOW with method='frequentist_nma'. Do NOT write your final response until evidence.indirect has returned results. Report I², Cochran Q, and consistency diagnostics after reviewing those results.",
       citations,
     };
   }
@@ -289,7 +292,7 @@ function decide(p: FeasibilityParams): FeasibilityOutput {
       "No formal heterogeneity test is possible with k=1 per edge.",
     ],
     next_step:
-      "Run evidence.indirect with method='bucher'. Document the transitivity assumption explicitly in the submission.",
+      "CALL evidence.indirect NOW with method='bucher'. Do NOT write your final response until evidence.indirect has returned results. Document the transitivity assumption in your response after reviewing those results.",
     citations,
   };
 }
@@ -310,14 +313,22 @@ function formatOutput(
   lines.push(`|---|---|`);
   lines.push(`| Connected network | ${params.connected_network} |`);
   lines.push(`| Head-to-head trial available | ${params.h2h_available} |`);
-  lines.push(`| IPD available (intervention) | ${params.ipd_available_for_intervention} |`);
-  lines.push(`| Effect modifiers identified | ${params.effect_modifiers_identified} |`);
-  lines.push(`| Effect modifier imbalance | ${params.effect_modifier_imbalance} |`);
+  lines.push(
+    `| IPD available (intervention) | ${params.ipd_available_for_intervention} |`,
+  );
+  lines.push(
+    `| Effect modifiers identified | ${params.effect_modifiers_identified} |`,
+  );
+  lines.push(
+    `| Effect modifier imbalance | ${params.effect_modifier_imbalance} |`,
+  );
   if (params.heterogeneity_i2_pct !== undefined) {
     lines.push(`| Heterogeneity I² | ${params.heterogeneity_i2_pct}% |`);
   }
   if (params.n_studies_per_comparison !== undefined) {
-    lines.push(`| Studies per comparison (min) | ${params.n_studies_per_comparison} |`);
+    lines.push(
+      `| Studies per comparison (min) | ${params.n_studies_per_comparison} |`,
+    );
   }
   if (params.outcome_type) {
     lines.push(`| Outcome type | ${params.outcome_type} |`);
@@ -338,7 +349,7 @@ function formatOutput(
     }
     lines.push(``);
   }
-  lines.push(`### Next step`);
+  lines.push(`### ⚡ Required Next Tool Call`);
   lines.push(decision.next_step);
   lines.push(``);
   lines.push(`### References`);
@@ -385,7 +396,15 @@ export async function handleItcFeasibility(
   }
 
   const body = formatOutput(params, decision);
-  return { content: body + "\n" + auditToMarkdown(audit, { disclosure: { level: extractDisclosureLevel(rawParams, "standard") } }), audit };
+  return {
+    content:
+      body +
+      "\n" +
+      auditToMarkdown(audit, {
+        disclosure: { level: extractDisclosureLevel(rawParams, "standard") },
+      }),
+    audit,
+  };
 }
 
 export const itcFeasibilityToolSchema = {
@@ -449,11 +468,12 @@ export const itcFeasibilityToolSchema = {
         description: "Primary outcome type — guides estimator recommendations.",
       },
     },
-      ai_disclosure_level: {
-        type: "string",
-        enum: ["off", "standard", "submission"],
-        description: "AI assistance disclosure level. \"off\" = no disclosure; \"standard\" = default (model/tools/sources/date + human-review reminder); \"submission\" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.",
-      },
+    ai_disclosure_level: {
+      type: "string",
+      enum: ["off", "standard", "submission"],
+      description:
+        'AI assistance disclosure level. "off" = no disclosure; "standard" = default (model/tools/sources/date + human-review reminder); "submission" = adds ISPOR ELEVATE-GenAI citation. Default is tool-specific.',
+    },
     required: ["connected_network"],
   },
 };

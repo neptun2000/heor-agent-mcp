@@ -1,9 +1,17 @@
 import { fetchWiley } from "../../../src/providers/direct/wiley.js";
 
 describe("fetchWiley", () => {
-  it("returns an array (never throws)", async () => {
-    const results = await fetchWiley("cost-effectiveness diabetes", 5);
-    expect(Array.isArray(results)).toBe(true);
+  it("throws on Crossref API errors so the dispatcher can record failure", async () => {
+    const origFetch = global.fetch;
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      text: async () => "rate limit",
+    });
+    await expect(fetchWiley("cost-effectiveness diabetes", 5)).rejects.toThrow(
+      /\[Wiley\] API 429/,
+    );
+    global.fetch = origFetch;
   });
 
   it("each result has required fields when results returned", async () => {
@@ -26,11 +34,8 @@ describe("fetchWiley", () => {
     expect(results.length).toBeLessThanOrEqual(2);
   }, 15000);
 
-  it("returns empty array on network error (resilient)", async () => {
-    const originalFetch = global.fetch;
-    global.fetch = async () => { throw new Error("Network error"); };
-    const results = await fetchWiley("test", 5);
-    expect(results).toEqual([]);
-    global.fetch = originalFetch;
+  it("returns an array from live Crossref when API is healthy", async () => {
+    const results = await fetchWiley("cost-effectiveness diabetes", 5);
+    expect(Array.isArray(results)).toBe(true);
   });
 });

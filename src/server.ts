@@ -133,6 +133,10 @@ import {
   regulatoryStatusCheckToolSchema,
 } from "./tools/regulatoryStatusCheck.js";
 import {
+  handleTrialEnrollmentCriteria,
+  trialEnrollmentCriteriaToolSchema,
+} from "./tools/trialEnrollmentCriteria.js";
+import {
   governanceSelfCheckHandler,
   governanceSelfCheckSchema,
   governanceSelfCheckToolSchema,
@@ -309,6 +313,7 @@ function createMcpServer(
       evidenceClinicalScaleToolSchema,
       evidenceUnmetNeedToolSchema,
       regulatoryStatusCheckToolSchema,
+      trialEnrollmentCriteriaToolSchema,
       governanceSelfCheckToolSchema,
       // data.claims_query is only registered when Azure Blob Storage is configured
       // (internal deployment only). Not exposed in the public npm package.
@@ -466,6 +471,12 @@ function createMcpServer(
           const regResult = await handleRegulatoryStatusCheck(args);
           // content (string or object) is wrapped once by the post-switch.
           result = { content: regResult.content };
+          break;
+        }
+        case "trial.enrollment_criteria": {
+          const trialResult = await handleTrialEnrollmentCriteria(args);
+          // content is wrapped once by the post-switch.
+          result = { content: trialResult.content };
           break;
         }
         case "data.claims_query": {

@@ -122,4 +122,69 @@ describe("handleItcFeasibility", () => {
   it("validates required connected_network field", async () => {
     await expect(handleItcFeasibility({})).rejects.toThrow();
   });
+
+  // Regression tests: verify imperative follow-on tool call language is present
+  // These guard against the "model stops after itcFeasibility and narrates instead of calling evidence.indirect"
+  describe("follow-on tool call directives (regression)", () => {
+    it("bucher_anchored next_step is imperative CALL directive", async () => {
+      const r = await handleItcFeasibility({
+        connected_network: true,
+        n_studies_per_comparison: 1,
+        effect_modifier_imbalance: "minor",
+      });
+      const text = r.content as string;
+      expect(text).toContain("bucher_anchored");
+      expect(text).toContain("CALL evidence.indirect NOW");
+      expect(text).toContain("Do NOT write your final response");
+    });
+
+    it("full_nma next_step is imperative CALL directive", async () => {
+      const r = await handleItcFeasibility({
+        connected_network: true,
+        effect_modifier_imbalance: "minor",
+        n_studies_per_comparison: 3,
+        heterogeneity_i2_pct: 30,
+      });
+      const text = r.content as string;
+      expect(text).toContain("full_nma");
+      expect(text).toContain("CALL evidence.indirect NOW");
+      expect(text).toContain("Do NOT write your final response");
+    });
+
+    it("unanchored_maic_stc next_step is imperative CALL directive", async () => {
+      const r = await handleItcFeasibility({
+        connected_network: false,
+        h2h_available: false,
+        ipd_available_for_intervention: true,
+        effect_modifiers_identified: true,
+      });
+      const text = r.content as string;
+      expect(text).toContain("unanchored_maic_stc");
+      expect(text).toContain("CALL evidence.population_adjusted NOW");
+      expect(text).toContain("Do NOT write your final response");
+    });
+
+    it("anchored_maic_stc next_step is imperative CALL directive", async () => {
+      const r = await handleItcFeasibility({
+        connected_network: true,
+        effect_modifiers_identified: true,
+        effect_modifier_imbalance: "major",
+        ipd_available_for_intervention: true,
+      });
+      const text = r.content as string;
+      expect(text).toContain("anchored_maic_stc");
+      expect(text).toContain("CALL evidence.population_adjusted NOW");
+      expect(text).toContain("Do NOT write your final response");
+    });
+
+    it("outputs Required Next Tool Call heading (not passive Next step)", async () => {
+      const r = await handleItcFeasibility({
+        connected_network: true,
+        n_studies_per_comparison: 1,
+      });
+      const text = r.content as string;
+      expect(text).toContain("Required Next Tool Call");
+      expect(text).not.toContain("### Next step");
+    });
+  });
 });

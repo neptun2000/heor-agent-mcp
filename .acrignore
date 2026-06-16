@@ -1,0 +1,7 @@
+.git
+.git/**
+node_modules
+dist
+tests
+*.md
+jest.config.js

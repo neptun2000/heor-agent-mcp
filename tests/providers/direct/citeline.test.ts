@@ -13,12 +13,17 @@ describe("fetchCiteline", () => {
     expect(results).toEqual([]);
   });
 
-  it("returns empty array on fetch error when key is set", async () => {
+  it("throws on direct API errors when key is set", async () => {
     process.env.CITELINE_API_KEY = "test-key";
     const origFetch = global.fetch;
-    global.fetch = jest.fn().mockRejectedValue(new Error("fail"));
-    const results = await fetchCiteline("semaglutide", 5);
-    expect(results).toEqual([]);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      text: async () => "forbidden",
+    });
+    await expect(fetchCiteline("semaglutide", 5)).rejects.toThrow(
+      /\[Citeline\] API 403/,
+    );
     global.fetch = origFetch;
   });
 });

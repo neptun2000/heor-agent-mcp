@@ -1,11 +1,16 @@
 import { fetchOecd } from "../../../src/providers/direct/oecd.js";
 
 describe("fetchOecd", () => {
-  it("returns empty array on fetch error", async () => {
+  it("throws on API errors so the dispatcher can record failure", async () => {
     const orig = global.fetch;
-    global.fetch = jest.fn().mockRejectedValue(new Error("fail"));
-    const results = await fetchOecd("health expenditure", 5);
-    expect(results).toEqual([]);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      text: async () => "unavailable",
+    });
+    await expect(fetchOecd("health expenditure", 5)).rejects.toThrow(
+      /\[OECD\] API 503/,
+    );
     global.fetch = orig;
   });
 
@@ -35,14 +40,6 @@ describe("fetchOecd", () => {
     expect(results.length).toBeGreaterThan(0);
     expect(results[0].source).toBe("oecd");
     expect(results[0].authors).toContain("OECD");
-    global.fetch = orig;
-  });
-
-  it("returns empty array when ok is false", async () => {
-    const orig = global.fetch;
-    global.fetch = jest.fn().mockResolvedValue({ ok: false });
-    const results = await fetchOecd("physicians", 5);
-    expect(results).toEqual([]);
     global.fetch = orig;
   });
 

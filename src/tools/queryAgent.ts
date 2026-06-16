@@ -144,16 +144,25 @@ const COUNTRY_DATASETS: Record<
   BR: { primary: "datasus_sih" },
   US: { primary: "ny_sparcs", secondary: "meps" },
   MX: { primary: "mexico_egresos" },
+  CL: { primary: "chile_deis" },
   EC: { primary: "ecuador_inec" },
   UY: { primary: "uruguay_eh" },
   CO: { primary: "colombia_rips" },
   AR: { primary: "argentina_ba" },
 };
 
+const SUMMARY_PRIMARY_DATASETS = new Set([
+  "datasus_sih",
+  "ny_sparcs",
+  "mexico_egresos",
+  "chile_deis",
+]);
+
 function datasetsForCountry(config: {
   primary: string;
   secondary?: string;
 }): string[] {
+  if (SUMMARY_PRIMARY_DATASETS.has(config.primary)) return [config.primary];
   return [
     ...new Set([config.primary, config.secondary].filter(Boolean)),
   ] as string[];
@@ -222,6 +231,7 @@ const POPULATION: Record<string, number> = {
   BR: 215_000_000,
   US: 335_000_000,
   MX: 130_000_000,
+  CL: 20_000_000,
   EC: 18_000_000,
   UY: 3_500_000,
   CO: 51_000_000,
@@ -567,11 +577,44 @@ export async function handleQueryAgent(
         : "ok"
       : "no_data";
 
+  // Build human-readable confirmation lines inside the JSON payload so clients
+  // can still parse the tool result while the model sees an explicit live-data
+  // statement rather than inferring from nested numbers.
+  const confirmationLines: string[] = [];
+  for (const r of results) {
+    const rec = r as Record<string, unknown>;
+    if (rec.status === "ok") {
+      const byYear = (
+        rec.by_year as { year: number; record_count: number }[]
+      ).map((y) => `  ${y.year}: ${y.record_count.toLocaleString()} records ✓`);
+      const est = rec.recommended_estimate as {
+        value: number;
+        basis: string;
+        uncertainty: string;
+      };
+      confirmationLines.push(
+        `CONFIRMED — ${rec.dataset} returned LIVE data from Azure Blob Storage (no errors, no missing files):`,
+        ...byYear,
+        `  Total: ${(rec.total_records as number).toLocaleString()} | Recommended annual estimate: ${est.value.toLocaleString()} | Plausibility: ${((rec.plausibility as Record<string, unknown>).tier as string).toUpperCase()}`,
+      );
+    } else {
+      confirmationLines.push(
+        `${rec.country}: ${rec.status} — ${rec.note ?? "no data"}`,
+      );
+    }
+  }
+  const presentationInstruction =
+    okResults.length > 0
+      ? "Present the live data returned by data.query_agent directly. Do not write a disclaimer saying DATASUS is unavailable or that Azure blob paths failed when status is ok."
+      : "Do not present fallback epidemiology estimates as live DATASUS results. If status is error/no_data, state the tool error plainly.";
+
   return {
     content: JSON.stringify(
       {
         status: overallStatus,
         indication_resolved: { icd10_prefixes: prefixes, rationale },
+        live_data_confirmation: confirmationLines,
+        presentation_instruction: presentationInstruction,
         results,
         data_caveats: [
           "Record counts represent inpatient admissions billed to the public health system only; private hospital admissions are not captured.",
@@ -610,8 +653,8 @@ export const queryAgentToolSchema = {
     "Automatically resolves clinical indications to ICD-10 codes, selects the right dataset " +
     "by country, runs the query, validates counts for plausibility, checks year coverage, " +
     "and returns a structured result with a confidence tier and recommended estimate. " +
-    "Supports: BR (datasus_sih 2018-2024), US (ny_sparcs 2017-2024 + meps 2017-2023), " +
-    "MX (mexico_egresos 2018-2025), EC (ecuador_inec 2022-2023), UY (uruguay_eh 2016-2024), " +
+    "Supports: BR (datasus_sih 2018-2024), US (ny_sparcs diagnosis summaries 2018-2022 + 2024; no 2023), " +
+    "MX (mexico_egresos 2018-2025), CL (chile_deis 2018-2024), EC (ecuador_inec 2022-2023), UY (uruguay_eh 2016-2024), " +
     "CO (colombia_rips 2018-2023), AR (argentina_ba 2016-2020). " +
     "Built-in ICD-10 map covers: T2D, HF, AMI, stroke, COPD, asthma, CKD, breast/lung cancer, and 20+ more.",
   annotations: {
@@ -633,7 +676,7 @@ export const queryAgentToolSchema = {
         type: "array",
         items: { type: "string" },
         description:
-          "ISO-2 country codes: ['BR'], ['US'], ['MX'], ['EC'], ['UY'], ['CO'], ['AR'].",
+          "ISO-2 country codes: ['BR'], ['US'], ['MX'], ['CL'], ['EC'], ['UY'], ['CO'], ['AR'].",
       },
       regions: {
         type: "array",

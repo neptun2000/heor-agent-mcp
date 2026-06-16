@@ -39,9 +39,16 @@ describe("fetchClinicalTrials", () => {
     expect(results[0].url).toContain("NCT04999999");
   });
 
-  it("returns empty array on error", async () => {
-    (global.fetch as jest.Mock).mockReset().mockRejectedValueOnce(new Error("Network error"));
-    const results = await fetchClinicalTrials("semaglutide", 20);
-    expect(results).toEqual([]);
+  it("throws on API errors so the dispatcher can record failure", async () => {
+    (global.fetch as jest.Mock)
+      .mockReset()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        text: async () => "rate limit",
+      });
+    await expect(fetchClinicalTrials("semaglutide", 20)).rejects.toThrow(
+      /\[ClinicalTrials.gov\] API 429/,
+    );
   });
 });

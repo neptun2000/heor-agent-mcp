@@ -1,11 +1,16 @@
 import { fetchOrangeBook } from "../../../src/providers/direct/orangeBook.js";
 
 describe("fetchOrangeBook", () => {
-  it("returns empty array on fetch error", async () => {
+  it("throws on openFDA API errors so the dispatcher can record failure", async () => {
     const orig = global.fetch;
-    global.fetch = jest.fn().mockRejectedValue(new Error("network error"));
-    const results = await fetchOrangeBook("semaglutide", 5);
-    expect(results).toEqual([]);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      text: async () => "rate limit",
+    });
+    await expect(fetchOrangeBook("semaglutide", 5)).rejects.toThrow(
+      /\[OrangeBook\] API 429/,
+    );
     global.fetch = orig;
   });
 

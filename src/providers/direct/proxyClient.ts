@@ -59,33 +59,33 @@ export async function fetchViaProxy(
   const proxyUrl = getProxyUrl();
   if (!proxyUrl) return [];
 
-  try {
-    const url = `${proxyUrl}/${source}?query=${encodeURIComponent(query)}&max=${maxResults}`;
-    const res = await fetch(url, {
-      headers: { Accept: "application/json" },
-      // Short timeout — local proxy should be fast
-      signal: AbortSignal.timeout(30000),
-    });
-    if (!res.ok) return [];
-    const data = (await res.json()) as unknown;
-
-    // Accept both formats: { results: [...] } or [...]
-    const results = Array.isArray(data)
-      ? data
-      : (data as Record<string, unknown>).results;
-    if (!Array.isArray(results)) return [];
-
-    // Basic validation of each result
-    return results.filter((r: unknown): r is LiteratureResult => {
-      if (typeof r !== "object" || r === null) return false;
-      const obj = r as Record<string, unknown>;
-      return (
-        typeof obj.id === "string" &&
-        typeof obj.title === "string" &&
-        typeof obj.source === "string"
-      );
-    });
-  } catch {
-    return [];
+  // No try/catch — callers that use proxy as optional fallback wrap this call.
+  const url = `${proxyUrl}/${source}?query=${encodeURIComponent(query)}&max=${maxResults}`;
+  const res = await fetch(url, {
+    headers: { Accept: "application/json" },
+    // Short timeout — local proxy should be fast
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`[Proxy] API ${res.status}: ${body.slice(0, 200)}`);
   }
+  const data = (await res.json()) as unknown;
+
+  // Accept both formats: { results: [...] } or [...]
+  const results = Array.isArray(data)
+    ? data
+    : (data as Record<string, unknown>).results;
+  if (!Array.isArray(results)) return [];
+
+  // Basic validation of each result
+  return results.filter((r: unknown): r is LiteratureResult => {
+    if (typeof r !== "object" || r === null) return false;
+    const obj = r as Record<string, unknown>;
+    return (
+      typeof obj.id === "string" &&
+      typeof obj.title === "string" &&
+      typeof obj.source === "string"
+    );
+  });
 }

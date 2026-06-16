@@ -106,7 +106,7 @@ describe("queryAgent — ICD resolution", () => {
 });
 
 describe("queryAgent — dataset selection and validation", () => {
-  it("uses configured secondary datasets for countries that define them", async () => {
+  it("uses the summary-backed primary dataset for countries that have one", async () => {
     mockClaims.mockResolvedValue(
       makeClaimsResult([{ year: 2022, record_count: 150000 }]),
     );
@@ -119,7 +119,26 @@ describe("queryAgent — dataset selection and validation", () => {
 
     expect(mockClaims).toHaveBeenCalledWith(
       expect.objectContaining({
-        datasets: ["ny_sparcs", "meps"],
+        datasets: ["ny_sparcs"],
+      }),
+      undefined,
+    );
+  });
+
+  it("routes Chile to the DEIS inpatient dataset", async () => {
+    mockClaims.mockResolvedValue(
+      makeClaimsResult([{ year: 2024, record_count: 10000 }]),
+    );
+
+    await handleQueryAgent({
+      indication: "type 2 diabetes",
+      country_codes: ["CL"],
+      regions: [],
+    });
+
+    expect(mockClaims).toHaveBeenCalledWith(
+      expect.objectContaining({
+        datasets: ["chile_deis"],
       }),
       undefined,
     );
@@ -142,7 +161,7 @@ describe("queryAgent — dataset selection and validation", () => {
 
     expect(mockClaims).toHaveBeenCalledWith(
       expect.objectContaining({
-        datasets: ["ny_sparcs", "meps"],
+        datasets: ["ny_sparcs"],
       }),
       controller.signal,
     );

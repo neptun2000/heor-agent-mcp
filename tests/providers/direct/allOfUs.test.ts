@@ -1,11 +1,16 @@
 import { fetchAllOfUs } from "../../../src/providers/direct/allOfUs.js";
 
 describe("fetchAllOfUs", () => {
-  it("returns empty array on fetch error", async () => {
+  it("throws on API errors so the dispatcher can record failure", async () => {
     const originalFetch = global.fetch;
-    global.fetch = jest.fn().mockRejectedValue(new Error("network error"));
-    const results = await fetchAllOfUs("diabetes", 5);
-    expect(results).toEqual([]);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      text: async () => "forbidden",
+    });
+    await expect(fetchAllOfUs("diabetes", 5)).rejects.toThrow(
+      /\[AllOfUs\] API 403/,
+    );
     global.fetch = originalFetch;
   });
 

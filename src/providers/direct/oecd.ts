@@ -60,14 +60,17 @@ export async function fetchOecd(
   query: string,
   maxResults: number,
 ): Promise<LiteratureResult[]> {
-  try {
-    const { dataset, filter, label } = findDataset(query);
+  // No try/catch — let errors propagate so the dispatcher records status:"failed".
+  const { dataset, filter, label } = findDataset(query);
     const url = `${BASE}/${dataset}${filter}/all?startTime=2018&dimensionAtObservation=AllDimensions&detail=dataonly`;
     const res = await fetch(url, {
       headers: { Accept: "application/vnd.sdmx.data+json; version=1.0" },
       signal: AbortSignal.timeout(15_000),
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`[OECD] API ${res.status}: ${body.slice(0, 200)}`);
+    }
 
     const data = (await res.json()) as Record<string, unknown>;
     const observations =
@@ -123,8 +126,5 @@ export async function fetchOecd(
       });
     }
 
-    return results;
-  } catch {
-    return [];
-  }
+  return results;
 }

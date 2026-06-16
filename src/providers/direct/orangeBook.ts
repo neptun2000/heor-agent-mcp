@@ -43,13 +43,16 @@ export async function fetchOrangeBook(
   query: string,
   maxResults: number,
 ): Promise<LiteratureResult[]> {
-  try {
-    // Sanitize query before embedding in Lucene template — strip quotes to prevent syntax injection
+  // No try/catch — let errors propagate so the dispatcher records status:"failed".
+  // Sanitize query before embedding in Lucene template — strip quotes to prevent syntax injection
     const safeQuery = query.replace(/"/g, " ").trim();
     const searchQuery = `(openfda.brand_name:"${safeQuery}"+openfda.generic_name:"${safeQuery}"+products.active_ingredients.name:"${safeQuery}")`;
     const url = `${BASE}?search=${encodeURIComponent(searchQuery)}&limit=${Math.min(maxResults, 100)}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`[OrangeBook] API ${res.status}: ${body.slice(0, 200)}`);
+    }
 
     const data = (await res.json()) as FdaResponse;
     if (!data.results) return [];
@@ -96,8 +99,5 @@ export async function fetchOrangeBook(
         url: `https://www.accessdata.fda.gov/scripts/cder/ob/results_product.cfm?Appl_Type=N&Appl_No=${app.application_number ?? ""}`,
       });
     }
-    return results;
-  } catch {
-    return [];
-  }
+  return results;
 }

@@ -304,20 +304,20 @@ export async function runMaicWorkflow(
   );
   lines.push("");
 
-  lines.push("## 8. Next Steps (Recommendations)");
+  lines.push("## 8. ⚡ Required Next Tool Calls (Next Steps)");
   lines.push(
-    "1. **Provide IPD** from the sponsor trial of " +
+    "This workflow completed **discovery + screening**. You MUST now call the estimation tools before writing your final response:",
+  );
+  lines.push(
+    "- **If trial-level effect estimates are available (HR/RR/OR + 95% CI from screened studies in §4):** CALL `evidence.indirect` NOW with method='bucher' (or method='frequentist_nma' if network has loops). Do NOT write final results until it returns.",
+  );
+  lines.push(
+    "- **If IPD is available from the sponsor trial of " +
       input.intervention +
-      " (covariate summaries: age, sex, baseline disease severity, prior biologics, etc.) to enable an anchored MAIC.",
+      ":** CALL `evidence.population_adjusted` NOW with method='maic'. Do NOT write final results until it returns.",
   );
   lines.push(
-    "2. Extract **trial-level effect estimates** (HR/RR/OR + 95% CI) for the primary endpoint from the screened studies in §4 — feed those to `evidence_indirect` for an anchored Bucher comparison.",
-  );
-  lines.push(
-    "3. Pass `rob_results` from §5 + `heterogeneity_per_outcome` from any pairwise meta-analysis to `hta_dossier_prep` to auto-fill a NICE/EMA/FDA dossier with structured GRADE evidence tables.",
-  );
-  lines.push(
-    "4. If the network is connected per §6, consider full Bayesian NMA (R/multinma or BUGS) instead of pairwise Bucher.",
+    "- **After ITC/MAIC results return:** Pass `rob_results` from §5 to `hta_dossier_prep` to auto-fill a NICE/EMA/FDA dossier.",
   );
   lines.push("");
 

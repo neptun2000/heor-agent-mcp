@@ -132,12 +132,17 @@ describe("fetchViaProxy", () => {
     global.fetch = origFetch;
   });
 
-  it("returns empty on fetch error", async () => {
+  it("throws on proxy HTTP errors", async () => {
     process.env.HEOR_PROXY_URL = "http://localhost:3333";
     const origFetch = global.fetch;
-    global.fetch = jest.fn().mockRejectedValue(new Error("fail"));
-    const results = await fetchViaProxy("cochrane", "test", 10);
-    expect(results).toEqual([]);
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 502,
+      text: async () => "bad gateway",
+    });
+    await expect(fetchViaProxy("cochrane", "test", 10)).rejects.toThrow(
+      /\[Proxy\] API 502/,
+    );
     global.fetch = origFetch;
   });
 });

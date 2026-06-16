@@ -759,6 +759,21 @@ function buildSection(
         status: "complete",
       };
     }
+    case "Unmet Need":
+      return {
+        content: `⚠️ Unmet need not populated. Run evidence.unmet_need and pipe the unmet_need_summary here. Required inputs: disease burden (literature.search with ihme_gbd/who_gho), treatment landscape gaps (literature.search with pubmed/clinicaltrials), and regulatory status of current options (regulatory.status_check).`,
+        status: "missing",
+      };
+    case "Place in Therapy": {
+      return {
+        content:
+          `⚠️ Place in therapy not populated. To ground this section:\n` +
+          `1. Run \`regulatory.status_check\` for ${drugName} and key comparators to confirm approved indications and any label restrictions.\n` +
+          `2. Run \`literature.search\` with sources ["nice_ta","cadth_reviews","icer_reports","pbac_psd"] to retrieve precedent positioning decisions for comparable agents in ${indication}.\n` +
+          `3. Draft the positioning narrative based on retrieved HTA decisions — specify line of therapy, prior treatment requirements, and how ${drugName} differs from established options.`,
+        status: "missing",
+      };
+    }
     default:
       return {
         content: `⚠️ ${name} — populate with submission-specific content.`,

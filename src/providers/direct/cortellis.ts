@@ -23,50 +23,52 @@ export async function fetchCortellis(
   query: string,
   maxResults: number,
 ): Promise<LiteratureResult[]> {
-  // Try institutional/enterprise proxy first if configured
   if (getProxyUrl()) {
-    const proxyResults = await fetchViaProxy("cortellis", query, maxResults);
-    if (proxyResults.length > 0) return proxyResults;
+    try {
+      const proxyResults = await fetchViaProxy("cortellis", query, maxResults);
+      if (proxyResults.length > 0) return proxyResults;
+    } catch {
+      // Proxy unreachable — fall through to direct API when key is set.
+    }
   }
 
-  // Fall back to direct API call if key is set
   const apiKey = process.env.CORTELLIS_API_KEY;
   if (!apiKey) return [];
 
-  try {
-    const url = `${BASE}?q=${encodeURIComponent(query)}&limit=${maxResults}`;
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        Accept: "application/json",
-      },
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!res.ok) return [];
-    const data = (await res.json()) as CortellisResponse;
-    const drugs = data.results ?? [];
-
-    return drugs.slice(0, maxResults).map((d, i) => ({
-      id: `cortellis_${d.id ?? i}`,
-      source: "cortellis" as const,
-      title: `${d.name ?? "Unknown"} (${d.phase ?? "N/A"}) — ${d.sponsor ?? "Unknown sponsor"}`,
-      authors: [d.sponsor ?? "Clarivate"],
-      date: d.updatedDate ?? "",
-      study_type: "pipeline",
-      abstract: [
-        `Phase: ${d.phase ?? "N/A"}`,
-        `Sponsor: ${d.sponsor ?? "N/A"}`,
-        `Indications: ${(d.indications ?? []).join(", ") || "N/A"}`,
-        `MoA: ${d.mechanismOfAction ?? "N/A"}`,
-        d.consensusForecast
-          ? `Consensus forecast: ${d.consensusForecast}`
-          : null,
-      ]
-        .filter(Boolean)
-        .join(" | "),
-      url: `https://www.cortellis.com/`,
-    }));
-  } catch {
-    return [];
+  // No try/catch on direct API — let errors propagate so the dispatcher records status:"failed".
+  const url = `${BASE}?q=${encodeURIComponent(query)}&limit=${maxResults}`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      Accept: "application/json",
+    },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`[Cortellis] API ${res.status}: ${body.slice(0, 200)}`);
   }
+  const data = (await res.json()) as CortellisResponse;
+  const drugs = data.results ?? [];
+
+  return drugs.slice(0, maxResults).map((d, i) => ({
+    id: `cortellis_${d.id ?? i}`,
+    source: "cortellis" as const,
+    title: `${d.name ?? "Unknown"} (${d.phase ?? "N/A"}) — ${d.sponsor ?? "Unknown sponsor"}`,
+    authors: [d.sponsor ?? "Clarivate"],
+    date: d.updatedDate ?? "",
+    study_type: "pipeline",
+    abstract: [
+      `Phase: ${d.phase ?? "N/A"}`,
+      `Sponsor: ${d.sponsor ?? "N/A"}`,
+      `Indications: ${(d.indications ?? []).join(", ") || "N/A"}`,
+      `MoA: ${d.mechanismOfAction ?? "N/A"}`,
+      d.consensusForecast
+        ? `Consensus forecast: ${d.consensusForecast}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" | "),
+    url: `https://www.cortellis.com/`,
+  }));
 }

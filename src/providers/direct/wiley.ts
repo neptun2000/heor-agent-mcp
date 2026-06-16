@@ -70,8 +70,8 @@ export async function fetchWiley(
   query: string,
   maxResults: number,
 ): Promise<LiteratureResult[]> {
-  try {
-    const issnFilter = WILEY_HEOR_ISSNS.map((i) => `issn:${i}`).join(",");
+  // No try/catch — let errors propagate so the dispatcher records status:"failed".
+  const issnFilter = WILEY_HEOR_ISSNS.map((i) => `issn:${i}`).join(",");
     const url = new URL(CROSSREF_BASE);
     url.searchParams.set("query", query);
     url.searchParams.set("filter", issnFilter);
@@ -85,7 +85,10 @@ export async function fetchWiley(
     const res = await fetch(url.toString(), {
       signal: AbortSignal.timeout(15_000),
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`[Wiley] API ${res.status}: ${body.slice(0, 200)}`);
+    }
 
     const data = (await res.json()) as { message: { items: CrossrefItem[] } };
     const items: CrossrefItem[] = data.message?.items ?? [];
@@ -115,7 +118,4 @@ export async function fetchWiley(
           url: item.URL ?? `https://doi.org/${item.DOI}`,
         };
       });
-  } catch {
-    return [];
-  }
 }

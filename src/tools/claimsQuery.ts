@@ -148,8 +148,8 @@ export function withDbLock<T>(
       () =>
         rejectOnce(
           new Error(
-            "DuckDB query timed out (90s). Add year_from/year_to to limit the scan, " +
-              "or reduce the date range.",
+            "DuckDB query timed out (90s). Reduce the date range, filter to specific regions, " +
+              "or build/use the claims summary layer for nationwide population-sizing scans.",
           ),
         ),
       QUERY_TIMEOUT_MS,
@@ -242,11 +242,54 @@ async function getDb(): Promise<DuckDBConnection> {
 // ── Parquet path helpers ──────────────────────────────────────────────────────
 
 const DATASUS_NAMES = new Set(["datasus_sih", "brazil_datasus"]);
+const SUMMARY_ENABLED_DATASETS = new Set([
+  "datasus_sih",
+  "mexico_egresos",
+  "chile_deis",
+  "ny_sparcs",
+]);
+const SUMMARY_AVAILABLE_YEARS: Record<string, number[]> = {
+  datasus_sih: [2018, 2019, 2020, 2021, 2022, 2023, 2024],
+  mexico_egresos: [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025],
+  chile_deis: [2018, 2019, 2020, 2021, 2022, 2023, 2024],
+  ny_sparcs: [2017, 2018, 2019, 2020, 2021, 2022, 2024],
+};
 const DATASET_STORAGE_NAMES: Record<string, string> = {
   brazil_datasus: "datasus_sih",
 };
 const storageDatasetName = (ds: string): string =>
   DATASET_STORAGE_NAMES[ds] ?? ds;
+
+function activeStorageDatasets(input: ClaimsQueryInput): string[] {
+  const active = input.datasets.includes("all")
+    ? []
+    : input.datasets.filter((d) => d !== "all");
+  return [...new Set(active.map(storageDatasetName))];
+}
+
+function isDatasusOnlyInput(input: ClaimsQueryInput): boolean {
+  const active = input.datasets.includes("all")
+    ? []
+    : input.datasets.filter((d) => d !== "all");
+  return active.length > 0 && active.every((d) => DATASUS_NAMES.has(d));
+}
+
+function summaryDatasetForInput(input: ClaimsQueryInput): string | null {
+  const activeStorage = activeStorageDatasets(input);
+  if (
+    (input.aggregation === "prevalence" || input.aggregation === "count") &&
+    activeStorage.length === 1 &&
+    !input.drug_names?.length &&
+    SUMMARY_ENABLED_DATASETS.has(activeStorage[0])
+  ) {
+    return activeStorage[0];
+  }
+  return null;
+}
+
+function shouldUseClaimsSummary(input: ClaimsQueryInput): boolean {
+  return summaryDatasetForInput(input) != null;
+}
 
 // Build explicit year list for partition pruning. Querying year_from=2021,year_to=2023
 // produces paths like source_year=2021/**, source_year=2022/**, source_year=2023/**
@@ -273,8 +316,7 @@ function parquetPaths(input: ClaimsQueryInput): {
   const active = input.datasets.includes("all")
     ? []
     : input.datasets.filter((d) => d !== "all");
-  const isDatasusOnly =
-    active.length > 0 && active.every((d) => DATASUS_NAMES.has(d));
+  const isDatasusOnly = isDatasusOnlyInput(input);
 
   const yearRange = buildYearRange(input.year_from, input.year_to);
 
@@ -301,11 +343,13 @@ function parquetPaths(input: ClaimsQueryInput): {
     return { pathSql: `[${paths.join(", ")}]`, skipRegionWhere: true };
   }
 
-  // Year-range partition pruning. Two patterns per year cover both storage shapes:
-  //   *.parquet   — flat  (ny_sparcs, meps, mexico_egresos…): year/data.parquet
-  //   */*.parquet — nested (datasus): year/region=SP/data.parquet
-  // Avoids **, which requires at least one sub-directory and returns zero for
-  // flat-structure datasets when the year segment is already in the path prefix.
+  // Year-range partition pruning.
+  // DataSUS stores files one level deeper: source_year=Y/region=XX/data.parquet
+  // All other datasets are flat:           source_year=Y/data.parquet
+  // DuckDB Azure extension throws "No files found" when any pattern in a list
+  // has zero matches, so we cannot mix *.parquet (flat) with */*.parquet
+  // (nested) in a single list — each dataset gets the correct depth.
+  // Wildcard ds="*" gets both patterns so mixed-dataset queries still work.
   const dsSegs =
     active.length > 0 ? [...new Set(active.map(storageDatasetName))] : ["*"];
 
@@ -313,10 +357,22 @@ function parquetPaths(input: ClaimsQueryInput): {
     const paths: string[] = [];
     for (const y of yearRange) {
       for (const ds of dsSegs) {
-        paths.push(`'${base}/source_dataset=${ds}/source_year=${y}/*.parquet'`);
-        paths.push(
-          `'${base}/source_dataset=${ds}/source_year=${y}/*/*.parquet'`,
-        );
+        if (ds === "*") {
+          // Mixed: both patterns needed; DuckDB tolerates empty globs in "all"
+          // queries because at least one pattern will always match.
+          paths.push(`'${base}/source_dataset=*/source_year=${y}/*.parquet'`);
+          paths.push(`'${base}/source_dataset=*/source_year=${y}/*/*.parquet'`);
+        } else if (DATASUS_NAMES.has(ds)) {
+          // Nested: region=XX/ subdirectory between year and file
+          paths.push(
+            `'${base}/source_dataset=${ds}/source_year=${y}/*/*.parquet'`,
+          );
+        } else {
+          // Flat: file sits directly under source_year=Y/
+          paths.push(
+            `'${base}/source_dataset=${ds}/source_year=${y}/*.parquet'`,
+          );
+        }
       }
     }
     return { pathSql: `[${paths.join(", ")}]`, skipRegionWhere: false };
@@ -334,90 +390,28 @@ function parquetPaths(input: ClaimsQueryInput): {
   return { pathSql: `'${base}/**/*.parquet'`, skipRegionWhere: false };
 }
 
-// ── NY SPARCS CCSR ↔ ICD-10 translation ──────────────────────────────────────
-// The public NY SPARCS Socrata export contains CCSR codes (e.g. END003) in the
-// primary_diag_icd column instead of raw ICD-10 codes. All other datasets store
-// ICD-10. This table maps the 3-char ICD-10 prefix to CCSR so the WHERE clause
-// can use the right code system per dataset.
-const ICD10_TO_CCSR: Record<string, string[]> = {
-  // Endocrine / metabolic
-  E10: ["END004"],
-  E11: ["END003"],
-  E12: ["END003"],
-  E13: ["END005"],
-  E66: ["END007"],
-  E78: ["END001"],
-  E03: ["END002"],
-  E05: ["END009"],
-  // Cardiovascular
-  I10: ["CIR011"],
-  I20: ["CIR009"],
-  I21: ["CIR008"],
-  I25: ["CIR002"],
-  I26: ["CIR018"],
-  I48: ["CIR013"],
-  I49: ["CIR014"],
-  I50: ["CIR019"],
-  I60: ["CIR020"],
-  I61: ["CIR012"],
-  I63: ["CIR007"],
-  I65: ["CIR010"],
-  I70: ["CIR001"],
-  I71: ["CIR015"],
-  I80: ["CIR016"],
-  I82: ["CIR017"],
-  // Respiratory
-  J10: ["RSP015"],
-  J12: ["RSP001"],
-  J13: ["RSP014"],
-  J15: ["RSP005"],
-  J18: ["RSP002"],
-  J44: ["RSP008"],
-  J45: ["RSP003"],
-  J96: ["RSP004"],
-  U07: ["RSP012"],
-  // GI / liver
-  K50: ["GIS011"],
-  K51: ["GIS012"],
-  K70: ["GIS009"],
-  K72: ["GIS007"],
-  K74: ["GIS008"],
-  K80: ["GIS006"],
-  K85: ["GIS014"],
-  K92: ["GIS004"],
-  // Renal / GU
-  N17: ["GEN007"],
-  N18: ["GEN008"],
-  N39: ["GEN003"],
-  N40: ["GEN004"],
-  // Oncology
-  C18: ["NEO004"],
-  C20: ["NEO005"],
-  C34: ["NEO010"],
-  C50: ["NEO011"],
-  C61: ["NEO015"],
-  C67: ["NEO017"],
-  C85: ["NEO027"],
-  C90: ["NEO022"],
-  C91: ["NEO023"],
-  // Neurological / psychiatric
-  F32: ["NVS004"],
-  F41: ["NVS012"],
-  G20: ["NVS001"],
-  G30: ["NVS005"],
-  G35: ["NVS002"],
-  G40: ["NVS003"],
-  // Musculoskeletal
-  M05: ["MUS007"],
-  M06: ["MUS006"],
-  M10: ["MUS009"],
-  M45: ["MUS008"],
-  // Infectious
-  A41: ["INF001"],
-  B20: ["INF003"],
-  // Injury
-  S72: ["INJ001"],
-};
+function claimsSummaryPathSql(input: ClaimsQueryInput, dataset: string): string {
+  const container = process.env.AZURE_STORAGE_CONTAINER ?? "heor-claims";
+  const safeDataset = dataset.replace(/[^A-Za-z0-9_]/g, "");
+  const base = `azure://${container}/claims_visits_summary/source_dataset=${safeDataset}`;
+  const yearRange = buildYearRange(input.year_from, input.year_to);
+
+  if (yearRange) {
+    const availableYears = SUMMARY_AVAILABLE_YEARS[safeDataset] ?? yearRange;
+    const selectedYears = yearRange.filter((y) => availableYears.includes(y));
+    if (selectedYears.length === 0) {
+      throw new Error(
+        `No claims summary parquet years loaded for ${safeDataset} in requested range.`,
+      );
+    }
+    const paths = selectedYears.map(
+      (y) => `'${base}/source_year=${y}/primary_diag_counts.parquet'`,
+    );
+    return paths.length === 1 ? paths[0] : `[${paths.join(", ")}]`;
+  }
+
+  return `'${base}/*/primary_diag_counts.parquet'`;
+}
 
 // ── WHERE clause builder (sanitised — all values come from Zod-validated input) ──
 
@@ -427,10 +421,7 @@ function buildWhere(input: ClaimsQueryInput, skipRegion = false): string {
   // Dataset filter (values from enum — safe to inline)
   // Map aliases (brazil_datasus → datasus_sih) so the WHERE matches the actual
   // source_dataset column value written by the ETL.
-  const active = input.datasets.includes("all")
-    ? []
-    : input.datasets.filter((d) => d !== "all");
-  const activeStorage = [...new Set(active.map(storageDatasetName))];
+  const activeStorage = activeStorageDatasets(input);
   if (activeStorage.length === 1) {
     parts.push(`source_dataset = '${activeStorage[0]}'`);
   } else if (activeStorage.length > 1) {
@@ -452,43 +443,14 @@ function buildWhere(input: ClaimsQueryInput, skipRegion = false): string {
   // Sex (enum — safe)
   if (input.sex !== "all") parts.push(`sex = '${input.sex}'`);
 
-  // ICD-10 prefix filter. NY SPARCS stores CCSR codes (e.g. END003) not ICD-10,
-  // so translate when ny_sparcs rows are in scope.
+  // ICD-10 prefix filter. ETL normalises source-specific coding quirks (for
+  // example NY SPARCS CCSR categories) into ICD-10 prefixes before upload.
   if (input.icd10_prefixes.length > 0) {
-    const nySparcsOnly =
-      active.length > 0 && active.every((d) => d === "ny_sparcs");
-    const nySparcsIncluded =
-      input.datasets.includes("all") || active.includes("ny_sparcs");
-    const otherIncluded =
-      input.datasets.includes("all") || active.some((d) => d !== "ny_sparcs");
-
     const icdLikes = input.icd10_prefixes.map((p) => {
       const safe = p.replace(/[^A-Za-z0-9.]/g, "").toUpperCase();
       return `primary_diag_icd LIKE '${safe}%'`;
     });
-    const ccsrCodes = [
-      ...new Set(
-        input.icd10_prefixes.flatMap((p) => {
-          const safe = p.replace(/[^A-Za-z0-9.]/g, "").toUpperCase();
-          return ICD10_TO_CCSR[safe] ?? ICD10_TO_CCSR[safe.slice(0, 3)] ?? [];
-        }),
-      ),
-    ];
-    const ccsrIn =
-      ccsrCodes.length > 0
-        ? `primary_diag_icd IN (${ccsrCodes.map((c) => `'${c}'`).join(",")})`
-        : null;
-
-    if (nySparcsOnly && ccsrIn) {
-      parts.push(ccsrIn);
-    } else if (nySparcsIncluded && otherIncluded && ccsrIn) {
-      parts.push(
-        `((source_dataset = 'ny_sparcs' AND ${ccsrIn})` +
-          ` OR (source_dataset != 'ny_sparcs' AND (${icdLikes.join(" OR ")})))`,
-      );
-    } else {
-      parts.push(`(${icdLikes.join(" OR ")})`);
-    }
+    parts.push(`(${icdLikes.join(" OR ")})`);
   }
 
   // Region filter — sanitise to [A-Za-z0-9 \-] only before inlining.
@@ -516,6 +478,45 @@ function buildWhere(input: ClaimsQueryInput, skipRegion = false): string {
   return parts.length > 0 ? `WHERE ${parts.join(" AND ")}` : "WHERE 1=1";
 }
 
+function buildClaimsSummaryWhere(
+  input: ClaimsQueryInput,
+  dataset: string,
+): string {
+  const safeDataset = dataset.replace(/[^A-Za-z0-9_]/g, "");
+  const parts: string[] = [`source_dataset = '${safeDataset}'`];
+
+  if (input.year_from !== undefined)
+    parts.push(`source_year >= ${input.year_from}`);
+  if (input.year_to !== undefined)
+    parts.push(`source_year <= ${input.year_to}`);
+
+  if (input.age_min !== undefined) parts.push(`age_years >= ${input.age_min}`);
+  if (input.age_max !== undefined) parts.push(`age_years <= ${input.age_max}`);
+
+  if (input.sex !== "all") parts.push(`sex = '${input.sex}'`);
+
+  if (input.icd10_prefixes.length > 0) {
+    const icdLikes = input.icd10_prefixes.map((p) => {
+      const safe = p.replace(/[^A-Za-z0-9.]/g, "").toUpperCase();
+      return `primary_diag_icd LIKE '${safe}%'`;
+    });
+    parts.push(`(${icdLikes.join(" OR ")})`);
+  }
+
+  if (input.regions && input.regions.length > 0) {
+    const safeRegions = input.regions.map((r) =>
+      r.replace(/[^A-Za-z0-9 \-]/g, "").toUpperCase(),
+    );
+    if (safeRegions.length === 1) {
+      parts.push(`region = '${safeRegions[0]}'`);
+    } else {
+      parts.push(`region IN (${safeRegions.map((r) => `'${r}'`).join(",")})`);
+    }
+  }
+
+  return `WHERE ${parts.join(" AND ")}`;
+}
+
 // Exclusion prefixes for comorbidities (exclude the queried condition itself)
 function buildIcdExclusion(prefixes: string[]): string {
   return prefixes
@@ -528,25 +529,7 @@ function buildIcdExclusion(prefixes: string[]): string {
 
 // ── Aggregation queries ───────────────────────────────────────────────────────
 
-async function queryPrevalence(
-  db: DuckDBConnection,
-  pathSql: string,
-  where: string,
-): Promise<unknown> {
-  const rows = await dbAll(
-    db,
-    `SELECT
-       source_year,
-       source_dataset,
-       COUNT(*) AS record_count,
-       SUM(CASE WHEN visit_weight IS NOT NULL THEN visit_weight ELSE 0 END) AS weighted_sum,
-       COUNT(CASE WHEN visit_weight IS NOT NULL THEN 1 END) AS weighted_count
-     FROM read_parquet(${pathSql}, hive_partitioning = false, union_by_name = true)
-     ${where}
-     GROUP BY source_year, source_dataset
-     ORDER BY source_year`,
-  );
-
+function formatPrevalenceRows(rows: Record<string, unknown>[]): unknown {
   const byYear = new Map<
     number,
     {
@@ -591,6 +574,53 @@ async function queryPrevalence(
     total_weighted_estimate: totalWeight,
     by_year,
   };
+}
+
+async function queryPrevalence(
+  db: DuckDBConnection,
+  pathSql: string,
+  where: string,
+): Promise<unknown> {
+  const rows = await dbAll(
+    db,
+    `SELECT
+       source_year,
+       source_dataset,
+       COUNT(*) AS record_count,
+       SUM(CASE WHEN visit_weight IS NOT NULL THEN visit_weight ELSE 0 END) AS weighted_sum,
+       COUNT(CASE WHEN visit_weight IS NOT NULL THEN 1 END) AS weighted_count
+     FROM read_parquet(${pathSql}, hive_partitioning = false, union_by_name = true)
+     ${where}
+     GROUP BY source_year, source_dataset
+     ORDER BY source_year`,
+  );
+
+  return formatPrevalenceRows(rows);
+}
+
+async function queryClaimsSummaryPrevalence(
+  db: DuckDBConnection,
+  input: ClaimsQueryInput,
+  dataset: string,
+): Promise<unknown> {
+  const safeDataset = dataset.replace(/[^A-Za-z0-9_]/g, "");
+  const pathSql = claimsSummaryPathSql(input, safeDataset);
+  const where = buildClaimsSummaryWhere(input, safeDataset);
+  const rows = await dbAll(
+    db,
+    `SELECT
+       source_year,
+       '${safeDataset}' AS source_dataset,
+       SUM(record_count) AS record_count,
+       0 AS weighted_sum,
+       0 AS weighted_count
+     FROM read_parquet(${pathSql}, hive_partitioning = false, union_by_name = true)
+     ${where}
+     GROUP BY source_year
+     ORDER BY source_year`,
+  );
+
+  return formatPrevalenceRows(rows);
 }
 
 async function queryDrugUtilization(
@@ -831,6 +861,12 @@ function _cacheSet(key: string, result: unknown): void {
   _cache.set(key, { result, ts: Date.now() });
 }
 
+type ClaimsExecutionSource =
+  | "cache"
+  | "datasus_summary"
+  | "claims_summary"
+  | "raw_parquet";
+
 // ── Main handler ──────────────────────────────────────────────────────────────
 
 export async function handleClaimsQuery(
@@ -860,36 +896,57 @@ export async function handleClaimsQuery(
   const db = await getDb();
   const { pathSql, skipRegionWhere } = parquetPaths(input);
   const where = buildWhere(input, skipRegionWhere);
+  const summaryDataset = summaryDatasetForInput(input);
   let results: unknown;
+  let executionSource: ClaimsExecutionSource = "raw_parquet";
+  let summaryFallbackError: string | null = null;
 
   if (cachedResults !== undefined) {
     results = cachedResults;
+    executionSource = "cache";
   } else {
-    results = await withDbLock(async () => {
-      switch (input.aggregation) {
-        case "prevalence":
-        case "count":
-          return queryPrevalence(db, pathSql, where);
-        case "drug_utilization":
-          return queryDrugUtilization(db, pathSql, where, input.top_n);
-        case "demographics":
-          return queryDemographics(db, pathSql, where);
-        case "comorbidities":
-          return queryComorbidities(
-            db,
-            pathSql,
-            where,
-            input.icd10_prefixes,
-            input.top_n,
-          );
-        case "cost":
-          return queryCost(db, pathSql, where);
-        default:
-          throw new Error(
-            `Unknown aggregation type: ${(input as { aggregation: string }).aggregation}`,
-          );
+    if (summaryDataset) {
+      try {
+        results = await withDbLock(
+          () => queryClaimsSummaryPrevalence(db, input, summaryDataset),
+          signal,
+        );
+        executionSource =
+          summaryDataset === "datasus_sih" ? "datasus_summary" : "claims_summary";
+      } catch (e) {
+        summaryFallbackError = String(e);
       }
-    }, signal);
+    }
+
+    if (results === undefined) {
+      results = await withDbLock(async () => {
+        switch (input.aggregation) {
+          case "prevalence":
+          case "count":
+            return queryPrevalence(db, pathSql, where);
+          case "drug_utilization":
+            return queryDrugUtilization(db, pathSql, where, input.top_n);
+          case "demographics":
+            return queryDemographics(db, pathSql, where);
+          case "comorbidities":
+            return queryComorbidities(
+              db,
+              pathSql,
+              where,
+              input.icd10_prefixes,
+              input.top_n,
+            );
+          case "cost":
+            return queryCost(db, pathSql, where);
+          default:
+            throw new Error(
+              `Unknown aggregation type: ${(input as { aggregation: string }).aggregation}`,
+            );
+        }
+      }, signal);
+      executionSource = "raw_parquet";
+    }
+
     _cacheSet(cacheKey, results);
   }
 
@@ -912,6 +969,15 @@ export async function handleClaimsQuery(
             : {}),
           sex: input.sex,
         },
+        execution: {
+          source: executionSource,
+          ...(summaryFallbackError
+            ? {
+                summary_fallback:
+                  "Claims summary layer unavailable; used raw parquet scan.",
+              }
+            : {}),
+        },
         results,
       },
       null,
@@ -920,6 +986,15 @@ export async function handleClaimsQuery(
     audit,
   };
 }
+
+export const __claimsQueryTestHooks = {
+  buildClaimsSummaryWhere,
+  claimsSummaryPathSql,
+  parquetPaths,
+  shouldUseClaimsSummary,
+  summaryDatasetForInput,
+  SUMMARY_AVAILABLE_YEARS,
+};
 
 // ── Tool schema ───────────────────────────────────────────────────────────────
 
@@ -940,7 +1015,7 @@ export const claimsQueryToolSchema = {
     "secondary_diags (semicolon-separated ICD-10), drugs_mentioned (semicolon-separated names), " +
     "visit_weight, total_cost_local, local_currency, source_dataset, source_year. " +
     "METADATA NOTE — primary_diag_icd coding varies by dataset: " +
-    "ny_sparcs stores CCSR codes (tool auto-translates your ICD-10 to CCSR internally — always pass ICD-10); " +
+    "ny_sparcs source exports CCSR categories, normalised by ETL to representative ICD-10 prefixes — always pass ICD-10; " +
     "brazil_datasus stores ICD-10 but E11 rarely appears as principal diagnosis (complications coded separately); " +
     "colombia_rips and mexico_egresos have sparse/empty secondary_diags. " +
     "Returns aggregated statistics only (cell suppression n<5). " +
@@ -977,7 +1052,7 @@ export const claimsQueryToolSchema = {
             "chile_deis",
             "colombia_rips",
             "wa_chars",
-            "argentina_deis",
+            "argentina_ba",
             "datasus_sih",
             "datasus_sia",
             "datasus_sim",

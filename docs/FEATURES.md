@@ -1,6 +1,6 @@
 # HEORAgent MCP Server — Features
 
-35 tools, 44 data sources, complete HEOR workflow automation.
+37 tools, 44 data sources, complete HEOR workflow automation.
 
 ## Core Workflow Tools
 
@@ -25,6 +25,8 @@
 | `rwe.method_select` | Recommends an RWE study design (retrospective database analysis, survey, literature review, chart review, social-media listening) for a research objective, scored on data availability, decision context, and required rigour | Picks the right real-world-evidence method *and* routes you to the tool that runs it; flags when no feasible design meets submission-grade rigour and suggests triangulation |
 | `pv.classify` | Classifies a planned study into its EMA pharmacovigilance regulatory category (PASS/PAES/DUS/registry…) | Maps a design to its GVP module + submission obligations before protocol work |
 | `pv.signal_workflow` | Disproportionality stats (PRR, ROR, IC/BCPNN, MGPS-EBGM) + signal verdict per EMA GVP Module IX | Turns FAERS/EudraVigilance case counts into a defensible signal assessment |
+| `pv.comparative_safety` | Class-level comparative safety profile — ranks top-N AEs per product by reporting rate per 1,000 exposed, side-by-side, with optional disproportionality | The multi-drug × multi-AE FAERS class view (e.g. anti-CGRP class); calls out events of interest like "cardiovascular not in any product's top 10" |
+| `evidence.triangulation` | Per-outcome RCT-vs-RWE concordance — agree/disagree + larger/smaller real-world effect (efficacy–effectiveness gap) | Builds the "literature review of RCTs and RWE, key message per outcome" section and pressure-tests whether RWE corroborates trial efficacy |
 
 ## Project Knowledge Base
 

@@ -160,6 +160,14 @@ import {
   handleRweMethodSelect,
   rweMethodSelectToolSchema,
 } from "./tools/rweMethodSelect.js";
+import {
+  handlePvComparativeSafety,
+  pvComparativeSafetyToolSchema,
+} from "./tools/pvComparativeSafety.js";
+import {
+  handleEvidenceTriangulation,
+  evidenceTriangulationToolSchema,
+} from "./tools/evidenceTriangulation.js";
 // mssql is loaded via dynamic require() inside claimsQuery.ts to avoid
 // bundling Node.js-only native modules — same pattern as applicationinsights
 import { randomUUID } from "node:crypto";
@@ -339,6 +347,8 @@ function createMcpServer(
       htaReviewSimulationToolSchema,
       livingReviewToolSchema,
       rweMethodSelectToolSchema,
+      pvComparativeSafetyToolSchema,
+      evidenceTriangulationToolSchema,
       // data.claims_query is internal-only. Require both storage credentials
       // and an explicit deployment flag so a public host cannot expose claims
       // data just because credentials were accidentally configured.
@@ -427,6 +437,12 @@ function createMcpServer(
           break;
         case "rwe.method_select":
           result = await handleRweMethodSelect(args);
+          break;
+        case "pv.comparative_safety":
+          result = await handlePvComparativeSafety(args);
+          break;
+        case "evidence.triangulation":
+          result = await handleEvidenceTriangulation(args);
           break;
         case "hta.workflow":
           result = await handleHtaWorkflow(args);

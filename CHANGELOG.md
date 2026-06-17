@@ -2,6 +2,15 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.18.0 (2026-06-17) — pv.comparative_safety + evidence.triangulation (RWE class safety & RCT-vs-RWE)
+
+### Added
+
+- **`pv.comparative_safety` tool.** Class-level comparative safety profile from spontaneous-report data (FAERS / EudraVigilance / VigiBase). Where `pv.signal_workflow` scores one drug × one AE, this ranks the top-N adverse events for each product in a class by **reporting rate per 1,000 exposed** (or raw report count when no exposure denominator is given), lays the products **side-by-side** in a class-comparison matrix, and emits key observations: the shared class profile, product-level differentiators, and explicit call-outs for `events_of_interest` (e.g. reports that *cardiovascular* did not rank in the top 10 for any product). Optionally layers in **disproportionality** (PRR/ROR/IC/EBGM, reusing `computeAllStats`) per drug-AE pair when `grand_total` + per-product `total_reports` + per-AE `event_total` are supplied. Standing caveat: spontaneous-report rates reflect reporting behaviour, not incidence — output is a hypothesis-generating reporting profile. New `src/pv/comparativeSafety.ts` + `src/tools/pvComparativeSafety.ts`. 13 tests. Design log #17.
+- **`evidence.triangulation` tool.** Per-outcome **RCT-vs-RWE concordance**. For each outcome the caller supplies what the randomised trials show (`rct`) and what real-world evidence shows (`rwe`) — each a direction of benefit (`favors`) plus an optional point estimate + measure. The tool classifies concordance (concordant / partially-concordant / discordant / single-source) and, when both bodies give an estimate on the **same measure**, whether the real-world effect is **larger** (long-term use, broad heterogeneous populations) or **smaller** (efficacy–effectiveness gap) — sign-normalised by `benefit_direction` so "larger" always means more benefit, for both lower-is-better (e.g. monthly migraine days, MD) and higher-is-better (e.g. responder rate, RR) outcomes. Returns a per-outcome concordance table, a key message per outcome, an overall triangulation statement, and a concordance summary; flags discordant and single-source outcomes. Builds the "literature review of RCTs and RWE — key message per relevant outcome" deliverable. RWE framed as complementary to, not a substitute for, RCTs. New `src/triangulation/{types,concordance}.ts` + `src/tools/evidenceTriangulation.ts`. 13 tests. Design log #18.
+
+Both are pure deterministic logic, no external calls; `submission` AI-disclosure default; registered in `server.ts`.
+
 ## v1.17.0 (2026-06-17) — rwe.method_select (RWE study-design selection)
 
 ### Added

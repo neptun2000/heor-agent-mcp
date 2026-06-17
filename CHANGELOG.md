@@ -2,6 +2,12 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.22.0 (2026-06-17) — claim registry auto-import (self-populating source of truth)
+
+### Added
+
+- **`evidence.claim_registry` gains an `import` action.** Auto-register claims from a tool result instead of manual upserts: pass `import_from { source_tool, result }` with the structured output of `models.cost_effectiveness` (→ ICER, incremental QALYs, incremental cost) or `models.budget_impact` (→ net budget impact), and the registry self-populates with provenance (`source_tool`/`source_run_id`, tagged `imported`). The extractor is additive and tolerant — it reads either the raw result or a `{content:...}` envelope, skips missing/non-finite fields, and never mutates the source tools (their default output is unchanged). Imported claims carry the right keywords, so `evidence.consistency_check` immediately detects drift of those figures across deliverables (verified end-to-end). New `src/claims/extract.ts`; extended `src/tools/claimRegistry.ts`. 5 new tests. Design log #23.
+
 ## v1.21.0 (2026-06-17) — living-evidence orchestration (gap_analysis/iEGP + workflow.living_evidence)
 
 ### Added

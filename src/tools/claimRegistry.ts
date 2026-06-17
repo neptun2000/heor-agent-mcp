@@ -25,10 +25,11 @@ import {
   saveClaimRegistry,
 } from "../knowledge/claimStore.js";
 import { sanitizeProjectId } from "../knowledge/paths.js";
+import { extractClaims, SUPPORTED_IMPORT_SOURCES } from "../claims/extract.js";
 import type { Claim } from "../claims/types.js";
 import type { ToolResult } from "../providers/types.js";
 
-const ACTIONS = ["upsert", "list", "get", "remove"] as const;
+const ACTIONS = ["upsert", "list", "get", "remove", "import"] as const;
 const STATUSES = ["draft", "verified", "superseded"] as const;
 
 const ClaimInputSchema = z.object({
@@ -51,6 +52,13 @@ const ClaimRegistrySchema = z
     action: caseInsensitiveEnum(ACTIONS),
     claim: ClaimInputSchema.optional(),
     claim_id: z.string().optional(),
+    import_from: z
+      .object({
+        source_tool: z.string().min(1),
+        source_run_id: z.string().optional(),
+        result: z.unknown(),
+      })
+      .optional(),
   })
   .strict();
 
@@ -160,6 +168,63 @@ export async function handleClaimRegistry(
       lines.push(renderClaim(base));
       break;
     }
+    case "import": {
+      if (!input.import_from) {
+        throw new Error(
+          "action 'import' requires import_from { source_tool, result }.",
+        );
+      }
+      const { source_tool, source_run_id, result } = input.import_from;
+      const extracted = extractClaims(source_tool, result);
+      if (extracted.length === 0) {
+        if (!SUPPORTED_IMPORT_SOURCES.includes(source_tool)) {
+          throw new Error(
+            `Unsupported import source "${source_tool}". Supported: ${SUPPORTED_IMPORT_SOURCES.join(", ")}.`,
+          );
+        }
+        lines.push(
+          `No claims could be extracted from the ${source_tool} result — check that the structured result object was passed.`,
+        );
+        break;
+      }
+      const importedIds: string[] = [];
+      for (const e of extracted) {
+        const id = slugify(e.id) || `claim-${registry.claims.length + 1}`;
+        const idx = registry.claims.findIndex((x) => x.id === id);
+        const claim: Claim = {
+          id,
+          statement: e.statement,
+          numeric_value: e.numeric_value,
+          value_display: e.value_display,
+          unit: e.unit,
+          keywords: e.keywords,
+          source_tool,
+          source_run_id,
+          status: "draft",
+          tags: ["imported"],
+          created_at: idx >= 0 ? registry.claims[idx].created_at : now,
+          updated_at: now,
+        };
+        if (idx >= 0) registry.claims[idx] = claim;
+        else registry.claims.push(claim);
+        importedIds.push(id);
+      }
+      registry.updated_at = now;
+      savedPath = await saveClaimRegistry(projectId, registry);
+      audit = addAssumption(
+        audit,
+        `Imported ${importedIds.length} claim(s) from ${source_tool}: ${importedIds.join(", ")}.`,
+      );
+      lines.push(
+        `Imported ${importedIds.length} claim(s) from \`${source_tool}\`: ${importedIds.map((i) => `\`${i}\``).join(", ")}.`,
+      );
+      lines.push("");
+      for (const id of importedIds) {
+        const c = registry.claims.find((x) => x.id === id);
+        if (c) lines.push(renderClaim(c));
+      }
+      break;
+    }
     case "remove": {
       if (!input.claim_id) throw new Error("action 'remove' requires claim_id.");
       const id = slugify(input.claim_id);
@@ -248,7 +313,7 @@ function truncate(s: string, n: number): string {
 export const claimRegistryToolSchema = {
   name: "evidence.claim_registry",
   description:
-    "Author evidence claims once and reference them by ID across deliverables (dossiers, publications, payer materials). A claim is a single source-of-truth statement — an ICER, an effect estimate, a prevalence — persisted in the project knowledge base. Actions: 'upsert' (create/update a claim; id auto-derived from the statement if omitted), 'list', 'get', 'remove'. Each claim carries a numeric_value + value_display + unit + keywords (anchors used by evidence.consistency_check to locate it in prose) + citation + source_tool/run for provenance + status (draft/verified/superseded). Requires an existing project (project.create). Pairs with evidence.consistency_check (detect drift across documents) and publication.draft (reuse claims). Enum values case-insensitive.",
+    "Author evidence claims once and reference them by ID across deliverables (dossiers, publications, payer materials). A claim is a single source-of-truth statement — an ICER, an effect estimate, a prevalence — persisted in the project knowledge base. Actions: 'upsert' (create/update a claim; id auto-derived from the statement if omitted), 'list', 'get', 'remove', and 'import' (auto-register claims from a tool result — pass import_from {source_tool, result} with the structured output of models.cost_effectiveness (→ ICER, incremental QALYs, incremental cost) or models.budget_impact (→ net budget impact); the registry self-populates instead of manual upserts). Each claim carries a numeric_value + value_display + unit + keywords (anchors used by evidence.consistency_check to locate it in prose) + citation + source_tool/run for provenance + status (draft/verified/superseded). Requires an existing project (project.create). Pairs with evidence.consistency_check (detect drift across documents) and publication.draft (reuse claims). Enum values case-insensitive.",
   annotations: {
     title: "Claim Registry",
     readOnlyHint: false,
@@ -282,6 +347,17 @@ export const claimRegistryToolSchema = {
         },
       },
       claim_id: { type: "string", description: "For 'get' / 'remove'." },
+      import_from: {
+        type: "object",
+        description:
+          "For 'import': auto-extract claims from a tool result. source_tool ∈ {models.cost_effectiveness, models.budget_impact}; result = that tool's structured output (the model_results / content object).",
+        properties: {
+          source_tool: { type: "string" },
+          source_run_id: { type: "string" },
+          result: {},
+        },
+        required: ["source_tool", "result"],
+      },
       ai_disclosure_level: {
         type: "string",
         enum: ["off", "standard", "submission"],

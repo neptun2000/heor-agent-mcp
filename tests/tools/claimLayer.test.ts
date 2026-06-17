@@ -104,6 +104,77 @@ describe("claim layer", () => {
         handleClaimRegistry({ project_id: "nonexistent-proj", action: "list" }),
       ).rejects.toThrow(/not found/i);
     });
+
+    it("imports claims from a models.cost_effectiveness result", async () => {
+      const r = (await handleClaimRegistry({
+        project_id: PROJECT,
+        action: "import",
+        import_from: {
+          source_tool: "models.cost_effectiveness",
+          source_run_id: "run-42",
+          result: {
+            base_case: { icer: 18500, delta_cost: 7400, delta_qaly: 0.4 },
+          },
+        },
+      })) as unknown as RegRes;
+      const ids = r.registry.claims.map((c) => c.id);
+      expect(ids).toContain("icer-base-case");
+      expect(ids).toContain("incremental-qalys");
+      expect(ids).toContain("incremental-cost");
+      const icer = r.registry.claims.find((c) => c.id === "icer-base-case")!;
+      expect(icer.numeric_value).toBe(18500);
+      expect(icer.source_tool).toBe("models.cost_effectiveness");
+      expect(icer.source_run_id).toBe("run-42");
+      expect(icer.keywords).toContain("ICER");
+    });
+
+    it("imports from a {content:...} envelope and a budget_impact result", async () => {
+      const r = (await handleClaimRegistry({
+        project_id: PROJECT,
+        action: "import",
+        import_from: {
+          source_tool: "models.budget_impact",
+          result: {
+            content: { summary: { total_net_budget_impact: 1250000, currency: "GBP" } },
+          },
+        },
+      })) as unknown as RegRes;
+      const net = r.registry.claims.find((c) => c.id === "net-budget-impact")!;
+      expect(net).toBeDefined();
+      expect(net.numeric_value).toBe(1250000);
+      expect(net.value_display).toMatch(/GBP/);
+    });
+
+    it("rejects an unsupported import source", async () => {
+      await expect(
+        handleClaimRegistry({
+          project_id: PROJECT,
+          action: "import",
+          import_from: { source_tool: "models.unknown", result: {} },
+        }),
+      ).rejects.toThrow(/unsupported import source/i);
+    });
+
+    it("imported claims are detectable by consistency_check (end-to-end)", async () => {
+      await handleClaimRegistry({
+        project_id: PROJECT,
+        action: "import",
+        import_from: {
+          source_tool: "models.cost_effectiveness",
+          result: { base_case: { icer: 18500, delta_cost: 7400, delta_qaly: 0.4 } },
+        },
+      });
+      const chk = (await handleConsistencyCheck({
+        project_id: PROJECT,
+        claim_ids: ["icer-base-case"],
+        deliverables: [
+          { name: "Dossier", text: "The base-case ICER was 18,500 per QALY." },
+          { name: "Slide", text: "ICER of 21,000 per QALY." },
+        ],
+      })) as unknown as ChkRes;
+      expect(chk.consistency.drift_count).toBe(1);
+      expect(chk.consistency.drifting_claims).toContain("icer-base-case");
+    });
   });
 
   // ── consistency_check ───────────────────────────────────────────────────

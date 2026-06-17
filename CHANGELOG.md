@@ -2,6 +2,15 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.19.0 (2026-06-17) — social listening (rwe.social_listening_protocol + pv.social_listening_triage)
+
+### Added
+
+- **`rwe.social_listening_protocol` tool.** Generates a social-listening study protocol + compliance checklist from the drug, indication, objectives, platforms, privacy jurisdictions, and seed keywords: objectives & scope, search strategy, inclusion/exclusion, analysis plan (sentiment + thematic + MedDRA-coded AE extraction), data-governance/privacy/ethics (GDPR Art. 6/9 and HIPAA items switch on jurisdiction), a **mandatory** pharmacovigilance-handling section (GVP Module VI applies to any systematic digital-media review regardless of objective or channel ownership; escalated when `is_mah_managed_channel`), deliverables, a mandatory/recommended compliance checklist, and limitations. The *planning* half of social listening — design + governance only, no scraping, so no platform-ToS or network-egress risk. New `src/social/{types,protocol}.ts` + `src/tools/rweSocialListeningProtocol.ts`. Design log #19.
+- **`pv.social_listening_triage` tool.** GVP Module VI reportability triage of **already-collected** social posts. The calling model supplies, per post, which of the four ICSR elements are present (identifiable reporter + patient + suspect product + adverse event) plus optional sentiment/themes/AE terms; the tool applies the deterministic four-element validity test (all four → valid reportable ICSR with a 15-day serious / 90-day non-serious clock; product+event only → follow-up needed; no AE → qualitative insight only), tallies sentiment/themes/AE terms, and surfaces the reporting obligations + low-validity caveats. It does **not** scrape and does **not** run NLP in-tool — keeping output auditable and anti-fabrication. New `src/social/reportability.ts` + `src/tools/pvSocialListeningTriage.ts`. Design log #19.
+
+Both pure deterministic logic, no external calls; `submission` AI-disclosure default; registered in `server.ts`. The pair implements the lowest-validity RWE method from `rwe.method_select` end-to-end (design → execution) while keeping live retrieval (a social provider) out of scope for now to avoid ToS/egress/PV-liability exposure. 21 tests.
+
 ## v1.18.0 (2026-06-17) — pv.comparative_safety + evidence.triangulation (RWE class safety & RCT-vs-RWE)
 
 ### Added

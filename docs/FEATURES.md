@@ -1,6 +1,6 @@
 # HEORAgent MCP Server — Features
 
-37 tools, 44 data sources, complete HEOR workflow automation.
+39 tools, 44 data sources, complete HEOR workflow automation.
 
 ## Core Workflow Tools
 
@@ -27,6 +27,8 @@
 | `pv.signal_workflow` | Disproportionality stats (PRR, ROR, IC/BCPNN, MGPS-EBGM) + signal verdict per EMA GVP Module IX | Turns FAERS/EudraVigilance case counts into a defensible signal assessment |
 | `pv.comparative_safety` | Class-level comparative safety profile — ranks top-N AEs per product by reporting rate per 1,000 exposed, side-by-side, with optional disproportionality | The multi-drug × multi-AE FAERS class view (e.g. anti-CGRP class); calls out events of interest like "cardiovascular not in any product's top 10" |
 | `evidence.triangulation` | Per-outcome RCT-vs-RWE concordance — agree/disagree + larger/smaller real-world effect (efficacy–effectiveness gap) | Builds the "literature review of RCTs and RWE, key message per outcome" section and pressure-tests whether RWE corroborates trial efficacy |
+| `rwe.social_listening_protocol` | Generates a social-listening study protocol + compliance checklist (search strategy, GDPR/HIPAA gating, mandatory GVP Module VI AE handling, limitations) | The planning half of the lowest-validity RWE method; no scraping/ToS risk — design + governance only |
+| `pv.social_listening_triage` | GVP Module VI four-element ICSR reportability triage of already-collected social posts + sentiment/theme/AE tallies | The execution half; turns raw social posts into a PV-compliant, validity-flagged input without scraping or NLP in-tool |
 
 ## Project Knowledge Base
 

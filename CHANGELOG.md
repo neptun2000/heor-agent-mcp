@@ -2,6 +2,12 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.17.0 (2026-06-17) — rwe.method_select (RWE study-design selection)
+
+### Added
+
+- **`rwe.method_select` tool.** Picks an appropriate real-world-evidence study design for a research question. Scores the five core RWE methodologies — retrospective database analysis, survey, literature review, chart review, social-media listening — against the `research_objective`, the `available_data` the user can access, the `decision_context` (HTA/payer, regulatory, clinical guideline, internal strategy, exploratory), and the `rigor_required` (exploratory / supportive / submission-grade). Returns a primary recommendation + ranked alternatives, each with its results-validity tier, intrinsic bias caveats, and the downstream tools in this server that operationalise it (e.g. `literature.search`, `pv.signal_workflow`, `evidence.population_adjusted`, `data.claims_query`) — so it doubles as a router into the rest of the toolset. Hard feasibility gate excludes methods whose required data is unavailable; flags `rigor_satisfiable=false` when no feasible design can meet the requested rigour; suggests triangulation when a strong complementary design exists. Pure deterministic decision logic, <200 ms, no external calls; enum values case-insensitive; `standard` AI-disclosure default. New `src/rwe/{types,methodRegistry,decisionTree}.ts` + `src/tools/rweMethodSelect.ts`, registered in `server.ts`. 22 tests. Design log #16. (Derived from an RWE method-comparison framework; validity tiers per ISPOR/ISPE RWE Good Procedural Practices + the FDA RWE framework.)
+
 ## v1.16.0 (2026-06-16) — literature.living_review (protocol-locked living SLR)
 
 ### Added

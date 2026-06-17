@@ -156,6 +156,10 @@ import {
   claimsQueryToolSchema,
 } from "./tools/claimsQuery.js";
 import { handleQueryAgent, queryAgentToolSchema } from "./tools/queryAgent.js";
+import {
+  handleRweMethodSelect,
+  rweMethodSelectToolSchema,
+} from "./tools/rweMethodSelect.js";
 // mssql is loaded via dynamic require() inside claimsQuery.ts to avoid
 // bundling Node.js-only native modules — same pattern as applicationinsights
 import { randomUUID } from "node:crypto";
@@ -334,6 +338,7 @@ function createMcpServer(
       governanceSelfCheckToolSchema,
       htaReviewSimulationToolSchema,
       livingReviewToolSchema,
+      rweMethodSelectToolSchema,
       // data.claims_query is internal-only. Require both storage credentials
       // and an explicit deployment flag so a public host cannot expose claims
       // data just because credentials were accidentally configured.
@@ -419,6 +424,9 @@ function createMcpServer(
           break;
         case "pv.signal_workflow":
           result = await handlePvSignalWorkflow(args);
+          break;
+        case "rwe.method_select":
+          result = await handleRweMethodSelect(args);
           break;
         case "hta.workflow":
           result = await handleHtaWorkflow(args);

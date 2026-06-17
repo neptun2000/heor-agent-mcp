@@ -29,6 +29,10 @@ export function getClaimsDir(projectId: string): string {
   return join(getProjectRoot(projectId), "claims");
 }
 
+export function getGvdDir(projectId: string): string {
+  return join(getProjectRoot(projectId), "gvd");
+}
+
 export function getReportsDir(projectId?: string): string {
   if (projectId) {
     return join(getProjectRoot(projectId), "reports");

@@ -1,6 +1,6 @@
 # HEORAgent MCP Server — Features
 
-44 tools, 44 data sources, complete HEOR workflow automation.
+45 tools, 44 data sources, complete HEOR workflow automation.
 
 ## Core Workflow Tools
 
@@ -44,6 +44,7 @@
 |------|-------------|----------------|
 | `evidence.gap_analysis` | Integrated Evidence Generation Plan (iEGP): assess domain coverage → prioritised, severity-ranked plan mapping each gap to a generation activity, tool, and unblocked deliverable | Decides what evidence to generate next; readiness score per decision context |
 | `workflow.living_evidence` | Orchestrates the SLR → living knowledge base → JCA/HTA deliverables pipeline; emits the ordered runbook for a baseline build or a signal-gated living refresh | The "from review to reimbursement" flow as one runbook; unchanged refreshes become near no-ops |
+| `hta.living_gvd` | Living Global Value Dossier as a diffable artifact: snapshot section→claim mappings, then diff against the registry to regenerate only the sections whose figures changed | Section-level refresh — don't rebuild the whole GVD when one ICER moves; pairs with the claim registry + living-evidence pipeline |
 
 ## Project Knowledge Base
 

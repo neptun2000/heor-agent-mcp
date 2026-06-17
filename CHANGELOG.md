@@ -2,6 +2,12 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.23.0 (2026-06-17) — hta.living_gvd (Living GVD as a diffable artifact)
+
+### Added
+
+- **`hta.living_gvd` tool.** Maintains a Living Global Value Dossier so a refresh regenerates only the sections whose figures changed, not the whole dossier. `snapshot` records which registry claims each GVD section is built from (`sections [{name, claim_ids}]`), capturing each claim's current value as a baseline manifest persisted at `<project>/gvd/manifest.json`. `refresh` diffs that snapshot against the live claim registry **by value** (0.5% tolerance / exact) and returns the stale sections to regenerate with old→new per claim, also flagging sections whose claims were removed (`claim_missing`) or superseded. Builds on `evidence.claim_registry` and is the `Living GVD` step of `workflow.living_evidence`. The tool computes the diff + regeneration list; regeneration itself stays in `hta.dossier` (no change to that tool). New `src/gvd/{types,livingGvd}.ts`, `src/knowledge/gvdManifestStore.ts` (+ `getGvdDir`), `src/tools/htaLivingGvd.ts`. 9 tests. Design log #24.
+
 ## v1.22.0 (2026-06-17) — claim registry auto-import (self-populating source of truth)
 
 ### Added

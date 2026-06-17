@@ -1,10 +1,10 @@
 import { fetchNiceTa } from "../../../src/providers/direct/niceTa.js";
+import { liveDescribe } from "../../helpers/live.js";
 
-// These hit the live NICE endpoint. Use a generous timeout so transient
-// endpoint slowness doesn't trip Jest's 5s default (matches wiley.test.ts).
-// The assertions still fail on a broken endpoint or wrong-shaped data — the
-// timeout only tolerates slow-but-successful responses.
-describe("fetchNiceTa", () => {
+// Hits the live NICE endpoint — gated behind RUN_LIVE_TESTS so a slow or
+// unreachable endpoint can't flake CI (see tests/helpers/live.ts). The 15s
+// timeout tolerates slow-but-successful responses when live tests are run.
+liveDescribe("fetchNiceTa (live)", () => {
   it("returns structured reference results", async () => {
     const results = await fetchNiceTa("semaglutide", 5);
     expect(results.length).toBeGreaterThan(0);

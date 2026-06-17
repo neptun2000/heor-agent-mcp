@@ -13,6 +13,10 @@ Completes the "living evidence intelligence — from review to reimbursement" ar
 
 Both pure logic, no external calls, registered in `server.ts`. 17 tests.
 
+### Changed (CI / testing)
+
+- **Deterministic CI: live-endpoint smoke tests are now opt-in.** The only tests that made unmocked calls to third-party endpoints (`niceTa`, `wiley` live cases) were flaking CI on slow/unreachable hosts for reasons unrelated to the change under test. They are now gated behind `RUN_LIVE_TESTS=1` via a `tests/helpers/live.ts` helper (`liveDescribe`/`liveIt`): `npm test` is fully deterministic (live tests skipped), `npm run test:live` runs them. Deterministic cases on those providers (mocked-error, key-absent, query-sanitisation) still always run. No runtime/tool behaviour changes.
+
 ## v1.20.0 (2026-06-17) — cross-deliverable claim layer (claim_registry + consistency_check + publication.draft)
 
 ### Added

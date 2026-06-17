@@ -25,6 +25,10 @@ export function getWikiDir(projectId: string): string {
   return join(getProjectRoot(projectId), "wiki");
 }
 
+export function getClaimsDir(projectId: string): string {
+  return join(getProjectRoot(projectId), "claims");
+}
+
 export function getReportsDir(projectId?: string): string {
   if (projectId) {
     return join(getProjectRoot(projectId), "reports");

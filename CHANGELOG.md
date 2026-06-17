@@ -2,6 +2,18 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.20.0 (2026-06-17) — cross-deliverable claim layer (claim_registry + consistency_check + publication.draft)
+
+### Added
+
+A single-source-of-truth layer so evidence figures stay consistent across dossiers, publications, and payer materials.
+
+- **`evidence.claim_registry` tool.** Author an evidence claim once — an ICER, an effect estimate, a prevalence — and reference it by ID across deliverables. Persisted in the project knowledge base at `<project>/claims/registry.json`. Actions: `upsert` (id auto-derived from the statement if omitted), `list`, `get`, `remove`. Each claim carries `numeric_value` + `value_display` + `unit` + `keywords` (anchors for drift detection) + `citation` + `source_tool`/`source_run_id` provenance + `status` (draft/verified/superseded). New `src/claims/types.ts`, `src/knowledge/claimStore.ts` (+ `getClaimsDir`), `src/tools/claimRegistry.ts`.
+- **`evidence.consistency_check` tool.** Detects drift of registered (or inline) claims across deliverables: scans each deliverable's text, locates each claim by its keywords, and flags where a DIFFERENT number sits within ±70 characters (drift — e.g. an ICER updated in the model but not the dossier) or where a claim is absent. Returns a claim × deliverable matrix + the actionable drifting-claims list. Keyword-anchored + numeric (exact for integers, 0.5% tolerance otherwise); necessary-not-sufficient, human review still required. New `src/claims/consistency.ts`, `src/tools/consistencyCheck.ts`.
+- **`publication.draft` tool.** Drafts an abstract / manuscript (IMRaD) / poster / plain-language summary that **reuses claims from the registry** (pass `reference_claim_ids` + `project_id`) so published figures match the dossier. Auto-selects the reporting guideline by study design (CONSORT/STROBE/PRISMA/CHEERS), enforces a per-type word limit, and emits a GPP2022 + ICMJE compliance checklist (authorship, disclosures, funding, trial registration, data-sharing); flags over-limit drafts, unregistered RCTs, and superseded claims, and notes AI cannot be a named author. New `src/claims/publication.ts`, `src/tools/publicationDraft.ts`.
+
+Closes the cross-deliverable linking gap: claims are linked by reference (not copy-paste) and drift is detectable. All three registered in `server.ts`; 13 tests. Design log #20.
+
 ## v1.19.0 (2026-06-17) — social listening (rwe.social_listening_protocol + pv.social_listening_triage)
 
 ### Added

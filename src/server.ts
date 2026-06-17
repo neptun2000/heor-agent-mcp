@@ -176,6 +176,18 @@ import {
   handleRweSocialListeningProtocol,
   rweSocialListeningProtocolToolSchema,
 } from "./tools/rweSocialListeningProtocol.js";
+import {
+  handleClaimRegistry,
+  claimRegistryToolSchema,
+} from "./tools/claimRegistry.js";
+import {
+  handleConsistencyCheck,
+  consistencyCheckToolSchema,
+} from "./tools/consistencyCheck.js";
+import {
+  handlePublicationDraft,
+  publicationDraftToolSchema,
+} from "./tools/publicationDraft.js";
 // mssql is loaded via dynamic require() inside claimsQuery.ts to avoid
 // bundling Node.js-only native modules — same pattern as applicationinsights
 import { randomUUID } from "node:crypto";
@@ -359,6 +371,9 @@ function createMcpServer(
       evidenceTriangulationToolSchema,
       pvSocialListeningTriageToolSchema,
       rweSocialListeningProtocolToolSchema,
+      claimRegistryToolSchema,
+      consistencyCheckToolSchema,
+      publicationDraftToolSchema,
       // data.claims_query is internal-only. Require both storage credentials
       // and an explicit deployment flag so a public host cannot expose claims
       // data just because credentials were accidentally configured.
@@ -459,6 +474,15 @@ function createMcpServer(
           break;
         case "rwe.social_listening_protocol":
           result = await handleRweSocialListeningProtocol(args);
+          break;
+        case "evidence.claim_registry":
+          result = await handleClaimRegistry(args);
+          break;
+        case "evidence.consistency_check":
+          result = await handleConsistencyCheck(args);
+          break;
+        case "publication.draft":
+          result = await handlePublicationDraft(args);
           break;
         case "hta.workflow":
           result = await handleHtaWorkflow(args);

@@ -1,6 +1,6 @@
 # HEORAgent MCP Server — Features
 
-39 tools, 44 data sources, complete HEOR workflow automation.
+42 tools, 44 data sources, complete HEOR workflow automation.
 
 ## Core Workflow Tools
 
@@ -29,6 +29,14 @@
 | `evidence.triangulation` | Per-outcome RCT-vs-RWE concordance — agree/disagree + larger/smaller real-world effect (efficacy–effectiveness gap) | Builds the "literature review of RCTs and RWE, key message per outcome" section and pressure-tests whether RWE corroborates trial efficacy |
 | `rwe.social_listening_protocol` | Generates a social-listening study protocol + compliance checklist (search strategy, GDPR/HIPAA gating, mandatory GVP Module VI AE handling, limitations) | The planning half of the lowest-validity RWE method; no scraping/ToS risk — design + governance only |
 | `pv.social_listening_triage` | GVP Module VI four-element ICSR reportability triage of already-collected social posts + sentiment/theme/AE tallies | The execution half; turns raw social posts into a PV-compliant, validity-flagged input without scraping or NLP in-tool |
+
+## Cross-Deliverable Traceability
+
+| Tool | What it does | Why it matters |
+|------|-------------|----------------|
+| `evidence.claim_registry` | Author an evidence claim once (ICER, effect estimate, prevalence) and reference it by ID; persisted in the project knowledge base | Single source of truth shared across dossiers, publications, and payer materials |
+| `evidence.consistency_check` | Scans deliverables for registered claims and flags drift (a different value next to the claim keyword) or absence | Catches the stale-ICER-in-the-slide class of error before release; claim × deliverable matrix |
+| `publication.draft` | Drafts an abstract/manuscript/poster/plain-language summary that reuses registry claims; auto-selects CONSORT/STROBE/PRISMA/CHEERS + GPP2022/ICMJE checklist | Fills the publications gap and keeps published figures identical to the dossier |
 
 ## Project Knowledge Base
 

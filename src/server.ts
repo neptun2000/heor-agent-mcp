@@ -188,6 +188,14 @@ import {
   handlePublicationDraft,
   publicationDraftToolSchema,
 } from "./tools/publicationDraft.js";
+import {
+  handleEvidenceGapAnalysis,
+  evidenceGapAnalysisToolSchema,
+} from "./tools/evidenceGapAnalysis.js";
+import {
+  handleWorkflowLivingEvidence,
+  workflowLivingEvidenceToolSchema,
+} from "./tools/workflowLivingEvidence.js";
 // mssql is loaded via dynamic require() inside claimsQuery.ts to avoid
 // bundling Node.js-only native modules — same pattern as applicationinsights
 import { randomUUID } from "node:crypto";
@@ -374,6 +382,8 @@ function createMcpServer(
       claimRegistryToolSchema,
       consistencyCheckToolSchema,
       publicationDraftToolSchema,
+      evidenceGapAnalysisToolSchema,
+      workflowLivingEvidenceToolSchema,
       // data.claims_query is internal-only. Require both storage credentials
       // and an explicit deployment flag so a public host cannot expose claims
       // data just because credentials were accidentally configured.
@@ -483,6 +493,12 @@ function createMcpServer(
           break;
         case "publication.draft":
           result = await handlePublicationDraft(args);
+          break;
+        case "evidence.gap_analysis":
+          result = await handleEvidenceGapAnalysis(args);
+          break;
+        case "workflow.living_evidence":
+          result = await handleWorkflowLivingEvidence(args);
           break;
         case "hta.workflow":
           result = await handleHtaWorkflow(args);

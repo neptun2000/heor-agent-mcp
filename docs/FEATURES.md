@@ -1,6 +1,6 @@
 # HEORAgent MCP Server — Features
 
-42 tools, 44 data sources, complete HEOR workflow automation.
+44 tools, 44 data sources, complete HEOR workflow automation.
 
 ## Core Workflow Tools
 
@@ -37,6 +37,13 @@
 | `evidence.claim_registry` | Author an evidence claim once (ICER, effect estimate, prevalence) and reference it by ID; persisted in the project knowledge base | Single source of truth shared across dossiers, publications, and payer materials |
 | `evidence.consistency_check` | Scans deliverables for registered claims and flags drift (a different value next to the claim keyword) or absence | Catches the stale-ICER-in-the-slide class of error before release; claim × deliverable matrix |
 | `publication.draft` | Drafts an abstract/manuscript/poster/plain-language summary that reuses registry claims; auto-selects CONSORT/STROBE/PRISMA/CHEERS + GPP2022/ICMJE checklist | Fills the publications gap and keeps published figures identical to the dossier |
+
+## Living-Evidence Orchestration
+
+| Tool | What it does | Why it matters |
+|------|-------------|----------------|
+| `evidence.gap_analysis` | Integrated Evidence Generation Plan (iEGP): assess domain coverage → prioritised, severity-ranked plan mapping each gap to a generation activity, tool, and unblocked deliverable | Decides what evidence to generate next; readiness score per decision context |
+| `workflow.living_evidence` | Orchestrates the SLR → living knowledge base → JCA/HTA deliverables pipeline; emits the ordered runbook for a baseline build or a signal-gated living refresh | The "from review to reimbursement" flow as one runbook; unchanged refreshes become near no-ops |
 
 ## Project Knowledge Base
 

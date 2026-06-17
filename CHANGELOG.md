@@ -2,6 +2,17 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.21.0 (2026-06-17) — living-evidence orchestration (gap_analysis/iEGP + workflow.living_evidence)
+
+### Added
+
+Completes the "living evidence intelligence — from review to reimbursement" architecture: one living source of truth that feeds every downstream deliverable.
+
+- **`evidence.gap_analysis` tool (iEGP).** Generates an integrated Evidence Generation Plan. Assess the evidence base across 11 HEOR domains (epidemiology, disease_burden, clinical_efficacy, comparative_effectiveness, safety, economic_cea, budget_impact, hrqol_utilities, adherence, unmet_need, patient_experience), each with a status (robust/limited/absent/discordant); the tool returns the gaps, a recommended generation activity per gap, the tool that operationalises it, the deliverable it unblocks, and a **severity-prioritised plan** (gaps on decision-critical domains for the context escalate one tier). Optionally folds in `discordant_outcomes` / `single_source_outcomes` from `evidence.triangulation`. Returns a readiness score (% of domains robust). New `src/iegp/{types,domainRegistry,planner}.ts` + `src/tools/evidenceGapAnalysis.ts`. Design log #21.
+- **`workflow.living_evidence` tool.** Orchestrates the end-to-end pipeline (AI-augmented SLR → living knowledge base → JCA/HTA deliverables). Returns the ordered **runbook** of tool calls: `stage=baseline` emits the full chain (search → screen → risk_of_bias → triangulation → network/indirect → cost_effectiveness → budget_impact → gap_analysis → claim_registry → dossier/JCA → consistency_check → living_review init); `stage=refresh` emits only the steps triggered by the signals you pass (`material_change` + `recommended_downstream` from `literature.living_review`, `drifting_claims` from `evidence.consistency_check`) so an unchanged refresh is a near no-op. Deterministic runbook generator — it does not execute steps or hold state (the calling agent runs them; the host owns persistence + the refresh schedule). New `src/orchestration/livingEvidence.ts` + `src/tools/workflowLivingEvidence.ts`. Design log #22.
+
+Both pure logic, no external calls, registered in `server.ts`. 17 tests.
+
 ## v1.20.0 (2026-06-17) — cross-deliverable claim layer (claim_registry + consistency_check + publication.draft)
 
 ### Added

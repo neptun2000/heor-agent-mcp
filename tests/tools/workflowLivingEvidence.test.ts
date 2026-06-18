@@ -30,6 +30,7 @@ describe("workflow_living_evidence — baseline", () => {
     expect(tools).toMatch(/evidence\.gap_analysis/);
     expect(tools).toMatch(/evidence\.claim_registry/);
     expect(tools).toMatch(/consistency_check/);
+    expect(tools).toMatch(/hta\.living_gvd/); // snapshot step wired in
   });
 
   it("includes the living_review init step to enable refresh", async () => {
@@ -81,6 +82,20 @@ describe("workflow_living_evidence — refresh gating", () => {
     });
     const regen = r.living_evidence.steps.find((s) => s.name === "Regenerate drifted deliverables")!;
     expect(regen.triggered).toBe(true);
+  });
+
+  it("always runs the Living GVD section diff on refresh", async () => {
+    const r = await run({
+      intervention: "x",
+      indication: "y",
+      stage: "refresh",
+      material_change: false,
+      drifting_claims: [],
+    });
+    const diff = r.living_evidence.steps.find((s) => s.name === "Living GVD section diff")!;
+    expect(diff).toBeDefined();
+    expect(diff.triggered).toBe(true);
+    expect(diff.tool).toMatch(/hta\.living_gvd/);
   });
 });
 

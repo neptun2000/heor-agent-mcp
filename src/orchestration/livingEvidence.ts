@@ -120,7 +120,7 @@ function baselineSteps(input: LivingEvidenceInput): PipelineStep[] {
     {
       name: "Register source-of-truth claims",
       tool: "evidence.claim_registry",
-      action: "Upsert key figures (ICER, effect estimates, prevalence) into the registry",
+      action: "Auto-import key figures from the model runs (import action: ICER, incremental QALYs, net budget impact); upsert any others",
       condition: "always",
       rationale: "One living source of truth that feeds every downstream deliverable.",
     },
@@ -130,6 +130,13 @@ function baselineSteps(input: LivingEvidenceInput): PipelineStep[] {
       action: `Produce: ${input.deliverables.join(", ") || "Living GVD, JCA submission, HTA submissions"}`,
       condition: "always",
       rationale: "Assemble the JCA/HTA deliverables from the knowledge base.",
+    },
+    {
+      name: "Snapshot the Living GVD",
+      tool: "hta.living_gvd (snapshot)",
+      action: "Record which registry claims each GVD section is built from, as the refresh baseline",
+      condition: "always",
+      rationale: "Make the GVD a diffable artifact so future refreshes regenerate only the sections that changed.",
     },
     {
       name: "Cross-deliverable consistency check",
@@ -182,7 +189,7 @@ function refreshSteps(input: LivingEvidenceInput): PipelineStep[] {
     {
       name: "Update source-of-truth claims",
       tool: "evidence.claim_registry",
-      action: "Upsert any figures that changed (status → supersede the old value)",
+      action: "Re-import changed figures from the re-run models (import action); supersede the old values",
       condition: "if material_change",
       triggered: material,
       rationale: material
@@ -200,14 +207,23 @@ function refreshSteps(input: LivingEvidenceInput): PipelineStep[] {
         : "Detect any deliverable that no longer matches the registry.",
     },
     {
+      name: "Living GVD section diff",
+      tool: "hta.living_gvd (refresh)",
+      action: "Diff the GVD snapshot against the registry → list the stale sections",
+      condition: "always",
+      triggered: true,
+      rationale:
+        "Pinpoint exactly which GVD sections changed, so regeneration is section-level, not whole-dossier.",
+    },
+    {
       name: "Regenerate drifted deliverables",
       tool: "hta.dossier / jca.pico_scope",
-      action: "Regenerate only the deliverables whose claims drifted",
+      action: "Regenerate only the stale GVD sections (from hta.living_gvd) and any drifted dossiers, then re-snapshot",
       condition: "if drift detected",
       triggered: material || hasDrift,
       rationale:
         material || hasDrift
-          ? "Updated values / drift → regenerate the affected deliverables only."
+          ? "Updated values / drift → regenerate the affected sections only, then re-snapshot the GVD."
           : "No drift → deliverables remain current; skip.",
     },
     {

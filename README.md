@@ -126,7 +126,16 @@ The first prompt exercises `literature_search` + `validate_links` (free, no API 
 
 ## What's new
 
-See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current: **v1.13.0** (28 tools, 44 data sources).
+See [CHANGELOG.md](./CHANGELOG.md) for full version history. Current: **v1.23.0** (45 tools, 44 data sources).
+
+### v1.17.0–v1.23.0 — Living Evidence Intelligence (review → reimbursement)
+
+A connected RWE + cross-deliverable layer (see [docs/FEATURES.md](./docs/FEATURES.md) for the full table):
+
+- **RWE & real-world safety:** `rwe.method_select` (study-design selection), `pv.comparative_safety` (class-level FAERS-style AE ranking), `evidence.triangulation` (per-outcome RCT↔RWE concordance).
+- **Governed social listening:** `rwe.social_listening_protocol` + `pv.social_listening_triage` (GVP Module VI ICSR triage — no scraping).
+- **One source of truth:** `evidence.claim_registry` (author/auto-import a figure once), `evidence.consistency_check` (detect drift across dossier/publication/payer), `publication.draft` (reuse claims; CONSORT/STROBE/PRISMA/CHEERS + GPP2022/ICMJE).
+- **Living orchestration:** `evidence.gap_analysis` (iEGP), `workflow.living_evidence` (SLR → living KB → JCA/HTA runbook), `hta.living_gvd` (regenerate only the GVD sections whose figures changed).
 
 ### v1.13.0 — AI Transparency Disclosure (ISPOR ELEVATE-GenAI aligned)
 

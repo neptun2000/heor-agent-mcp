@@ -156,6 +156,50 @@ import {
   claimsQueryToolSchema,
 } from "./tools/claimsQuery.js";
 import { handleQueryAgent, queryAgentToolSchema } from "./tools/queryAgent.js";
+import {
+  handleRweMethodSelect,
+  rweMethodSelectToolSchema,
+} from "./tools/rweMethodSelect.js";
+import {
+  handlePvComparativeSafety,
+  pvComparativeSafetyToolSchema,
+} from "./tools/pvComparativeSafety.js";
+import {
+  handleEvidenceTriangulation,
+  evidenceTriangulationToolSchema,
+} from "./tools/evidenceTriangulation.js";
+import {
+  handlePvSocialListeningTriage,
+  pvSocialListeningTriageToolSchema,
+} from "./tools/pvSocialListeningTriage.js";
+import {
+  handleRweSocialListeningProtocol,
+  rweSocialListeningProtocolToolSchema,
+} from "./tools/rweSocialListeningProtocol.js";
+import {
+  handleClaimRegistry,
+  claimRegistryToolSchema,
+} from "./tools/claimRegistry.js";
+import {
+  handleConsistencyCheck,
+  consistencyCheckToolSchema,
+} from "./tools/consistencyCheck.js";
+import {
+  handlePublicationDraft,
+  publicationDraftToolSchema,
+} from "./tools/publicationDraft.js";
+import {
+  handleEvidenceGapAnalysis,
+  evidenceGapAnalysisToolSchema,
+} from "./tools/evidenceGapAnalysis.js";
+import {
+  handleWorkflowLivingEvidence,
+  workflowLivingEvidenceToolSchema,
+} from "./tools/workflowLivingEvidence.js";
+import {
+  handleHtaLivingGvd,
+  htaLivingGvdToolSchema,
+} from "./tools/htaLivingGvd.js";
 // mssql is loaded via dynamic require() inside claimsQuery.ts to avoid
 // bundling Node.js-only native modules — same pattern as applicationinsights
 import { randomUUID } from "node:crypto";
@@ -334,6 +378,17 @@ function createMcpServer(
       governanceSelfCheckToolSchema,
       htaReviewSimulationToolSchema,
       livingReviewToolSchema,
+      rweMethodSelectToolSchema,
+      pvComparativeSafetyToolSchema,
+      evidenceTriangulationToolSchema,
+      pvSocialListeningTriageToolSchema,
+      rweSocialListeningProtocolToolSchema,
+      claimRegistryToolSchema,
+      consistencyCheckToolSchema,
+      publicationDraftToolSchema,
+      evidenceGapAnalysisToolSchema,
+      workflowLivingEvidenceToolSchema,
+      htaLivingGvdToolSchema,
       // data.claims_query is internal-only. Require both storage credentials
       // and an explicit deployment flag so a public host cannot expose claims
       // data just because credentials were accidentally configured.
@@ -419,6 +474,39 @@ function createMcpServer(
           break;
         case "pv.signal_workflow":
           result = await handlePvSignalWorkflow(args);
+          break;
+        case "rwe.method_select":
+          result = await handleRweMethodSelect(args);
+          break;
+        case "pv.comparative_safety":
+          result = await handlePvComparativeSafety(args);
+          break;
+        case "evidence.triangulation":
+          result = await handleEvidenceTriangulation(args);
+          break;
+        case "pv.social_listening_triage":
+          result = await handlePvSocialListeningTriage(args);
+          break;
+        case "rwe.social_listening_protocol":
+          result = await handleRweSocialListeningProtocol(args);
+          break;
+        case "evidence.claim_registry":
+          result = await handleClaimRegistry(args);
+          break;
+        case "evidence.consistency_check":
+          result = await handleConsistencyCheck(args);
+          break;
+        case "publication.draft":
+          result = await handlePublicationDraft(args);
+          break;
+        case "evidence.gap_analysis":
+          result = await handleEvidenceGapAnalysis(args);
+          break;
+        case "workflow.living_evidence":
+          result = await handleWorkflowLivingEvidence(args);
+          break;
+        case "hta.living_gvd":
+          result = await handleHtaLivingGvd(args);
           break;
         case "hta.workflow":
           result = await handleHtaWorkflow(args);

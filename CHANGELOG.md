@@ -2,6 +2,76 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.23.1 (2026-06-17) — pipeline integration + docs sync
+
+### Changed
+
+- **`workflow.living_evidence` now references the tools built since it was written.** The baseline runbook registers source-of-truth claims via the claim registry's `import` action (auto-extract from the model runs) and adds a **Snapshot the Living GVD** step (`hta.living_gvd`). The refresh runbook adds a **Living GVD section diff** step (always-on) and makes regeneration section-level (regenerate only the stale GVD sections, then re-snapshot). No schema change — the orchestrator output now mirrors the real toolchain.
+- **Docs sync:** README + package description updated to **45 tools / v1.23.x** with a "Living Evidence Intelligence" summary of the v1.17–v1.23 additions.
+
+## v1.23.0 (2026-06-17) — hta.living_gvd (Living GVD as a diffable artifact)
+
+### Added
+
+- **`hta.living_gvd` tool.** Maintains a Living Global Value Dossier so a refresh regenerates only the sections whose figures changed, not the whole dossier. `snapshot` records which registry claims each GVD section is built from (`sections [{name, claim_ids}]`), capturing each claim's current value as a baseline manifest persisted at `<project>/gvd/manifest.json`. `refresh` diffs that snapshot against the live claim registry **by value** (0.5% tolerance / exact) and returns the stale sections to regenerate with old→new per claim, also flagging sections whose claims were removed (`claim_missing`) or superseded. Builds on `evidence.claim_registry` and is the `Living GVD` step of `workflow.living_evidence`. The tool computes the diff + regeneration list; regeneration itself stays in `hta.dossier` (no change to that tool). New `src/gvd/{types,livingGvd}.ts`, `src/knowledge/gvdManifestStore.ts` (+ `getGvdDir`), `src/tools/htaLivingGvd.ts`. 9 tests. Design log #24.
+
+## v1.22.0 (2026-06-17) — claim registry auto-import (self-populating source of truth)
+
+### Added
+
+- **`evidence.claim_registry` gains an `import` action.** Auto-register claims from a tool result instead of manual upserts: pass `import_from { source_tool, result }` with the structured output of `models.cost_effectiveness` (→ ICER, incremental QALYs, incremental cost) or `models.budget_impact` (→ net budget impact), and the registry self-populates with provenance (`source_tool`/`source_run_id`, tagged `imported`). The extractor is additive and tolerant — it reads either the raw result or a `{content:...}` envelope, skips missing/non-finite fields, and never mutates the source tools (their default output is unchanged). Imported claims carry the right keywords, so `evidence.consistency_check` immediately detects drift of those figures across deliverables (verified end-to-end). New `src/claims/extract.ts`; extended `src/tools/claimRegistry.ts`. 5 new tests. Design log #23.
+
+## v1.21.0 (2026-06-17) — living-evidence orchestration (gap_analysis/iEGP + workflow.living_evidence)
+
+### Added
+
+Completes the "living evidence intelligence — from review to reimbursement" architecture: one living source of truth that feeds every downstream deliverable.
+
+- **`evidence.gap_analysis` tool (iEGP).** Generates an integrated Evidence Generation Plan. Assess the evidence base across 11 HEOR domains (epidemiology, disease_burden, clinical_efficacy, comparative_effectiveness, safety, economic_cea, budget_impact, hrqol_utilities, adherence, unmet_need, patient_experience), each with a status (robust/limited/absent/discordant); the tool returns the gaps, a recommended generation activity per gap, the tool that operationalises it, the deliverable it unblocks, and a **severity-prioritised plan** (gaps on decision-critical domains for the context escalate one tier). Optionally folds in `discordant_outcomes` / `single_source_outcomes` from `evidence.triangulation`. Returns a readiness score (% of domains robust). New `src/iegp/{types,domainRegistry,planner}.ts` + `src/tools/evidenceGapAnalysis.ts`. Design log #21.
+- **`workflow.living_evidence` tool.** Orchestrates the end-to-end pipeline (AI-augmented SLR → living knowledge base → JCA/HTA deliverables). Returns the ordered **runbook** of tool calls: `stage=baseline` emits the full chain (search → screen → risk_of_bias → triangulation → network/indirect → cost_effectiveness → budget_impact → gap_analysis → claim_registry → dossier/JCA → consistency_check → living_review init); `stage=refresh` emits only the steps triggered by the signals you pass (`material_change` + `recommended_downstream` from `literature.living_review`, `drifting_claims` from `evidence.consistency_check`) so an unchanged refresh is a near no-op. Deterministic runbook generator — it does not execute steps or hold state (the calling agent runs them; the host owns persistence + the refresh schedule). New `src/orchestration/livingEvidence.ts` + `src/tools/workflowLivingEvidence.ts`. Design log #22.
+
+Both pure logic, no external calls, registered in `server.ts`. 17 tests.
+
+### Changed (CI / testing)
+
+- **Deterministic CI: live-endpoint smoke tests are now opt-in.** The only tests that made unmocked calls to third-party endpoints (`niceTa`, `wiley` live cases) were flaking CI on slow/unreachable hosts for reasons unrelated to the change under test. They are now gated behind `RUN_LIVE_TESTS=1` via a `tests/helpers/live.ts` helper (`liveDescribe`/`liveIt`): `npm test` is fully deterministic (live tests skipped), `npm run test:live` runs them. Deterministic cases on those providers (mocked-error, key-absent, query-sanitisation) still always run. No runtime/tool behaviour changes.
+
+## v1.20.0 (2026-06-17) — cross-deliverable claim layer (claim_registry + consistency_check + publication.draft)
+
+### Added
+
+A single-source-of-truth layer so evidence figures stay consistent across dossiers, publications, and payer materials.
+
+- **`evidence.claim_registry` tool.** Author an evidence claim once — an ICER, an effect estimate, a prevalence — and reference it by ID across deliverables. Persisted in the project knowledge base at `<project>/claims/registry.json`. Actions: `upsert` (id auto-derived from the statement if omitted), `list`, `get`, `remove`. Each claim carries `numeric_value` + `value_display` + `unit` + `keywords` (anchors for drift detection) + `citation` + `source_tool`/`source_run_id` provenance + `status` (draft/verified/superseded). New `src/claims/types.ts`, `src/knowledge/claimStore.ts` (+ `getClaimsDir`), `src/tools/claimRegistry.ts`.
+- **`evidence.consistency_check` tool.** Detects drift of registered (or inline) claims across deliverables: scans each deliverable's text, locates each claim by its keywords, and flags where a DIFFERENT number sits within ±70 characters (drift — e.g. an ICER updated in the model but not the dossier) or where a claim is absent. Returns a claim × deliverable matrix + the actionable drifting-claims list. Keyword-anchored + numeric (exact for integers, 0.5% tolerance otherwise); necessary-not-sufficient, human review still required. New `src/claims/consistency.ts`, `src/tools/consistencyCheck.ts`.
+- **`publication.draft` tool.** Drafts an abstract / manuscript (IMRaD) / poster / plain-language summary that **reuses claims from the registry** (pass `reference_claim_ids` + `project_id`) so published figures match the dossier. Auto-selects the reporting guideline by study design (CONSORT/STROBE/PRISMA/CHEERS), enforces a per-type word limit, and emits a GPP2022 + ICMJE compliance checklist (authorship, disclosures, funding, trial registration, data-sharing); flags over-limit drafts, unregistered RCTs, and superseded claims, and notes AI cannot be a named author. New `src/claims/publication.ts`, `src/tools/publicationDraft.ts`.
+
+Closes the cross-deliverable linking gap: claims are linked by reference (not copy-paste) and drift is detectable. All three registered in `server.ts`; 13 tests. Design log #20.
+
+## v1.19.0 (2026-06-17) — social listening (rwe.social_listening_protocol + pv.social_listening_triage)
+
+### Added
+
+- **`rwe.social_listening_protocol` tool.** Generates a social-listening study protocol + compliance checklist from the drug, indication, objectives, platforms, privacy jurisdictions, and seed keywords: objectives & scope, search strategy, inclusion/exclusion, analysis plan (sentiment + thematic + MedDRA-coded AE extraction), data-governance/privacy/ethics (GDPR Art. 6/9 and HIPAA items switch on jurisdiction), a **mandatory** pharmacovigilance-handling section (GVP Module VI applies to any systematic digital-media review regardless of objective or channel ownership; escalated when `is_mah_managed_channel`), deliverables, a mandatory/recommended compliance checklist, and limitations. The *planning* half of social listening — design + governance only, no scraping, so no platform-ToS or network-egress risk. New `src/social/{types,protocol}.ts` + `src/tools/rweSocialListeningProtocol.ts`. Design log #19.
+- **`pv.social_listening_triage` tool.** GVP Module VI reportability triage of **already-collected** social posts. The calling model supplies, per post, which of the four ICSR elements are present (identifiable reporter + patient + suspect product + adverse event) plus optional sentiment/themes/AE terms; the tool applies the deterministic four-element validity test (all four → valid reportable ICSR with a 15-day serious / 90-day non-serious clock; product+event only → follow-up needed; no AE → qualitative insight only), tallies sentiment/themes/AE terms, and surfaces the reporting obligations + low-validity caveats. It does **not** scrape and does **not** run NLP in-tool — keeping output auditable and anti-fabrication. New `src/social/reportability.ts` + `src/tools/pvSocialListeningTriage.ts`. Design log #19.
+
+Both pure deterministic logic, no external calls; `submission` AI-disclosure default; registered in `server.ts`. The pair implements the lowest-validity RWE method from `rwe.method_select` end-to-end (design → execution) while keeping live retrieval (a social provider) out of scope for now to avoid ToS/egress/PV-liability exposure. 21 tests.
+
+## v1.18.0 (2026-06-17) — pv.comparative_safety + evidence.triangulation (RWE class safety & RCT-vs-RWE)
+
+### Added
+
+- **`pv.comparative_safety` tool.** Class-level comparative safety profile from spontaneous-report data (FAERS / EudraVigilance / VigiBase). Where `pv.signal_workflow` scores one drug × one AE, this ranks the top-N adverse events for each product in a class by **reporting rate per 1,000 exposed** (or raw report count when no exposure denominator is given), lays the products **side-by-side** in a class-comparison matrix, and emits key observations: the shared class profile, product-level differentiators, and explicit call-outs for `events_of_interest` (e.g. reports that *cardiovascular* did not rank in the top 10 for any product). Optionally layers in **disproportionality** (PRR/ROR/IC/EBGM, reusing `computeAllStats`) per drug-AE pair when `grand_total` + per-product `total_reports` + per-AE `event_total` are supplied. Standing caveat: spontaneous-report rates reflect reporting behaviour, not incidence — output is a hypothesis-generating reporting profile. New `src/pv/comparativeSafety.ts` + `src/tools/pvComparativeSafety.ts`. 13 tests. Design log #17.
+- **`evidence.triangulation` tool.** Per-outcome **RCT-vs-RWE concordance**. For each outcome the caller supplies what the randomised trials show (`rct`) and what real-world evidence shows (`rwe`) — each a direction of benefit (`favors`) plus an optional point estimate + measure. The tool classifies concordance (concordant / partially-concordant / discordant / single-source) and, when both bodies give an estimate on the **same measure**, whether the real-world effect is **larger** (long-term use, broad heterogeneous populations) or **smaller** (efficacy–effectiveness gap) — sign-normalised by `benefit_direction` so "larger" always means more benefit, for both lower-is-better (e.g. monthly migraine days, MD) and higher-is-better (e.g. responder rate, RR) outcomes. Returns a per-outcome concordance table, a key message per outcome, an overall triangulation statement, and a concordance summary; flags discordant and single-source outcomes. Builds the "literature review of RCTs and RWE — key message per relevant outcome" deliverable. RWE framed as complementary to, not a substitute for, RCTs. New `src/triangulation/{types,concordance}.ts` + `src/tools/evidenceTriangulation.ts`. 13 tests. Design log #18.
+
+Both are pure deterministic logic, no external calls; `submission` AI-disclosure default; registered in `server.ts`.
+
+## v1.17.0 (2026-06-17) — rwe.method_select (RWE study-design selection)
+
+### Added
+
+- **`rwe.method_select` tool.** Picks an appropriate real-world-evidence study design for a research question. Scores the five core RWE methodologies — retrospective database analysis, survey, literature review, chart review, social-media listening — against the `research_objective`, the `available_data` the user can access, the `decision_context` (HTA/payer, regulatory, clinical guideline, internal strategy, exploratory), and the `rigor_required` (exploratory / supportive / submission-grade). Returns a primary recommendation + ranked alternatives, each with its results-validity tier, intrinsic bias caveats, and the downstream tools in this server that operationalise it (e.g. `literature.search`, `pv.signal_workflow`, `evidence.population_adjusted`, `data.claims_query`) — so it doubles as a router into the rest of the toolset. Hard feasibility gate excludes methods whose required data is unavailable; flags `rigor_satisfiable=false` when no feasible design can meet the requested rigour; suggests triangulation when a strong complementary design exists. Pure deterministic decision logic, <200 ms, no external calls; enum values case-insensitive; `standard` AI-disclosure default. New `src/rwe/{types,methodRegistry,decisionTree}.ts` + `src/tools/rweMethodSelect.ts`, registered in `server.ts`. 22 tests. Design log #16. (Derived from an RWE method-comparison framework; validity tiers per ISPOR/ISPE RWE Good Procedural Practices + the FDA RWE framework.)
+
 ## v1.16.0 (2026-06-16) — literature.living_review (protocol-locked living SLR)
 
 ### Added

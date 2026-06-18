@@ -1,6 +1,8 @@
 import { fetchWiley } from "../../../src/providers/direct/wiley.js";
+import { liveIt } from "../../helpers/live.js";
 
 describe("fetchWiley", () => {
+  // Deterministic (mocked) — always runs.
   it("throws on Crossref API errors so the dispatcher can record failure", async () => {
     const origFetch = global.fetch;
     global.fetch = jest.fn().mockResolvedValue({
@@ -14,7 +16,8 @@ describe("fetchWiley", () => {
     global.fetch = origFetch;
   });
 
-  it("each result has required fields when results returned", async () => {
+  // Live Crossref calls — gated behind RUN_LIVE_TESTS (see tests/helpers/live.ts).
+  liveIt("each result has required fields when results returned", async () => {
     const results = await fetchWiley("semaglutide pharmacoeconomics", 3);
     for (const r of results) {
       expect(r.id).toMatch(/^wiley_/);
@@ -29,13 +32,13 @@ describe("fetchWiley", () => {
     }
   }, 15000);
 
-  it("respects maxResults limit", async () => {
+  liveIt("respects maxResults limit", async () => {
     const results = await fetchWiley("health economics", 2);
     expect(results.length).toBeLessThanOrEqual(2);
   }, 15000);
 
-  it("returns an array from live Crossref when API is healthy", async () => {
+  liveIt("returns an array from live Crossref when API is healthy", async () => {
     const results = await fetchWiley("cost-effectiveness diabetes", 5);
     expect(Array.isArray(results)).toBe(true);
-  });
+  }, 15000);
 });

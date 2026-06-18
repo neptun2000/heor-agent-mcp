@@ -1,6 +1,6 @@
 # HEORAgent MCP Server — Features
 
-21 tools, 44 data sources, complete HEOR workflow automation.
+45 tools, 44 data sources, complete HEOR workflow automation.
 
 ## Core Workflow Tools
 
@@ -17,6 +17,34 @@
 | `budget_impact_model` | ISPOR-compliant BIA with year-by-year output | Every HTA submission requires BIA alongside CEA |
 | `hta_dossier_prep` | NICE, EMA, FDA, IQWiG, HAS, EU JCA, GVD with auto-GRADE | Body-specific templates save weeks of manual formatting |
 | `validate_links` | HTTP validation of citation URLs | Prevents broken references in reports |
+
+## Study Design & Real-World Evidence
+
+| Tool | What it does | Why it matters |
+|------|-------------|----------------|
+| `rwe.method_select` | Recommends an RWE study design (retrospective database analysis, survey, literature review, chart review, social-media listening) for a research objective, scored on data availability, decision context, and required rigour | Picks the right real-world-evidence method *and* routes you to the tool that runs it; flags when no feasible design meets submission-grade rigour and suggests triangulation |
+| `pv.classify` | Classifies a planned study into its EMA pharmacovigilance regulatory category (PASS/PAES/DUS/registry…) | Maps a design to its GVP module + submission obligations before protocol work |
+| `pv.signal_workflow` | Disproportionality stats (PRR, ROR, IC/BCPNN, MGPS-EBGM) + signal verdict per EMA GVP Module IX | Turns FAERS/EudraVigilance case counts into a defensible signal assessment |
+| `pv.comparative_safety` | Class-level comparative safety profile — ranks top-N AEs per product by reporting rate per 1,000 exposed, side-by-side, with optional disproportionality | The multi-drug × multi-AE FAERS class view (e.g. anti-CGRP class); calls out events of interest like "cardiovascular not in any product's top 10" |
+| `evidence.triangulation` | Per-outcome RCT-vs-RWE concordance — agree/disagree + larger/smaller real-world effect (efficacy–effectiveness gap) | Builds the "literature review of RCTs and RWE, key message per outcome" section and pressure-tests whether RWE corroborates trial efficacy |
+| `rwe.social_listening_protocol` | Generates a social-listening study protocol + compliance checklist (search strategy, GDPR/HIPAA gating, mandatory GVP Module VI AE handling, limitations) | The planning half of the lowest-validity RWE method; no scraping/ToS risk — design + governance only |
+| `pv.social_listening_triage` | GVP Module VI four-element ICSR reportability triage of already-collected social posts + sentiment/theme/AE tallies | The execution half; turns raw social posts into a PV-compliant, validity-flagged input without scraping or NLP in-tool |
+
+## Cross-Deliverable Traceability
+
+| Tool | What it does | Why it matters |
+|------|-------------|----------------|
+| `evidence.claim_registry` | Author an evidence claim once (ICER, effect estimate, prevalence) and reference it by ID; persisted in the project knowledge base | Single source of truth shared across dossiers, publications, and payer materials |
+| `evidence.consistency_check` | Scans deliverables for registered claims and flags drift (a different value next to the claim keyword) or absence | Catches the stale-ICER-in-the-slide class of error before release; claim × deliverable matrix |
+| `publication.draft` | Drafts an abstract/manuscript/poster/plain-language summary that reuses registry claims; auto-selects CONSORT/STROBE/PRISMA/CHEERS + GPP2022/ICMJE checklist | Fills the publications gap and keeps published figures identical to the dossier |
+
+## Living-Evidence Orchestration
+
+| Tool | What it does | Why it matters |
+|------|-------------|----------------|
+| `evidence.gap_analysis` | Integrated Evidence Generation Plan (iEGP): assess domain coverage → prioritised, severity-ranked plan mapping each gap to a generation activity, tool, and unblocked deliverable | Decides what evidence to generate next; readiness score per decision context |
+| `workflow.living_evidence` | Orchestrates the SLR → living knowledge base → JCA/HTA deliverables pipeline; emits the ordered runbook for a baseline build or a signal-gated living refresh | The "from review to reimbursement" flow as one runbook; unchanged refreshes become near no-ops |
+| `hta.living_gvd` | Living Global Value Dossier as a diffable artifact: snapshot section→claim mappings, then diff against the registry to regenerate only the sections whose figures changed | Section-level refresh — don't rebuild the whole GVD when one ICER moves; pairs with the claim registry + living-evidence pipeline |
 
 ## Project Knowledge Base
 

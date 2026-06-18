@@ -8,6 +8,7 @@ All notable changes to HEORAgent MCP Server.
 
 - **`workflow.living_evidence` now references the tools built since it was written.** The baseline runbook registers source-of-truth claims via the claim registry's `import` action (auto-extract from the model runs) and adds a **Snapshot the Living GVD** step (`hta.living_gvd`). The refresh runbook adds a **Living GVD section diff** step (always-on) and makes regeneration section-level (regenerate only the stale GVD sections, then re-snapshot). No schema change — the orchestrator output now mirrors the real toolchain.
 - **Docs sync:** README + package description updated to **45 tools / v1.23.x** with a "Living Evidence Intelligence" summary of the v1.17–v1.23 additions.
+- **Release automation:** added `.github/workflows/publish.yml` — publishes to npm on a GitHub Release (or manual dispatch), with a build + test gate and a guard that the release tag matches `package.json`. Requires an `NPM_TOKEN` repository secret. Must be on `master` to take effect (release workflows run from the default branch).
 
 ## v1.23.0 (2026-06-17) — hta.living_gvd (Living GVD as a diffable artifact)
 

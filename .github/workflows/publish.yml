@@ -1,0 +1,61 @@
+name: Publish to npm
+
+# Publishes the package to npm when you cut a GitHub Release (or trigger
+# manually). Requires an NPM_TOKEN secret:
+#   Settings → Secrets and variables → Actions → New repository secret
+#   Name: NPM_TOKEN   Value: an npm "Automation" access token with publish rights.
+#
+# Release flow:
+#   1. Merge to master (package.json already at the target version).
+#   2. Create a GitHub Release with tag vX.Y.Z matching package.json.
+#   3. This workflow builds, tests, verifies the version, and publishes.
+#
+# Note: release / workflow_dispatch workflows run from the DEFAULT branch,
+# so this file must be on master to take effect.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Verify package.json version matches the release tag
+        if: github.event_name == 'release'
+        run: |
+          PKG="$(node -p "require('./package.json').version")"
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "package.json=$PKG  release tag=$TAG"
+          if [ "$PKG" != "$TAG" ]; then
+            echo "::error::package.json version ($PKG) != release tag ($TAG). Bump package.json or fix the tag before releasing."
+            exit 1
+          fi
+
+      - name: Publish to npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

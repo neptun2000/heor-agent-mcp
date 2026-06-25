@@ -806,6 +806,59 @@ describe("hta_workflow — Codex P2: utility partial-input must not break CE", (
   });
 });
 
+describe("hta_workflow — confounder identification (Phase 2.5, design log #43)", () => {
+  it("runs confounder_identification when the flag is set and renders an annex", async () => {
+    let calledWith: Record<string, unknown> | undefined;
+    const deps = {
+      ...makeDeps(),
+      confounderIdentification: async (args: unknown) => {
+        calledWith = args as Record<string, unknown>;
+        return {
+          content: {
+            markdown_report:
+              "# Confounder Identification (Pufulete Step 1)\n- Baseline EDSS",
+            status_label: "draft_for_human_consolidation",
+          },
+        };
+      },
+    };
+    const result = await runHtaWorkflow(
+      {
+        drug: "Drug X",
+        indication: "Indication Y",
+        include_confounder_identification: true,
+        pico: { comparator: "placebo" },
+      },
+      deps,
+    );
+    expect(calledWith).toBeDefined();
+    expect(calledWith!.mode).toBe("closed_corpus");
+    expect(Array.isArray(calledWith!.corpus_papers)).toBe(true);
+    const content = result.content as string;
+    expect(content).toContain("Confounder Identification (Annex");
+    expect(content).toContain("Baseline EDSS");
+  });
+
+  it("does NOT run confounder_identification by default", async () => {
+    let called = false;
+    const deps = {
+      ...makeDeps(),
+      confounderIdentification: async () => {
+        called = true;
+        return { content: { markdown_report: "x" } };
+      },
+    };
+    const result = await runHtaWorkflow(
+      { drug: "Drug X", indication: "Indication Y" },
+      deps,
+    );
+    expect(called).toBe(false);
+    expect(result.content as string).not.toContain(
+      "Confounder Identification (Annex",
+    );
+  });
+});
+
 describe("hta_workflow — Codex P3: unmet_need_inputs visible in MCP tool schema", () => {
   it("htaWorkflowToolSchema.inputSchema.properties.unmet_need_inputs is exported", async () => {
     const mod = await import("../../src/tools/htaWorkflow.js");

@@ -152,6 +152,35 @@ const HtaWorkflowSchema = z
       .describe(
         "When true (default), Phase 3.6 fans out regulatory.status_check across comparators surfaced by Phases 1–3.5. Results are piped into hta_dossier as regulatory_landscape. Degrades gracefully on API errors — never blocks dossier. Set false to skip. Design log #26.",
       ),
+
+    // Design log #43: opt-in confounder identification (Phase 2.5)
+    include_confounder_identification: z
+      .boolean()
+      .default(false)
+      .describe(
+        "When true, Phase 2.5 runs confounder_identification (IQWiG Pufulete Step 1) in closed_corpus mode over the screened literature and appends the result as a 'Confounder Identification' annex. Pass confounder_candidate_extractions to seed it with your own variable extractions; otherwise a deterministic keyword-lexicon fallback runs. Design log #43.",
+      ),
+    confounder_candidate_extractions: z
+      .array(
+        z
+          .object({
+            variable_name: z.string().min(1),
+            category: z.string().optional(),
+            source_paper_pmid: z.string().optional(),
+            source_paper_doi: z.string().optional(),
+            source_paper_title: z.string().optional(),
+            source_location: z.string().min(1),
+            verbatim_snippet: z.string().max(200).optional(),
+            direction: z
+              .enum(["prognostic", "treatment_predictor", "both", "unclear"])
+              .optional(),
+          })
+          .strict(),
+      )
+      .optional()
+      .describe(
+        "Optional agent-extracted confounder candidates for Phase 2.5. Each must cite a screened paper (pmid/doi/title). Design log #43.",
+      ),
   })
   .strict();
 
@@ -168,6 +197,7 @@ export interface HtaWorkflowDeps {
   validateLinks: Handler;
   jcaPicoScope?: Handler; // optional — only needed when hta_body=jca
   evidenceUnmetNeed?: Handler; // optional — only used when hta_body=gvd + unmet_need_inputs supplied
+  confounderIdentification?: Handler; // optional — only used when include_confounder_identification=true
 }
 
 function isToolResult(x: unknown): x is { content: unknown } {
@@ -207,6 +237,29 @@ interface LiteratureRecord {
 
 function isRecord(x: unknown): x is Record<string, unknown> {
   return typeof x === "object" && x !== null;
+}
+
+/**
+ * Map a screened LiteratureRecord to a confounder_identification corpus paper,
+ * recovering a PMID / DOI from the record's id or URL where possible.
+ * Design log #43.
+ */
+function recordToCorpusPaper(r: LiteratureRecord): {
+  pmid?: string;
+  doi?: string;
+  title: string;
+  abstract?: string;
+} {
+  const pmid =
+    r.url?.match(/pubmed\.ncbi\.nlm\.nih\.gov\/(\d{1,8})/i)?.[1] ??
+    (r.source === "pubmed" && /^\d{1,8}$/.test(r.id) ? r.id : undefined);
+  const doi = r.url?.match(/(10\.\d{4,9}\/[^\s?#]+)/i)?.[1];
+  return {
+    pmid,
+    doi,
+    title: r.title,
+    abstract: r.abstract || undefined,
+  };
 }
 
 /**
@@ -413,6 +466,45 @@ export async function runHtaWorkflow(
     }
   }
   phaseTimings.screen_abstracts = Date.now() - tScreen;
+
+  // ── Phase 2.5: confounder_identification (opt-in, design log #43) ───
+  let confounderContent = "";
+  if (
+    input.include_confounder_identification &&
+    deps.confounderIdentification &&
+    screenedRecords.length > 0
+  ) {
+    const tConf = Date.now();
+    const confRes = await safeRun(() =>
+      deps.confounderIdentification!({
+        intervention: input.drug,
+        comparator: input.pico?.comparator ?? "standard of care",
+        indication: input.indication,
+        population: input.pico?.population,
+        mode: "closed_corpus",
+        corpus_papers: screenedRecords.map(recordToCorpusPaper),
+        candidate_extractions: input.confounder_candidate_extractions,
+        ai_disclosure_level: "submission",
+      }),
+    );
+    phaseTimings.confounder_identification = Date.now() - tConf;
+    if (confRes.ok) {
+      const v = confRes.value as { content?: { markdown_report?: string } };
+      confounderContent =
+        isRecord(v?.content) && typeof v.content.markdown_report === "string"
+          ? v.content.markdown_report
+          : asText(confRes.value);
+      audit = addAssumption(
+        audit,
+        `Phase 2.5 (confounder_identification) ran over ${screenedRecords.length} screened paper(s) in closed_corpus mode (${phaseTimings.confounder_identification}ms). Output is a draft for human consolidation, appended as an annex.`,
+      );
+    } else {
+      audit = addWarning(
+        audit,
+        `Phase 2.5 (confounder_identification) failed: ${confRes.error}. The confounder annex will be omitted.`,
+      );
+    }
+  }
 
   // ── Phase 3: risk_of_bias ─────────────────────────────────────────
   const tRob = Date.now();
@@ -904,6 +996,16 @@ export async function runHtaWorkflow(
   lines.push(dossierContent || "_(dossier phase failed — see warnings below)_");
   lines.push("");
 
+  if (input.include_confounder_identification) {
+    lines.push(`## Confounder Identification (Annex — IQWiG Pufulete Step 1)`);
+    lines.push("");
+    lines.push(
+      confounderContent ||
+        "_(confounder phase skipped or failed — see warnings; requires ≥1 screened paper)_",
+    );
+    lines.push("");
+  }
+
   if (validationContent) {
     lines.push(`## URL validation report`);
     lines.push("");
@@ -957,6 +1059,7 @@ export async function handleHtaWorkflow(
     { handleHtaDossierPrep },
     { handleValidateLinks },
     { evidenceUnmetNeedHandler },
+    { handleConfounderIdentification },
   ] = await Promise.all([
     import("./literatureSearch.js"),
     import("./screenAbstracts.js"),
@@ -965,6 +1068,7 @@ export async function handleHtaWorkflow(
     import("./htaDossierPrep.js"),
     import("./validateLinks.js"),
     import("./evidenceUnmetNeed.js"),
+    import("./confounderIdentification.js"),
   ]);
   return runHtaWorkflow(rawInput, {
     literatureSearch: handleLiteratureSearch as Handler,
@@ -974,6 +1078,7 @@ export async function handleHtaWorkflow(
     htaDossier: handleHtaDossierPrep as Handler,
     validateLinks: handleValidateLinks as Handler,
     evidenceUnmetNeed: evidenceUnmetNeedHandler as Handler,
+    confounderIdentification: handleConfounderIdentification as Handler,
   });
 }
 
@@ -1119,6 +1224,34 @@ export const htaWorkflowToolSchema = {
               qualitative_summary: { type: "string" },
             },
           },
+        },
+      },
+      include_confounder_identification: {
+        type: "boolean",
+        default: false,
+        description:
+          "When true, Phase 2.5 runs confounder_identification (IQWiG Pufulete Step 1) in closed_corpus mode over the screened literature and appends a 'Confounder Identification' annex. Design log #43.",
+      },
+      confounder_candidate_extractions: {
+        type: "array",
+        description:
+          "Optional agent-extracted confounder candidates for Phase 2.5; each must cite a screened paper (pmid/doi/title). Design log #43.",
+        items: {
+          type: "object",
+          properties: {
+            variable_name: { type: "string" },
+            category: { type: "string" },
+            source_paper_pmid: { type: "string" },
+            source_paper_doi: { type: "string" },
+            source_paper_title: { type: "string" },
+            source_location: { type: "string" },
+            verbatim_snippet: { type: "string" },
+            direction: {
+              type: "string",
+              enum: ["prognostic", "treatment_predictor", "both", "unclear"],
+            },
+          },
+          required: ["variable_name", "source_location"],
         },
       },
       ai_disclosure_level: {

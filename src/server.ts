@@ -87,6 +87,18 @@ import {
   validateLinksToolSchema,
 } from "./tools/validateLinks.js";
 import {
+  handleVerifyCitations,
+  verifyCitationsToolSchema,
+} from "./tools/verifyCitations.js";
+import {
+  handleConfounderIdentification,
+  confounderIdentificationToolSchema,
+} from "./tools/confounderIdentification.js";
+import {
+  handleConfounderExpertTemplate,
+  confounderExpertTemplateToolSchema,
+} from "./tools/confounderExpertTemplate.js";
+import {
   handleUtilityValueSet,
   utilityValueSetToolSchema,
 } from "./tools/utilityValueSet.js";
@@ -361,6 +373,9 @@ function createMcpServer(
       screenAbstractsToolSchema,
       riskOfBiasToolSchema,
       validateLinksToolSchema,
+      verifyCitationsToolSchema,
+      confounderIdentificationToolSchema,
+      confounderExpertTemplateToolSchema,
       utilityValueSetToolSchema,
       itcFeasibilityToolSchema,
       examplesToolSchema,
@@ -453,6 +468,15 @@ function createMcpServer(
           break;
         case "utils.validate_links":
           result = await handleValidateLinks(args);
+          break;
+        case "utils.verify_citations":
+          result = await handleVerifyCitations(args);
+          break;
+        case "evidence.confounder_identification":
+          result = await handleConfounderIdentification(args);
+          break;
+        case "evidence.confounder_expert_template":
+          result = await handleConfounderExpertTemplate(args);
           break;
         case "hta.utility":
           result = await handleUtilityValueSet(args);

@@ -2,6 +2,18 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.24.0 (2026-06-25) — Confounder identification (IQWiG Pufulete Step 1) + citation verification
+
+### Added
+
+- **`evidence.confounder_identification` tool.** IQWiG / Pufulete-2022 Step 1: systematic identification of candidate confounder variables for a non-randomised comparison, with full provenance. **Deterministic** (the MCP server never calls an LLM) — the calling agent reads each corpus paper and passes structured `candidate_extractions`; the tool enforces **closed-corpus provenance** (it never cites a paper outside the supplied corpus — out-of-corpus candidates are rejected, not surfaced), verifies every cited source via `verify_citations`, dedupes, and proposes **consolidation hints** for human review (never an auto-merge). A keyword-lexicon **fallback extractor** runs when no candidates are supplied. Emits an `expert_interview_required` block for the confounders literature cannot supply, and always labels its output `draft_for_human_consolidation` (never a complete list). `open_search` mode runs `literature.search` + `literature.screen` and freezes the screened set as the corpus. Closes the gap PHAROS/Regulaido demoed at ISPOR 2026 vs IQWiG GA23-02 (RRMS, dimethyl fumarate vs glatiramer acetate). Design log #43.
+- **`utils.verify_citations` tool.** Verifies DOI/PMID citations against **Crossref** + **NCBI E-utilities**. Per-citation status: `verified`, `fabricated` (a format-valid identifier that resolves to nothing — the hallucination class general LLMs hit ~36–40% of the time), `unverifiable` (network/server error or malformed identifier — **never** asserts fabrication), or `url_only`. Live in production; mocked in CI. Design log #43.
+- **`evidence.confounder_expert_template` tool.** Pufulete Step 2/3 clinician/patient interview instrument for the "unmeasurable" confounders (patient preference, tolerability) — pure templating, no LLM/network. Pairs with `confounder_identification.expert_interview_required`. Design log #43.
+- **Workflow integration.** `hta.workflow` gains opt-in `include_confounder_identification` (Phase 2.5: closed-corpus run over the screened literature → rendered as a "Confounder Identification" annex); `workflow.maic` gains opt-in `include_confounder_identification` (open_search run after screening). Both off by default.
+- **GA23-02 benchmark.** `fixtures/iqwig-ga23-02-ground-truth.json` (132 individual variables → 26 consolidated + 2 expert-only) + a mock-corpus regression test scoring consolidated recall / precision / zero-fabrication (`tests/benchmarks/confounderGa2302.test.ts`; live run gated by `RUN_BENCHMARK=1`). `examples` tool gains a `confounder_identification` RRMS DMF-vs-GA example.
+
+Tool count 45 → 48 public-facing. Web tier synced (`tools.ts`, `mcpSession.ts` `TOOL_NAME_MAP`, system-prompt mandate, `MCP_API_VERSION`).
+
 ## v1.23.1 (2026-06-17) — pipeline integration + docs sync
 
 ### Changed

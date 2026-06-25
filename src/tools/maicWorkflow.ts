@@ -46,6 +46,12 @@ const MaicWorkflowSchema = z
     outcome_type: z.enum(["binary", "continuous", "time_to_event"]).optional(),
     max_results_per_search: z.number().int().min(1).max(100).default(50),
     runs_per_search: z.number().int().min(1).max(3).default(2),
+    include_confounder_identification: z
+      .boolean()
+      .default(false)
+      .describe(
+        "When true, after screening runs confounder_identification (IQWiG Pufulete Step 1) in open_search mode and appends a 'Confounder Identification' section. Design log #43.",
+      ),
   })
   .strict();
 
@@ -59,6 +65,7 @@ export interface MaicWorkflowDeps {
   screenAbstracts: Handler;
   riskOfBias: Handler;
   evidenceNetwork: Handler;
+  confounderIdentification?: Handler; // optional — only used when include_confounder_identification=true
 }
 
 function isToolResult(x: unknown): x is { content: unknown } {
@@ -203,6 +210,48 @@ export async function runMaicWorkflow(
     }),
   );
 
+  // ---- Phase 5 (opt-in): confounder_identification (design log #43) ----
+  // open_search mode — maic_workflow screens via concatenated text, so the
+  // confounder tool runs its own structured search+screen and freezes the
+  // corpus. Stays deterministic; verifies every cited source via Crossref/PubMed.
+  let confounderContent = "";
+  if (
+    input.include_confounder_identification &&
+    deps.confounderIdentification
+  ) {
+    const confRes = await safeRun(() =>
+      deps.confounderIdentification!({
+        intervention: input.intervention,
+        comparator: input.comparator,
+        indication: input.indication,
+        population: input.pico?.population,
+        outcome: input.pico?.outcome,
+        mode: "open_search",
+        runs: input.runs_per_search,
+        ai_disclosure_level: "submission",
+      }),
+    );
+    if (confRes.ok) {
+      const v = confRes.value as { content?: { markdown_report?: string } };
+      confounderContent =
+        v &&
+        typeof v === "object" &&
+        v.content &&
+        typeof v.content.markdown_report === "string"
+          ? v.content.markdown_report
+          : asText(confRes.value);
+      audit = addAssumption(
+        audit,
+        "Confounder identification (IQWiG Pufulete Step 1) ran in open_search mode; output is a draft for human consolidation.",
+      );
+    } else {
+      audit = addWarning(
+        audit,
+        `confounder_identification skipped: ${confRes.error}`,
+      );
+    }
+  }
+
   // Surface phase failures into the audit record so the user knows what was skipped
   if (!feasResult.ok)
     audit = addWarning(audit, `itc_feasibility skipped: ${feasResult.error}`);
@@ -286,6 +335,15 @@ export async function runMaicWorkflow(
   );
   lines.push("");
 
+  if (input.include_confounder_identification) {
+    lines.push("## 6b. Confounder Identification (IQWiG Pufulete Step 1)");
+    lines.push(
+      confounderContent ||
+        "*(confounder identification skipped or failed — see audit warnings)*",
+    );
+    lines.push("");
+  }
+
   lines.push("## 7. Limitations");
   const trialsCited = [
     ...(input.trials_intervention ?? []),
@@ -363,12 +421,14 @@ export async function handleMaicWorkflow(
     { handleScreenAbstracts },
     { handleRiskOfBias },
     { handleEvidenceNetwork },
+    { handleConfounderIdentification },
   ] = await Promise.all([
     import("./itcFeasibility.js"),
     import("./literatureSearch.js"),
     import("./screenAbstracts.js"),
     import("./riskOfBias.js"),
     import("./evidenceNetwork.js"),
+    import("./confounderIdentification.js"),
   ]);
   return runMaicWorkflow(rawInput, {
     itcFeasibility: handleItcFeasibility as Handler,
@@ -376,6 +436,7 @@ export async function handleMaicWorkflow(
     screenAbstracts: handleScreenAbstracts as Handler,
     riskOfBias: handleRiskOfBias as Handler,
     evidenceNetwork: handleEvidenceNetwork as Handler,
+    confounderIdentification: handleConfounderIdentification as Handler,
   });
 }
 
@@ -438,6 +499,12 @@ export const maicWorkflowToolSchema = {
         minimum: 1,
         maximum: 3,
         default: 2,
+      },
+      include_confounder_identification: {
+        type: "boolean",
+        default: false,
+        description:
+          "When true, after screening runs confounder_identification (IQWiG Pufulete Step 1) in open_search mode and appends a 'Confounder Identification' section. Design log #43.",
       },
     },
     ai_disclosure_level: {

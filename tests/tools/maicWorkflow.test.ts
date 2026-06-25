@@ -263,3 +263,50 @@ describe("maic_workflow — output structure", () => {
     expect(String(r.content)).toMatch(/INSPIRE/);
   });
 });
+
+describe("maic_workflow — confounder identification (design log #43)", () => {
+  it("runs confounder_identification (open_search) when the flag is set", async () => {
+    let confArgs: Record<string, unknown> | undefined;
+    const { deps } = makeStubDeps({
+      confounderIdentification: async (args: unknown) => {
+        confArgs = args as Record<string, unknown>;
+        return ok({
+          markdown_report:
+            "# Confounder Identification (Pufulete Step 1)\n- Baseline EDSS",
+        });
+      },
+    });
+    const r = await runMaicWorkflow(
+      {
+        intervention: "dimethyl fumarate",
+        comparator: "glatiramer acetate",
+        indication: "relapsing-remitting multiple sclerosis",
+        include_confounder_identification: true,
+      },
+      deps,
+    );
+    expect(confArgs).toBeDefined();
+    expect(confArgs!.mode).toBe("open_search");
+    expect(String(r.content)).toMatch(/Confounder Identification/);
+    expect(String(r.content)).toMatch(/Baseline EDSS/);
+  });
+
+  it("does NOT run confounder_identification by default", async () => {
+    let called = false;
+    const { deps } = makeStubDeps({
+      confounderIdentification: async () => {
+        called = true;
+        return ok({ markdown_report: "x" });
+      },
+    });
+    await runMaicWorkflow(
+      {
+        intervention: "dimethyl fumarate",
+        comparator: "glatiramer acetate",
+        indication: "relapsing-remitting multiple sclerosis",
+      },
+      deps,
+    );
+    expect(called).toBe(false);
+  });
+});

@@ -23,6 +23,7 @@ const ExamplesSchema = z
         "population_adjusted_comparison",
         "evidence_indirect",
         "maic_workflow_recipe",
+        "confounder_identification",
       ])
       .optional()
       .describe(
@@ -180,6 +181,57 @@ const EXAMPLES: Record<string, Example> = {
     notes:
       "Add a third h2h comparison (DrugA vs DrugC) to trigger the Bucher consistency check. Effect measure can be HR (hazard ratio), OR, RR, or MD (mean difference).",
   },
+  confounder_identification: {
+    description:
+      "IQWiG / Pufulete Step 1 confounder identification: dimethyl fumarate vs glatiramer acetate in RRMS (mirrors IQWiG GA23-02). closed_corpus mode — YOU read each corpus paper and supply candidate_extractions; the tool enforces provenance, verifies every source, and proposes consolidation hints. Edit and re-run with confounder_identification.",
+    input: {
+      intervention: "dimethyl fumarate",
+      comparator: "glatiramer acetate",
+      indication: "relapsing-remitting multiple sclerosis",
+      mode: "closed_corpus",
+      corpus_papers: [
+        {
+          pmid: "22992073",
+          title:
+            "Placebo-Controlled Phase 3 Study of Oral BG-12 for Relapsing Multiple Sclerosis (DEFINE)",
+          year: 2012,
+        },
+        {
+          pmid: "22992074",
+          title:
+            "Comparator-Controlled Study of BG-12 and Glatiramer Acetate in RRMS (CONFIRM)",
+          year: 2012,
+        },
+      ],
+      candidate_extractions: [
+        {
+          variable_name: "Baseline EDSS",
+          category: "disease severity",
+          source_paper_pmid: "22992073",
+          source_location: "Table 1 baseline",
+          verbatim_snippet: "mean EDSS 2.4",
+          direction: "both",
+        },
+        {
+          variable_name: "Annualised relapse rate (prior year)",
+          category: "disease activity",
+          source_paper_pmid: "22992074",
+          source_location: "Table 1 baseline",
+          direction: "both",
+        },
+        {
+          variable_name: "Prior DMT exposure",
+          category: "treatment history",
+          source_paper_pmid: "22992073",
+          source_location: "Methods — eligibility",
+          direction: "treatment_predictor",
+        },
+      ],
+      ai_disclosure_level: "submission",
+    },
+    notes:
+      "Output is ALWAYS a draft for human consolidation, never a complete list. A candidate citing a PMID/DOI not in corpus_papers is rejected (closed-corpus provenance). consolidation_candidates are HINTS — IQWiG-style consolidation + expert sign-off stay human. Use confounder_expert_template for the 2 'unmeasurable' confounders (patient preference, tolerability). For open discovery, set mode='open_search' and omit corpus_papers/candidate_extractions.",
+  },
 };
 
 export async function handleExamples(rawParams: unknown): Promise<ToolResult> {
@@ -327,6 +379,7 @@ export const examplesToolSchema = {
           "survival_fitting",
           "population_adjusted_comparison",
           "evidence_indirect",
+          "confounder_identification",
         ],
         description:
           "Which tool to get an example for. Omit to list all available examples.",

@@ -807,10 +807,15 @@ describe("hta_workflow — Codex P2: utility partial-input must not break CE", (
 });
 
 describe("hta_workflow — confounder identification (Phase 2.5, design log #43)", () => {
-  it("runs confounder_identification when the flag is set and renders an annex", async () => {
+  it("runs confounder_identification (closed_corpus) and pipes the report into the dossier", async () => {
     let calledWith: Record<string, unknown> | undefined;
+    let dossierArgs: Record<string, unknown> | undefined;
     const deps = {
       ...makeDeps(),
+      htaDossier: async (args: unknown) => {
+        dossierArgs = args as Record<string, unknown>;
+        return { content: "# NICE STA dossier draft" };
+      },
       confounderIdentification: async (args: unknown) => {
         calledWith = args as Record<string, unknown>;
         return {
@@ -822,7 +827,7 @@ describe("hta_workflow — confounder identification (Phase 2.5, design log #43)
         };
       },
     };
-    const result = await runHtaWorkflow(
+    await runHtaWorkflow(
       {
         drug: "Drug X",
         indication: "Indication Y",
@@ -831,31 +836,32 @@ describe("hta_workflow — confounder identification (Phase 2.5, design log #43)
       },
       deps,
     );
+    // Confounder phase ran in closed_corpus mode over the screened corpus ...
     expect(calledWith).toBeDefined();
     expect(calledWith!.mode).toBe("closed_corpus");
     expect(Array.isArray(calledWith!.corpus_papers)).toBe(true);
-    const content = result.content as string;
-    expect(content).toContain("Confounder Identification (Annex");
-    expect(content).toContain("Baseline EDSS");
+    // ... and its report was piped into the dossier as confounder_section.
+    expect(dossierArgs).toBeDefined();
+    expect(dossierArgs!.confounder_section).toContain("Baseline EDSS");
   });
 
-  it("does NOT run confounder_identification by default", async () => {
+  it("does NOT run confounder_identification (or pass confounder_section) by default", async () => {
     let called = false;
+    let dossierArgs: Record<string, unknown> | undefined;
     const deps = {
       ...makeDeps(),
+      htaDossier: async (args: unknown) => {
+        dossierArgs = args as Record<string, unknown>;
+        return { content: "# dossier" };
+      },
       confounderIdentification: async () => {
         called = true;
         return { content: { markdown_report: "x" } };
       },
     };
-    const result = await runHtaWorkflow(
-      { drug: "Drug X", indication: "Indication Y" },
-      deps,
-    );
+    await runHtaWorkflow({ drug: "Drug X", indication: "Indication Y" }, deps);
     expect(called).toBe(false);
-    expect(result.content as string).not.toContain(
-      "Confounder Identification (Annex",
-    );
+    expect(dossierArgs!.confounder_section).toBeUndefined();
   });
 });
 

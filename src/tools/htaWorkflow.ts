@@ -847,6 +847,9 @@ export async function runHtaWorkflow(
       ...(regulatoryLandscape.length > 0
         ? { regulatory_landscape: regulatoryLandscape }
         : {}),
+      // Design log #43: pipe the confounder report into the dossier so the
+      // primary artifact carries the annex (not just the workflow wrapper).
+      ...(confounderContent ? { confounder_section: confounderContent } : {}),
     }),
   );
   let dossierContent = "";
@@ -996,13 +999,17 @@ export async function runHtaWorkflow(
   lines.push(dossierContent || "_(dossier phase failed — see warnings below)_");
   lines.push("");
 
-  if (input.include_confounder_identification) {
-    lines.push(`## Confounder Identification (Annex — IQWiG Pufulete Step 1)`);
+  // Design log #43: the confounder annex is rendered INSIDE the dossier (piped
+  // as confounder_section in Phase 5), so the primary artifact carries it. If
+  // the dossier phase failed, surface the confounder report here as a fallback.
+  if (
+    input.include_confounder_identification &&
+    !dossierRes.ok &&
+    confounderContent
+  ) {
+    lines.push(`## Confounder Identification (IQWiG Pufulete Step 1)`);
     lines.push("");
-    lines.push(
-      confounderContent ||
-        "_(confounder phase skipped or failed — see warnings; requires ≥1 screened paper)_",
-    );
+    lines.push(confounderContent);
     lines.push("");
   }
 

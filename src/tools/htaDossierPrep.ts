@@ -169,6 +169,13 @@ const DossierSchema = z.object({
     .describe(
       "Optional: 1-paragraph unmet need synthesis from the evidence.unmet_need tool. When provided and hta_body='nice', prepended to the Unmet Need section (NICE STA Section B). When hta_body='gvd', prepended to the 'Unmet Need' section (GVD Section 4). Pipe evidence.unmet_need result.unmet_need_summary here.",
     ),
+  // Design log #43: accept a confounder_identification markdown_report as an annex.
+  confounder_section: z
+    .string()
+    .optional()
+    .describe(
+      "Optional: the markdown_report from confounder_identification (IQWiG Pufulete Step 1). Rendered verbatim as an 'Annex: Confounder Identification' before the gap analysis — a methods annex for non-randomised comparisons (no GRADE coupling). Pipe confounder_identification result.markdown_report here.",
+    ),
   // Design log #26: accept regulatory_landscape from hta_workflow Phase 3.6
   regulatory_landscape: z
     .array(z.unknown())
@@ -1522,6 +1529,24 @@ export async function handleHtaDossierPrep(
     );
   }
 
+  // Design log #43: Confounder Identification annex (Pufulete Step 1).
+  // Rendered verbatim from confounder_identification.markdown_report — a methods
+  // annex for non-randomised comparisons; no GRADE/economic coupling.
+  if (
+    params.confounder_section &&
+    params.confounder_section.trim().length > 0
+  ) {
+    lines.push("---");
+    lines.push("## Annex: Confounder Identification (IQWiG Pufulete Step 1)");
+    lines.push("");
+    lines.push(params.confounder_section.trim());
+    lines.push("");
+    audit = addAssumption(
+      audit,
+      "Confounder Identification annex appended from confounder_identification.markdown_report (draft for human consolidation). Design log #43.",
+    );
+  }
+
   if (gaps.length > 0) {
     lines.push(`---`);
     lines.push(`## Gap Analysis`);
@@ -1698,6 +1723,11 @@ export const htaDossierPrepToolSchema = {
         type: "string",
         description:
           "Optional: 1-paragraph unmet need synthesis from the evidence.unmet_need tool. Pipe evidence.unmet_need result.unmet_need_summary here. Prepended to the Unmet Need section for NICE (Section B) and GVD (Section 4).",
+      },
+      confounder_section: {
+        type: "string",
+        description:
+          "Optional: the markdown_report from confounder_identification (IQWiG Pufulete Step 1). Rendered verbatim as an 'Annex: Confounder Identification' before the gap analysis. Design log #43.",
       },
       heterogeneity_per_outcome: {
         type: "object",

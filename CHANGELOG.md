@@ -2,6 +2,12 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.24.1 (2026-06-25) — hta_dossier confounder annex passthrough
+
+### Added
+
+- **`hta_dossier` accepts an optional `confounder_section`** — the `markdown_report` from `confounder_identification` (design log #43) is now rendered verbatim as an **"Annex: Confounder Identification (IQWiG Pufulete Step 1)"** before the gap analysis. A methods annex for non-randomised comparisons; no GRADE/economic coupling. `hta_workflow` now pipes its Phase 2.5 confounder report into the Phase 5 dossier via this field, so the **primary dossier artifact** carries the annex (previously it was only in the workflow wrapper); the workflow keeps a fallback render if the dossier phase fails. Web `hta_dossier` definition + MCP↔web schema-parity fixture updated to expose the field.
+
 ## v1.24.0 (2026-06-25) — Confounder identification (IQWiG Pufulete Step 1) + citation verification
 
 ### Added

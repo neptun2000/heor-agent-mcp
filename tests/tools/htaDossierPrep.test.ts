@@ -600,3 +600,21 @@ describe("handleHtaDossierPrep — design log #37: economic evidence summary", (
     expect(txt).toMatch(/Economic model results not provided/);
   });
 });
+
+describe("handleHtaDossierPrep — confounder_section passthrough (design log #43)", () => {
+  it("renders a confounder annex when confounder_section is provided", async () => {
+    const r = await handleHtaDossierPrep({
+      ...baseParams,
+      confounder_section:
+        "# Confounder Identification (Pufulete Step 1)\n- Baseline EDSS (PMID 22992073) — verified",
+    });
+    const txt = r.content as string;
+    expect(txt).toMatch(/Annex: Confounder Identification/);
+    expect(txt).toContain("Baseline EDSS (PMID 22992073)");
+  });
+
+  it("omits the annex when confounder_section is absent", async () => {
+    const r = await handleHtaDossierPrep({ ...baseParams });
+    expect(r.content as string).not.toMatch(/Annex: Confounder Identification/);
+  });
+});

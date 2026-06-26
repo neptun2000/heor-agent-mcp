@@ -41,6 +41,27 @@ export const SOURCE_REGISTRY: SourceMeta[] = [
     category: "biomedical",
     description: "Bioactive molecules and drug-like compounds",
   },
+  {
+    id: "europe_pmc",
+    name: "Europe PMC",
+    category: "biomedical",
+    description:
+      "40M+ abstracts + full text + preprints + guidelines (EMBL-EBI). Broader full-text coverage than PubMed — strong for confounder/baseline-characteristic extraction.",
+  },
+  {
+    id: "openalex",
+    name: "OpenAlex",
+    category: "biomedical",
+    description:
+      "250M+ scholarly works + citation graph + concepts (open). Broad SLR coverage + dedup for the open_search corpus.",
+  },
+  {
+    id: "semantic_scholar",
+    name: "Semantic Scholar",
+    category: "biomedical",
+    description:
+      "AI citation graph + related-work + TLDRs (Allen Institute). Snowball discovery of comparator studies for confounder/MAIC work.",
+  },
 
   // Clinical trials
   {

@@ -53,7 +53,10 @@ export type DataSource =
   | "ispor"
   | "wiley"
   | "ohe"
-  | "euroqol";
+  | "euroqol"
+  | "europe_pmc"
+  | "openalex"
+  | "semantic_scholar";
 export type StudyType = "rct" | "meta_analysis" | "observational" | "review";
 export type TimeHorizon = "lifetime" | "5yr" | "10yr" | number;
 export type Perspective = "nhs" | "us_payer" | "societal";

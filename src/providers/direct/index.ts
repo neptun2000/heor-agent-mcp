@@ -59,6 +59,9 @@ import { fetchIspor } from "./ispor.js";
 import { fetchWiley } from "./wiley.js";
 import { fetchOhe } from "./ohe.js";
 import { fetchEuroqol } from "./euroqol.js";
+import { fetchEuropePmc } from "./europePmc.js";
+import { fetchOpenAlex } from "./openAlex.js";
+import { fetchSemanticScholar } from "./semanticScholar.js";
 import { getProxyUrl } from "./proxyClient.js";
 import { resultsToMarkdown } from "../../formatters/markdown.js";
 import { resultsToDocx } from "../../formatters/docx.js";
@@ -121,6 +124,9 @@ const FETCHERS: Record<
   wiley: fetchWiley,
   ohe: fetchOhe,
   euroqol: fetchEuroqol,
+  europe_pmc: fetchEuropePmc,
+  openalex: fetchOpenAlex,
+  semantic_scholar: fetchSemanticScholar,
 };
 
 export class DirectProvider implements IProvider {

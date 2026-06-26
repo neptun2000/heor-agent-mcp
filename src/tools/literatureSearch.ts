@@ -109,6 +109,9 @@ const LiteratureSearchSchema = z.object({
         "wiley",
         "ohe",
         "euroqol",
+        "europe_pmc",
+        "openalex",
+        "semantic_scholar",
       ]),
     )
     .optional(),
@@ -277,10 +280,13 @@ export const literatureSearchToolSchema = {
             "wiley",
             "ohe",
             "euroqol",
+            "europe_pmc",
+            "openalex",
+            "semantic_scholar",
           ],
         },
         description:
-          "Data sources to query. Default: pubmed, clinicaltrials, biorxiv, chembl, wiley, embase. Use 'who_gho' and 'world_bank' for epidemiology and demographic data. Use 'oecd' for OECD health statistics (expenditure, hospital beds, physicians, life expectancy). Use 'ihme_gbd' for Global Burden of Disease estimates. Use 'orange_book' for FDA drug approvals. Use 'purple_book' for FDA biologics and biosimilars. Enterprise (require API key): 'cochrane' (COCHRANE_API_KEY), 'citeline' (CITELINE_API_KEY), 'pharmapendium' (PHARMAPENDIUM_API_KEY), 'cortellis' (CORTELLIS_API_KEY). HTA cost refs: 'cms_nadac', 'pssru', 'nhs_costs', 'bnf', 'pbs_schedule'. LATAM sources: 'datasus', 'conitec', 'anvisa', 'paho', 'iets', 'fonasa'. APAC sources: 'hitap'. HTA appraisal/precedent sources: 'nice_ta', 'cadth_reviews', 'icer_reports', 'pbac_psd', 'gba_decisions', 'has_tc', 'iqwig', 'aifa', 'tlv', 'inesss'. HEOR methodology sources: 'ispor', 'wiley' (Pharmacoeconomics, Health Economics, Value in Health — via CrossRef), 'ohe' (Office of Health Economics — value set analyses, HTA methodology), 'euroqol' (EuroQol Group — EQ-5D instrument, country value sets, crosswalks).",
+          "Data sources to query. Default: pubmed, clinicaltrials, biorxiv, chembl, wiley, embase. Use 'europe_pmc' for Europe PMC (40M+ abstracts + full text + preprints + guidelines — broader full-text coverage than PubMed; strong for confounder/baseline-characteristic extraction). Use 'openalex' (250M+ works + citation graph) and 'semantic_scholar' (citation graph + related-work) for broad SLR + snowball comparator discovery. Use 'who_gho' and 'world_bank' for epidemiology and demographic data. Use 'oecd' for OECD health statistics (expenditure, hospital beds, physicians, life expectancy). Use 'ihme_gbd' for Global Burden of Disease estimates. Use 'orange_book' for FDA drug approvals. Use 'purple_book' for FDA biologics and biosimilars. Enterprise (require API key): 'cochrane' (COCHRANE_API_KEY), 'citeline' (CITELINE_API_KEY), 'pharmapendium' (PHARMAPENDIUM_API_KEY), 'cortellis' (CORTELLIS_API_KEY). HTA cost refs: 'cms_nadac', 'pssru', 'nhs_costs', 'bnf', 'pbs_schedule'. LATAM sources: 'datasus', 'conitec', 'anvisa', 'paho', 'iets', 'fonasa'. APAC sources: 'hitap'. HTA appraisal/precedent sources: 'nice_ta', 'cadth_reviews', 'icer_reports', 'pbac_psd', 'gba_decisions', 'has_tc', 'iqwig', 'aifa', 'tlv', 'inesss'. HEOR methodology sources: 'ispor', 'wiley' (Pharmacoeconomics, Health Economics, Value in Health — via CrossRef), 'ohe' (Office of Health Economics — value set analyses, HTA methodology), 'euroqol' (EuroQol Group — EQ-5D instrument, country value sets, crosswalks).",
       },
       max_results: {
         type: "number",

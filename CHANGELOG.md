@@ -2,6 +2,16 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.25.0 (2026-06-26) — 3 new literature sources (Europe PMC, OpenAlex, Semantic Scholar)
+
+### Added
+
+- **`literature.search` gains 3 biomedical sources**, chosen to strengthen the confounder-identification direction (open-corpus SLR + comparator discovery), each verified live before shipping:
+  - **`europe_pmc`** — Europe PMC (EMBL-EBI): 40M+ abstracts **+ full text** + preprints + guidelines. Broader full-text coverage than PubMed — directly improves `confounder_identification` open_search extraction from methods/baseline tables (live smoke: full ~1.6k-char abstracts).
+  - **`openalex`** — OpenAlex: 250M+ works + citation graph + concepts (inverted-index abstracts reconstructed). Broad SLR + dedup for the open corpus; complements the Crossref-based `verify_citations`.
+  - **`semantic_scholar`** — Semantic Scholar (Allen Institute): citation graph + related-work for snowball comparator discovery. **Note:** the free tier is rate-limited; set `S2_API_KEY` for reliable use (the fetcher degrades gracefully — a 429 is recorded as a failed source, never crashes the search).
+- New fetchers in `providers/direct/` (+ tests), `DataSource` union, `FETCHERS` map, `sources/registry.ts` metadata, and the web Tool Catalog (`heorData.ts`) so they appear in the Biomedical group. WHO ICTRP (no REST API — SOAP/bulk only) and EU CTIS (auth-gated public API) were evaluated and **deferred**.
+
 ## v1.24.1 (2026-06-25) — hta_dossier confounder annex passthrough
 
 ### Added

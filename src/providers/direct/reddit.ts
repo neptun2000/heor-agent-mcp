@@ -5,7 +5,8 @@
  * pseudonymized CollectedPost[]. Deterministic, no NLP. Graceful degradation when
  * credentials are absent. All HTTP via global fetch (mocked in CI).
  */
-import { createHash } from "node:crypto";
+import { pseudonymizeAuthor } from "../../social/pseudonymize.js";
+export { pseudonymizeAuthor } from "../../social/pseudonymize.js";
 import type {
   CollectedPost,
   SocialCollectInput,
@@ -15,11 +16,6 @@ import type {
 const USER_AGENT =
   process.env.REDDIT_USER_AGENT ??
   "heor-agent-mcp/1.0 (social-listening; +https://github.com/neptun2000/heor-agent-mcp)";
-
-/** Truncated SHA-256 of a handle. Deterministic + irreversible. */
-export function pseudonymizeAuthor(username: string): string {
-  return createHash("sha256").update(username).digest("hex").slice(0, 12);
-}
 
 const TOKEN_URL = "https://www.reddit.com/api/v1/access_token";
 let cachedToken: { token: string; expiresAt: number } | null = null;
@@ -189,7 +185,7 @@ export async function collectRedditPosts(
       result.posts.push({
         id: d.name,
         source_url: `https://www.reddit.com${d.permalink ?? ""}`,
-        subreddit: d.subreddit ?? sub ?? "",
+        channel: d.subreddit ?? sub ?? undefined,
         author_pseudonym: pseudonymizeAuthor(d.author ?? "[deleted]"),
         created_at: new Date((d.created_utc ?? 0) * 1000).toISOString(),
         title: d.title ?? "",

@@ -75,6 +75,7 @@ function input(over: Partial<SocialCollectInput> = {}): SocialCollectInput {
     drug: "Ajovy",
     brand_names: ["fremanezumab"],
     indication: "chronic migraine",
+    platform: "reddit",
     subreddits: ["migraine"],
     keywords: ["injection site"],
     time_window: "year",

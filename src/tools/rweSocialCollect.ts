@@ -28,19 +28,26 @@ const RweSocialCollectSchema = z
     drug: z.string().min(1, "drug is required"),
     brand_names: z.array(z.string()).default([]),
     indication: z.string().optional(),
+    platform: z.enum(["reddit", "bluesky"]).default("reddit"),
     subreddits: z.array(z.string()).default([]),
     keywords: z.array(z.string()).default([]),
-    time_window: z.enum(["day", "week", "month", "year", "all"]).default("year"),
+    time_window: z
+      .enum(["day", "week", "month", "year", "all"])
+      .default("year"),
     sort: z.enum(["relevance", "new", "top"]).default("relevance"),
     max_posts: z.number().int().min(1).max(100).default(50),
   })
   .strip();
 
-export async function handleRweSocialCollect(rawInput: unknown): Promise<ToolResult> {
+export async function handleRweSocialCollect(
+  rawInput: unknown,
+): Promise<ToolResult> {
   const parsed = RweSocialCollectSchema.safeParse(rawInput);
   if (!parsed.success) {
     throw new Error(
-      parsed.error.issues.map((i) => `${i.path.join(".") || "input"}: ${i.message}`).join("\n"),
+      parsed.error.issues
+        .map((i) => `${i.path.join(".") || "input"}: ${i.message}`)
+        .join("\n"),
     );
   }
   const input = parsed.data;
@@ -67,19 +74,29 @@ export async function handleRweSocialCollect(rawInput: unknown): Promise<ToolRes
   for (const w of result.warnings) audit = addWarning(audit, w);
 
   const lines: string[] = [];
-  lines.push(`# Social-Listening Collection — ${input.drug}${input.indication ? ` (${input.indication})` : ""}`);
+  lines.push(
+    `# Social-Listening Collection — ${input.drug}${input.indication ? ` (${input.indication})` : ""}`,
+  );
   lines.push("");
   lines.push(
     `**Platform:** Reddit · **Posts:** ${result.total_collected} · **Window:** ${input.time_window} · **Sort:** ${input.sort}`,
   );
-  lines.push(`**Query:** \`${result.query_used}\` · **Fetched:** ${result.fetched_at}`);
+  lines.push(
+    `**Query:** \`${result.query_used}\` · **Fetched:** ${result.fetched_at}`,
+  );
   lines.push("");
 
   lines.push("## ⚠️ Governance");
-  lines.push("- ⚠️ **Lowest-validity RWE** — social-listening output is descriptive / hypothesis-generating only.");
+  lines.push(
+    "- ⚠️ **Lowest-validity RWE** — social-listening output is descriptive / hypothesis-generating only.",
+  );
   lines.push(`- ${result.governance.gvp_module_vi}`);
-  lines.push("- Public data only; authors pseudonymized (no raw handles); nothing persisted server-side.");
-  lines.push("- Run `rwe.social_listening_protocol` first for jurisdiction privacy gating (GDPR/HIPAA).");
+  lines.push(
+    "- Public data only; authors pseudonymized (no raw handles); nothing persisted server-side.",
+  );
+  lines.push(
+    "- Run `rwe.social_listening_protocol` first for jurisdiction privacy gating (GDPR/HIPAA).",
+  );
   lines.push("");
 
   if (result.warnings.length) {
@@ -90,12 +107,16 @@ export async function handleRweSocialCollect(rawInput: unknown): Promise<ToolRes
 
   if (result.posts.length) {
     lines.push("## Collected posts");
-    lines.push("| ID | Subreddit | Author (pseudonym) | Score | Comments | Title |");
-    lines.push("|----|-----------|--------------------|-------|----------|-------|");
+    lines.push(
+      "| ID | Channel | Author (pseudonym) | Score | Comments | Preview |",
+    );
+    lines.push(
+      "|----|---------|--------------------|----|----------|---------|",
+    );
     for (const p of result.posts) {
-      const title = p.title.replace(/\|/g, "\\|").slice(0, 80);
+      const preview = (p.title || p.body).replace(/\|/g, "\\|").slice(0, 80);
       lines.push(
-        `| ${p.id} | r/${p.subreddit} | ${p.author_pseudonym} | ${p.score} | ${p.num_comments} | ${title} |`,
+        `| ${p.id} | ${p.channel ? "r/" + p.channel : "—"} | ${p.author_pseudonym} | ${p.score} | ${p.num_comments} | ${preview} |`,
       );
     }
     lines.push("");
@@ -106,11 +127,15 @@ export async function handleRweSocialCollect(rawInput: unknown): Promise<ToolRes
   }
 
   lines.push("## References");
-  lines.push("- EMA GVP Module VI rev 2 (Management and reporting of adverse reactions)");
+  lines.push(
+    "- EMA GVP Module VI rev 2 (Management and reporting of adverse reactions)",
+  );
   lines.push("- Reddit Data API (free OAuth tier)");
   lines.push("");
   lines.push(
-    auditToMarkdown(audit, { disclosure: { level: extractDisclosureLevel(rawInput, "standard") } }),
+    auditToMarkdown(audit, {
+      disclosure: { level: extractDisclosureLevel(rawInput, "standard") },
+    }),
   );
 
   return {
@@ -147,10 +172,21 @@ export const rweSocialCollectToolSchema = {
       indication: { type: "string" },
       subreddits: { type: "array", items: { type: "string" } },
       keywords: { type: "array", items: { type: "string" } },
-      time_window: { type: "string", enum: ["day", "week", "month", "year", "all"], default: "year" },
-      sort: { type: "string", enum: ["relevance", "new", "top"], default: "relevance" },
+      time_window: {
+        type: "string",
+        enum: ["day", "week", "month", "year", "all"],
+        default: "year",
+      },
+      sort: {
+        type: "string",
+        enum: ["relevance", "new", "top"],
+        default: "relevance",
+      },
       max_posts: { type: "number", minimum: 1, maximum: 100, default: 50 },
-      ai_disclosure_level: { type: "string", enum: ["off", "standard", "submission"] },
+      ai_disclosure_level: {
+        type: "string",
+        enum: ["off", "standard", "submission"],
+      },
     },
     required: ["drug"],
   },

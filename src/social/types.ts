@@ -126,7 +126,7 @@ export interface SocialProtocolInput {
 export interface CollectedPost {
   id: string; // Reddit fullname "t3_…" — stable diff key for monitoring
   source_url: string; // permalink (audit-back; identifying — flagged in governance)
-  subreddit: string;
+  channel?: string; // Reddit: subreddit name; Bluesky: omitted
   author_pseudonym: string; // truncated SHA-256 of handle — NEVER the raw username
   created_at: string; // ISO 8601
   title: string;
@@ -145,7 +145,7 @@ export interface SocialCollectGovernance {
 export interface SocialCollectResult {
   drug: string;
   indication?: string;
-  platform: "reddit";
+  platform: "reddit" | "bluesky";
   query_used: string; // exact query string — auditability + monitoring hook
   fetched_at: string; // ISO — monitoring hook
   total_collected: number;
@@ -158,6 +158,7 @@ export interface SocialCollectInput {
   drug: string;
   brand_names: string[];
   indication?: string;
+  platform: "reddit" | "bluesky";
   subreddits: string[];
   keywords: string[];
   time_window: "day" | "week" | "month" | "year" | "all";

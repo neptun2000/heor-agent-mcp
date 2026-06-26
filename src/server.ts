@@ -236,6 +236,10 @@ function internalClaimsEnabled(): boolean {
   );
 }
 
+function internalDeploymentEnabled(): boolean {
+  return process.env.HEOR_ENABLE_INTERNAL_CLAIMS === "true";
+}
+
 // Pre-built HEOR workflow prompts for Claude Desktop slash-command discovery
 const HEOR_PROMPTS = [
   {
@@ -402,13 +406,15 @@ function createMcpServer(
       evidenceTriangulationToolSchema,
       pvSocialListeningTriageToolSchema,
       rweSocialListeningProtocolToolSchema,
-      rweSocialCollectToolSchema,
       claimRegistryToolSchema,
       consistencyCheckToolSchema,
       publicationDraftToolSchema,
       evidenceGapAnalysisToolSchema,
       workflowLivingEvidenceToolSchema,
       htaLivingGvdToolSchema,
+      // rwe.social_collect is internal-only (social listening data collection).
+      // Requires only the explicit deployment flag (no storage credentials needed).
+      ...(internalDeploymentEnabled() ? [rweSocialCollectToolSchema] : []),
       // data.claims_query is internal-only. Require both storage credentials
       // and an explicit deployment flag so a public host cannot expose claims
       // data just because credentials were accidentally configured.
@@ -519,9 +525,21 @@ function createMcpServer(
         case "rwe.social_listening_protocol":
           result = await handleRweSocialListeningProtocol(args);
           break;
-        case "rwe.social_collect":
+        case "rwe.social_collect": {
+          if (!internalDeploymentEnabled()) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "rwe.social_collect is not available in this deployment.",
+                },
+              ],
+              isError: true,
+            };
+          }
           result = await handleRweSocialCollect(args);
           break;
+        }
         case "evidence.claim_registry":
           result = await handleClaimRegistry(args);
           break;

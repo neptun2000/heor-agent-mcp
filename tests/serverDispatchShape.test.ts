@@ -25,10 +25,7 @@ import { join } from "node:path";
  * only flags the `result = { content: [` ASSIGNMENT form, which is always a bug.
  */
 describe("server.ts dispatch shape — no double-wrap", () => {
-  const src = readFileSync(
-    join(__dirname, "..", "src", "server.ts"),
-    "utf8",
-  );
+  const src = readFileSync(join(__dirname, "..", "src", "server.ts"), "utf8");
 
   it("no dispatch case assigns result = { content: [ ... ] }", () => {
     const re = /result\s*=\s*\{\s*content:\s*\[/g;
@@ -46,6 +43,33 @@ describe("server.ts dispatch shape — no double-wrap", () => {
     );
     expect(src).not.toMatch(
       /if \(!process\.env\.AZURE_STORAGE_CONNECTION_STRING\)/,
+    );
+  });
+
+  it("rwe.social_collect is gated behind internalDeploymentEnabled()", () => {
+    // Helper function must exist
+    expect(src).toContain("function internalDeploymentEnabled()");
+    // Flag-only check (no storage credential requirement)
+    expect(src).toMatch(
+      /function internalDeploymentEnabled\(\)[^}]+HEOR_ENABLE_INTERNAL_CLAIMS/s,
+    );
+
+    // Must NOT appear in the unconditional ListTools array
+    // (only in the conditional spread)
+    const listToolsBlock =
+      src.match(
+        /server\.setRequestHandler\(ListToolsRequestSchema[\s\S]*?^\s*\}\)\)/m,
+      )?.[0] ?? "";
+    expect(listToolsBlock).not.toMatch(/^\s*rweSocialCollectToolSchema,\s*$/m);
+    expect(listToolsBlock).toContain("internalDeploymentEnabled()");
+    expect(listToolsBlock).toContain("rweSocialCollectToolSchema");
+
+    // Dispatch guard must return "not available" text with isError:true
+    expect(src).toContain(
+      "rwe.social_collect is not available in this deployment.",
+    );
+    expect(src).toMatch(
+      /case "rwe\.social_collect"[\s\S]*?if \(!internalDeploymentEnabled\(\)\)/,
     );
   });
 });

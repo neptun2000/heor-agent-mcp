@@ -183,6 +183,28 @@ describe("collectRedditPosts", () => {
     expect(r.warnings.join(" ")).toMatch(/not valid JSON/);
   });
 
+  it("URL-encodes the subreddit path segment", async () => {
+    process.env.REDDIT_CLIENT_ID = "id";
+    process.env.REDDIT_CLIENT_SECRET = "secret";
+    const urls: string[] = [];
+    global.fetch = jest.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("access_token"))
+        return {
+          ok: true,
+          json: async () => ({ access_token: "TKN", expires_in: 3600 }),
+        } as never;
+      urls.push(u);
+      return {
+        ok: true,
+        json: async () => ({ data: { children: [] } }),
+      } as never;
+    }) as unknown as typeof fetch;
+    await collectRedditPosts(input({ subreddits: ["a b/c"] }), 1000);
+    expect(urls[0]).toContain("/r/a%20b%2Fc/search");
+    expect(urls[0]).not.toContain("/r/a b/c/search");
+  });
+
   it("dedups by id across multiple subreddits and respects max_posts", async () => {
     process.env.REDDIT_CLIENT_ID = "id";
     process.env.REDDIT_CLIENT_SECRET = "secret";

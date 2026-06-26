@@ -142,7 +142,7 @@ export async function collectRedditPosts(
     if (result.posts.length >= input.max_posts) break;
     const url = new URL(
       sub
-        ? `https://oauth.reddit.com/r/${sub}/search`
+        ? `https://oauth.reddit.com/r/${encodeURIComponent(sub)}/search`
         : "https://oauth.reddit.com/search",
     );
     url.searchParams.set("q", query_used);

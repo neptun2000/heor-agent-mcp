@@ -18,6 +18,7 @@ import {
 import { auditToMarkdown } from "../formatters/markdown.js";
 import { extractDisclosureLevel } from "../formatters/disclosure.js";
 import { collectRedditPosts } from "../providers/direct/reddit.js";
+import { collectBlueskyPosts } from "../providers/direct/bluesky.js";
 import type { SocialCollectResult } from "../social/types.js";
 import type { ToolResult } from "../providers/types.js";
 
@@ -28,7 +29,7 @@ const RweSocialCollectSchema = z
     drug: z.string().min(1, "drug is required"),
     brand_names: z.array(z.string()).default([]),
     indication: z.string().optional(),
-    platform: z.enum(["reddit", "bluesky"]).default("reddit"),
+    platform: z.enum(["bluesky", "reddit"]).default("bluesky"),
     subreddits: z.array(z.string()).default([]),
     keywords: z.array(z.string()).default([]),
     time_window: z
@@ -59,17 +60,21 @@ export async function handleRweSocialCollect(
   );
   audit = setMethodology(
     audit,
-    "Public Reddit search via the free OAuth API (application-only). Posts are pseudonymized " +
-      "(SHA-256 of handle) and returned verbatim for downstream LLM extraction; the tool runs no NLP. " +
+    `Public ${input.platform === "reddit" ? "Reddit" : "Bluesky (AT Protocol)"} search via the free API. ` +
+      "Posts are pseudonymized (SHA-256 of handle) and returned verbatim for downstream LLM extraction; the tool runs no NLP. " +
       "Social listening is the lowest-validity RWE source — output is descriptive/hypothesis-generating. " +
       "A systematic digital-media review triggers EMA GVP Module VI AE handling.",
   );
 
-  const result: SocialCollectResult = await collectRedditPosts(input);
+  const result: SocialCollectResult =
+    input.platform === "reddit"
+      ? await collectRedditPosts(input)
+      : await collectBlueskyPosts(input);
 
+  const platformLabel = input.platform === "reddit" ? "Reddit" : "Bluesky";
   audit = addAssumption(
     audit,
-    `${result.total_collected} public Reddit post(s) collected for query: ${result.query_used}`,
+    `${result.total_collected} public ${platformLabel} post(s) collected for query: ${result.query_used}`,
   );
   for (const w of result.warnings) audit = addWarning(audit, w);
 
@@ -79,7 +84,7 @@ export async function handleRweSocialCollect(
   );
   lines.push("");
   lines.push(
-    `**Platform:** Reddit · **Posts:** ${result.total_collected} · **Window:** ${input.time_window} · **Sort:** ${input.sort}`,
+    `**Platform:** ${input.platform === "reddit" ? "Reddit" : "Bluesky"} · **Posts:** ${result.total_collected} · **Window:** ${input.time_window} · **Sort:** ${input.sort}`,
   );
   lines.push(
     `**Query:** \`${result.query_used}\` · **Fetched:** ${result.fetched_at}`,
@@ -130,7 +135,11 @@ export async function handleRweSocialCollect(
   lines.push(
     "- EMA GVP Module VI rev 2 (Management and reporting of adverse reactions)",
   );
-  lines.push("- Reddit Data API (free OAuth tier)");
+  lines.push(
+    input.platform === "reddit"
+      ? "- Reddit Data API (free OAuth tier)"
+      : "- Bluesky / AT Protocol (app.bsky.feed.searchPosts)",
+  );
   lines.push("");
   lines.push(
     auditToMarkdown(audit, {
@@ -148,14 +157,14 @@ export async function handleRweSocialCollect(
 export const rweSocialCollectToolSchema = {
   name: "rwe.social_collect",
   description:
-    "Collect public Reddit posts for a drug/indication via the free Reddit OAuth API, for social-listening RWE. " +
-    "Searches (drug OR brand_names) optionally AND (keywords) across site-wide or specific subreddits, over a time " +
-    "window, and returns normalized posts (id, subreddit, pseudonymized author, timestamp, title, body, score, " +
+    "Collect public posts for a drug/indication from a free social source (Bluesky by default, or Reddit) for social-listening RWE. " +
+    "Searches (drug OR brand_names) optionally AND (keywords) across the chosen platform, over a time " +
+    "window, and returns normalized posts (id, channel, pseudonymized author, timestamp, title, body, score, " +
     "comment count) plus a governance block. It is PURE-FETCH: it does NOT run NLP and does NOT scrape — the calling " +
     "model extracts the four ICSR elements per post and passes them to pv.social_listening_triage. Authors are " +
-    "pseudonymized (SHA-256); public data only; nothing is persisted. Requires REDDIT_CLIENT_ID/REDDIT_CLIENT_SECRET " +
-    "(free app at reddit.com/prefs/apps); degrades gracefully with a notice when absent. A systematic digital-media " +
-    "review triggers EMA GVP Module VI AE handling. ⚠️ Social listening is the lowest-validity RWE source — output is " +
+    "pseudonymized (SHA-256); public data only; nothing is persisted. Bluesky requires BLUESKY_IDENTIFIER/BLUESKY_APP_PASSWORD; " +
+    "Reddit requires REDDIT_CLIENT_ID/REDDIT_CLIENT_SECRET (free app at reddit.com/prefs/apps); degrades gracefully with a notice when absent. " +
+    "A systematic digital-media review triggers EMA GVP Module VI AE handling. ⚠️ Social listening is the lowest-validity RWE source — output is " +
     "hypothesis-generating only. Pairs with rwe.social_listening_protocol (design) and pv.social_listening_triage (triage).",
   annotations: {
     title: "Social-Listening Collection (Reddit)",
@@ -170,6 +179,11 @@ export const rweSocialCollectToolSchema = {
       drug: { type: "string" },
       brand_names: { type: "array", items: { type: "string" } },
       indication: { type: "string" },
+      platform: {
+        type: "string",
+        enum: ["bluesky", "reddit"],
+        default: "bluesky",
+      },
       subreddits: { type: "array", items: { type: "string" } },
       keywords: { type: "array", items: { type: "string" } },
       time_window: {

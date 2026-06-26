@@ -173,7 +173,15 @@ export async function collectRedditPosts(
       );
       continue;
     }
-    const data = (await res.json()) as RedditListing;
+    let data: RedditListing;
+    try {
+      data = (await res.json()) as RedditListing;
+    } catch {
+      result.warnings.push(
+        `Reddit response for ${sub ?? "site-wide"} was not valid JSON.`,
+      );
+      continue;
+    }
     for (const child of data?.data?.children ?? []) {
       const d = child.data;
       if (!d?.name || seen.has(d.name)) continue;

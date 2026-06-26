@@ -161,6 +161,28 @@ describe("collectRedditPosts", () => {
     expect(r.governance.gvp_module_vi).toMatch(/Module VI/);
   });
 
+  it("records a warning and never throws when a search body is malformed", async () => {
+    process.env.REDDIT_CLIENT_ID = "id";
+    process.env.REDDIT_CLIENT_SECRET = "secret";
+    global.fetch = jest.fn(async (url: string | URL) => {
+      const u = String(url);
+      if (u.includes("access_token"))
+        return {
+          ok: true,
+          json: async () => ({ access_token: "TKN", expires_in: 3600 }),
+        } as never;
+      return {
+        ok: true,
+        json: async () => {
+          throw new SyntaxError("bad JSON");
+        },
+      } as never;
+    }) as unknown as typeof fetch;
+    const r = await collectRedditPosts(input(), 1000);
+    expect(r.total_collected).toBe(0);
+    expect(r.warnings.join(" ")).toMatch(/not valid JSON/);
+  });
+
   it("dedups by id across multiple subreddits and respects max_posts", async () => {
     process.env.REDDIT_CLIENT_ID = "id";
     process.env.REDDIT_CLIENT_SECRET = "secret";

@@ -120,3 +120,47 @@ export interface SocialProtocolInput {
   time_window_months?: number;
   is_mah_managed_channel: boolean;
 }
+
+// ── Live collection (rwe.social_collect, design log #45) ────────────────────
+
+export interface CollectedPost {
+  id: string; // Reddit fullname "t3_…" — stable diff key for monitoring
+  source_url: string; // permalink (audit-back; identifying — flagged in governance)
+  subreddit: string;
+  author_pseudonym: string; // truncated SHA-256 of handle — NEVER the raw username
+  created_at: string; // ISO 8601
+  title: string;
+  body: string; // selftext
+  score: number;
+  num_comments: number;
+}
+
+export interface SocialCollectGovernance {
+  public_data_only: true;
+  pseudonymized: true;
+  persisted: false;
+  gvp_module_vi: string;
+}
+
+export interface SocialCollectResult {
+  drug: string;
+  indication?: string;
+  platform: "reddit";
+  query_used: string; // exact query string — auditability + monitoring hook
+  fetched_at: string; // ISO — monitoring hook
+  total_collected: number;
+  posts: CollectedPost[];
+  governance: SocialCollectGovernance;
+  warnings: string[];
+}
+
+export interface SocialCollectInput {
+  drug: string;
+  brand_names: string[];
+  indication?: string;
+  subreddits: string[];
+  keywords: string[];
+  time_window: "day" | "week" | "month" | "year" | "all";
+  sort: "relevance" | "new" | "top";
+  max_posts: number;
+}

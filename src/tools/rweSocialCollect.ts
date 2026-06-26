@@ -167,7 +167,7 @@ export const rweSocialCollectToolSchema = {
     "A systematic digital-media review triggers EMA GVP Module VI AE handling. ⚠️ Social listening is the lowest-validity RWE source — output is " +
     "hypothesis-generating only. Pairs with rwe.social_listening_protocol (design) and pv.social_listening_triage (triage).",
   annotations: {
-    title: "Social-Listening Collection (Reddit)",
+    title: "Social-Listening Collection (Bluesky / Reddit)",
     readOnlyHint: true,
     destructiveHint: false,
     idempotentHint: false,

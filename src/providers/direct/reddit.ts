@@ -61,3 +61,137 @@ export async function getRedditToken(now = Date.now()): Promise<string | null> {
   };
   return cachedToken.token;
 }
+
+interface RedditChild {
+  data?: {
+    name?: string;
+    permalink?: string;
+    subreddit?: string;
+    author?: string;
+    created_utc?: number;
+    title?: string;
+    selftext?: string;
+    score?: number;
+    num_comments?: number;
+  };
+}
+interface RedditListing {
+  data?: { children?: RedditChild[] };
+}
+
+const GVP_VI_NOTE =
+  "Systematic digital-media review triggers EMA GVP Module VI AE handling — " +
+  "route posts with adverse events through pv.social_listening_triage.";
+
+function quote(term: string): string {
+  return `"${term.replace(/"/g, "")}"`;
+}
+
+/** Build a Reddit search query: (drug OR brands) [AND (kw OR kw)]. */
+export function buildRedditQuery(input: SocialCollectInput): string {
+  const drugTerms = [input.drug, ...input.brand_names]
+    .map((t) => t.trim())
+    .filter(Boolean);
+  const drugClause =
+    drugTerms.length > 1
+      ? `(${drugTerms.map(quote).join(" OR ")})`
+      : quote(drugTerms[0] ?? input.drug);
+  const parts = [drugClause];
+  const kws = input.keywords.map((k) => k.trim()).filter(Boolean);
+  if (kws.length) parts.push(`(${kws.map(quote).join(" OR ")})`);
+  return parts.join(" ");
+}
+
+/** Pull public Reddit posts. Deterministic, pseudonymized, degrades on missing creds. */
+export async function collectRedditPosts(
+  input: SocialCollectInput,
+  now = Date.now(),
+): Promise<SocialCollectResult> {
+  const query_used = buildRedditQuery(input);
+  const result: SocialCollectResult = {
+    drug: input.drug,
+    indication: input.indication,
+    platform: "reddit",
+    query_used,
+    fetched_at: new Date(now).toISOString(),
+    total_collected: 0,
+    posts: [],
+    governance: {
+      public_data_only: true,
+      pseudonymized: true,
+      persisted: false,
+      gvp_module_vi: GVP_VI_NOTE,
+    },
+    warnings: [],
+  };
+
+  const token = await getRedditToken(now);
+  if (!token) {
+    result.warnings.push(
+      "Reddit collection unavailable: set REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET " +
+        "(free app at reddit.com/prefs/apps).",
+    );
+    return result;
+  }
+
+  const targets: (string | null)[] = input.subreddits.length
+    ? input.subreddits
+    : [null];
+  const seen = new Set<string>();
+  for (const sub of targets) {
+    if (result.posts.length >= input.max_posts) break;
+    const url = new URL(
+      sub
+        ? `https://oauth.reddit.com/r/${sub}/search`
+        : "https://oauth.reddit.com/search",
+    );
+    url.searchParams.set("q", query_used);
+    url.searchParams.set("sort", input.sort);
+    url.searchParams.set("t", input.time_window);
+    url.searchParams.set("limit", String(Math.min(input.max_posts, 100)));
+    url.searchParams.set("type", "link");
+    if (sub) url.searchParams.set("restrict_sr", "true");
+
+    let res: { ok: boolean; status?: number; json: () => Promise<unknown> };
+    try {
+      res = (await fetch(url, {
+        headers: { Authorization: `Bearer ${token}`, "User-Agent": USER_AGENT },
+      })) as unknown as {
+        ok: boolean;
+        status?: number;
+        json: () => Promise<unknown>;
+      };
+    } catch {
+      result.warnings.push(
+        `Reddit search failed for ${sub ?? "site-wide"} (network error).`,
+      );
+      continue;
+    }
+    if (!res.ok) {
+      result.warnings.push(
+        `Reddit search returned ${res.status ?? "error"} for ${sub ?? "site-wide"}.`,
+      );
+      continue;
+    }
+    const data = (await res.json()) as RedditListing;
+    for (const child of data?.data?.children ?? []) {
+      const d = child.data;
+      if (!d?.name || seen.has(d.name)) continue;
+      seen.add(d.name);
+      result.posts.push({
+        id: d.name,
+        source_url: `https://www.reddit.com${d.permalink ?? ""}`,
+        subreddit: d.subreddit ?? sub ?? "",
+        author_pseudonym: pseudonymizeAuthor(d.author ?? "[deleted]"),
+        created_at: new Date((d.created_utc ?? 0) * 1000).toISOString(),
+        title: d.title ?? "",
+        body: d.selftext ?? "",
+        score: d.score ?? 0,
+        num_comments: d.num_comments ?? 0,
+      });
+      if (result.posts.length >= input.max_posts) break;
+    }
+  }
+  result.total_collected = result.posts.length;
+  return result;
+}

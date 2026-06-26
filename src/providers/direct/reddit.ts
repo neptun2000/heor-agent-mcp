@@ -38,9 +38,9 @@ export async function getRedditToken(now = Date.now()): Promise<string | null> {
     return cachedToken.token;
 
   const basic = Buffer.from(`${id}:${secret}`).toString("base64");
-  let res: { ok: boolean; json: () => Promise<unknown> };
+  let data: { access_token?: string; expires_in?: number };
   try {
-    res = (await fetch(TOKEN_URL, {
+    const res = await fetch(TOKEN_URL, {
       method: "POST",
       headers: {
         Authorization: `Basic ${basic}`,
@@ -48,15 +48,12 @@ export async function getRedditToken(now = Date.now()): Promise<string | null> {
         "User-Agent": USER_AGENT,
       },
       body: "grant_type=client_credentials",
-    })) as unknown as { ok: boolean; json: () => Promise<unknown> };
+    });
+    if (!res.ok) return null;
+    data = (await res.json()) as { access_token?: string; expires_in?: number };
   } catch {
     return null;
   }
-  if (!res.ok) return null;
-  const data = (await res.json()) as {
-    access_token?: string;
-    expires_in?: number;
-  };
   if (!data.access_token) return null;
   cachedToken = {
     token: data.access_token,

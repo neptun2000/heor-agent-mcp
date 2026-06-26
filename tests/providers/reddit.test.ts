@@ -41,6 +41,18 @@ describe("getRedditToken", () => {
     expect(await getRedditToken(1000)).toBe("TKN");
   });
 
+  it("returns null (never throws) when the token body is malformed", async () => {
+    process.env.REDDIT_CLIENT_ID = "id";
+    process.env.REDDIT_CLIENT_SECRET = "secret";
+    global.fetch = jest.fn(async () => ({
+      ok: true,
+      json: async () => {
+        throw new SyntaxError("Unexpected token < in JSON");
+      },
+    })) as unknown as typeof fetch;
+    await expect(getRedditToken(1000)).resolves.toBeNull();
+  });
+
   it("caches the token until near expiry (one network call for two reads)", async () => {
     process.env.REDDIT_CLIENT_ID = "id";
     process.env.REDDIT_CLIENT_SECRET = "secret";

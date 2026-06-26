@@ -189,6 +189,10 @@ import {
   rweSocialListeningProtocolToolSchema,
 } from "./tools/rweSocialListeningProtocol.js";
 import {
+  handleRweSocialCollect,
+  rweSocialCollectToolSchema,
+} from "./tools/rweSocialCollect.js";
+import {
   handleClaimRegistry,
   claimRegistryToolSchema,
 } from "./tools/claimRegistry.js";
@@ -398,6 +402,7 @@ function createMcpServer(
       evidenceTriangulationToolSchema,
       pvSocialListeningTriageToolSchema,
       rweSocialListeningProtocolToolSchema,
+      rweSocialCollectToolSchema,
       claimRegistryToolSchema,
       consistencyCheckToolSchema,
       publicationDraftToolSchema,
@@ -513,6 +518,9 @@ function createMcpServer(
           break;
         case "rwe.social_listening_protocol":
           result = await handleRweSocialListeningProtocol(args);
+          break;
+        case "rwe.social_collect":
+          result = await handleRweSocialCollect(args);
           break;
         case "evidence.claim_registry":
           result = await handleClaimRegistry(args);

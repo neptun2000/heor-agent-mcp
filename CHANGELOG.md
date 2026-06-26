@@ -2,11 +2,14 @@
 
 All notable changes to HEORAgent MCP Server.
 
-## v1.26.0 (2026-06-26) — `rwe.social_collect` (social-listening live collection, Reddit)
+## v1.26.0 (2026-06-26) — `rwe.social_collect` (social-listening live collection: Bluesky + Reddit)
 
 ### Added
 
-- **`rwe.social_collect`** — completes the social-listening trio (`rwe.social_listening_protocol` → **`rwe.social_collect`** → `pv.social_listening_triage`). Pulls public Reddit posts for a drug/indication via the **free** Reddit OAuth API ((drug OR brand_names) optionally AND keywords, across site-wide or named subreddits, over a time window), normalizes them, and **pseudonymizes authors** (truncated SHA-256 — no raw handles). **Pure-fetch**: runs no NLP and does not scrape — the calling model extracts the four ICSR elements per post and passes them to `pv.social_listening_triage`. Public data only; nothing persisted server-side; output carries the EMA GVP Module VI AE-handling trigger and the lowest-validity-RWE caveat. Requires `REDDIT_CLIENT_ID`/`REDDIT_CLIENT_SECRET` (free app at reddit.com/prefs/apps); degrades gracefully with a notice when unset. New `providers/direct/reddit.ts` fetcher (separated for reuse) + tool; live in prod, mocked in CI. Design log #45. Tool count 46 → 47 always-on.
+- **`rwe.social_collect`** — completes the social-listening trio (`rwe.social_listening_protocol` → **`rwe.social_collect`** → `pv.social_listening_triage`). Pulls public posts for a drug/indication from a **free** social source and **pseudonymizes authors** (truncated SHA-256 — no raw handles). **`platform` selects the source:**
+  - **`bluesky`** (default) — AT Protocol `app.bsky.feed.searchPosts` via an instantly-issued **app password** (`BLUESKY_IDENTIFIER` + `BLUESKY_APP_PASSWORD`); no approval gate, no commercial reclassification.
+  - **`reddit`** — free Reddit OAuth API (`REDDIT_CLIENT_ID`/`REDDIT_CLIENT_SECRET`). ⚠️ Reddit's 2025 Responsible-Builder policy now gates app creation behind manual approval (~2–4 wk) and treats sponsor use as commercial — so Bluesky is the default working source.
+  - **Pure-fetch**: no NLP, no scraping — the calling model extracts the four ICSR elements per post and passes them to `pv.social_listening_triage`. Public data only; nothing persisted; carries the EMA GVP Module VI AE-handling trigger + lowest-validity-RWE caveat. Graceful degradation with a notice when creds are unset. New `providers/direct/bluesky.ts` + `reddit.ts` fetchers (separated for reuse); live in prod, mocked in CI. Design log #45.
 
 ## v1.25.0 (2026-06-26) — 3 new literature sources (Europe PMC, OpenAlex, Semantic Scholar)
 

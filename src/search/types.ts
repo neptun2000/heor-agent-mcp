@@ -1,13 +1,20 @@
 export type StrandId = "economic" | "clinical" | "hrqol" | "epidemiology";
 export type Database = "embase" | "pubmed";
 
+export interface FilterProvenance {
+  source: string;
+  url: string;
+  citation: string;
+  templateUrl?: string;
+}
+
 export interface FilterBlock {
   id: string;
   strand?: StrandId;
   database: Database;
   /** One or more term lines; OR-combined within the block when >1. */
   lines: string[];
-  provenance: { source: string; url: string; citation: string };
+  provenance: FilterProvenance;
 }
 
 export interface StrategyInput {

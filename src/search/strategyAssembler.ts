@@ -14,8 +14,7 @@ export function assembleStrategy(input: StrategyInput): AssembledStrategy {
     lines.push({ n, query });
     return n;
   };
-  // Emit a block's term lines, then (if >1) an OR-combine line. Returns the
-  // line number that represents the whole block.
+
   const emitBlock = (block: string[]): number => {
     const nums = block.map((line) => push(line));
     if (nums.length === 1) return nums[0];

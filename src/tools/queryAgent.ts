@@ -96,7 +96,18 @@ const ICD_MAP: Record<string, IcdEntry> = {
   schizophrenia: { prefixes: ["F20"], note: "Schizophrenia" },
 };
 
-function resolveIcd(
+const MIN_PARTIAL_KEY_LEN = 4;
+
+function indicationTokens(indication: string): string[] {
+  return indication
+    .toLowerCase()
+    .split(/[\s,/+-]+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
+/** Exported for unit tests — maps indication text to ICD-10 prefixes. */
+export function resolveIcd(
   indication: string,
   extra: string[],
 ): { prefixes: string[]; rationale: string } {
@@ -111,13 +122,28 @@ function resolveIcd(
         (extra.length ? ` + caller-supplied: ${extra.join(", ")}` : ""),
     };
   }
-  // Partial match (indication contains a known key or vice versa)
+
+  const tokens = indicationTokens(key);
+
+  // Token match — e.g. "t2d" in "adult t2d patients"
   for (const [mapKey, entry] of Object.entries(ICD_MAP)) {
-    if (key.includes(mapKey) || mapKey.includes(key)) {
+    if (tokens.includes(mapKey)) {
       return {
         prefixes: [...new Set([...entry.prefixes, ...extra])],
         rationale:
-          `Matched "${mapKey}": ${entry.note}` +
+          `Matched token "${mapKey}": ${entry.note}` +
+          (extra.length ? ` + ${extra.join(", ")}` : ""),
+      };
+    }
+  }
+
+  // Phrase containment — indication includes a known multi-word / long key
+  for (const [mapKey, entry] of Object.entries(ICD_MAP)) {
+    if (mapKey.length >= MIN_PARTIAL_KEY_LEN && key.includes(mapKey)) {
+      return {
+        prefixes: [...new Set([...entry.prefixes, ...extra])],
+        rationale:
+          `Matched phrase "${mapKey}": ${entry.note}` +
           (extra.length ? ` + ${extra.join(", ")}` : ""),
       };
     }

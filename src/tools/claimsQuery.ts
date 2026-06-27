@@ -105,8 +105,8 @@ let _dbInitializing: Promise<DuckDBConnection> | null = null;
 
 // Serialize all DuckDB queries — concurrent large scans on the same in-process
 // DuckDB instance exhaust Azure App Service memory (1.75 GB limit) and crash.
-// The timeout rejects the caller after 90s but keeps the lock until the underlying
-// DuckDB query finishes — no orphaned concurrent scans, no OOM.
+// On timeout we interrupt the in-flight DuckDB connection so the lock releases
+// instead of starving the queue for minutes on Azure's 1.75 GB instances.
 const QUERY_TIMEOUT_MS = 90_000;
 let _queryQueue: Promise<unknown> = Promise.resolve();
 
@@ -114,6 +114,14 @@ function abortError(): Error {
   return new Error(
     "DuckDB query cancelled before execution because the client disconnected.",
   );
+}
+
+function interruptActiveQuery(): void {
+  try {
+    _conn?.interrupt();
+  } catch {
+    // best-effort — lock still drains via lockPromise
+  }
 }
 
 export function withDbLock<T>(
@@ -144,16 +152,15 @@ export function withDbLock<T>(
       reject(err);
     };
 
-    const timer = setTimeout(
-      () =>
-        rejectOnce(
-          new Error(
-            "DuckDB query timed out (90s). Reduce the date range, filter to specific regions, " +
-              "or build/use the claims summary layer for nationwide population-sizing scans.",
-          ),
+    const timer = setTimeout(() => {
+      interruptActiveQuery();
+      rejectOnce(
+        new Error(
+          "DuckDB query timed out (90s). Reduce the date range, filter to specific regions, " +
+            "or build/use the claims summary layer for nationwide population-sizing scans.",
         ),
-      QUERY_TIMEOUT_MS,
-    );
+      );
+    }, QUERY_TIMEOUT_MS);
     cleanup.push(() => clearTimeout(timer));
 
     if (signal) {

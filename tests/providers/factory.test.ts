@@ -17,10 +17,10 @@ describe("createProvider", () => {
     expect(provider.constructor.name).toBe("DirectProvider");
   });
 
-  it("returns HostedProvider when HEOR_API_KEY is set", async () => {
+  it("still returns DirectProvider when HEOR_API_KEY is set (HostedProvider Phase 2)", async () => {
     process.env.HEOR_API_KEY = "test-key";
     const { createProvider } = await import("../../src/providers/factory.js");
     const provider = createProvider();
-    expect(provider.constructor.name).toBe("HostedProvider");
+    expect(provider.constructor.name).toBe("DirectProvider");
   });
 });

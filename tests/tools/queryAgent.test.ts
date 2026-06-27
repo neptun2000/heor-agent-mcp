@@ -1,4 +1,8 @@
-import { handleQueryAgent, queryAgentToolSchema } from "../../src/tools/queryAgent.js";
+import {
+  handleQueryAgent,
+  queryAgentToolSchema,
+  resolveIcd,
+} from "../../src/tools/queryAgent.js";
 
 // Mock handleClaimsQuery so tests don't need Azure Blob Storage
 jest.mock("../../src/tools/claimsQuery.js", () => ({
@@ -88,6 +92,22 @@ describe("queryAgent — ICD resolution", () => {
     });
     const parsed = JSON.parse(result.content as string);
     expect(parsed.indication_resolved.icd10_prefixes).toContain("E11");
+  });
+
+  it("does not substring-match short tokens inside longer keys (mi ≠ ami)", () => {
+    const { prefixes, rationale } = resolveIcd("mi", []);
+    expect(prefixes).toHaveLength(0);
+    expect(rationale).toContain("Unknown indication");
+  });
+
+  it("does not substring-match cop inside copd", () => {
+    const { prefixes } = resolveIcd("cop", []);
+    expect(prefixes).toHaveLength(0);
+  });
+
+  it("matches COPD via exact token", () => {
+    const { prefixes } = resolveIcd("copd", []);
+    expect(prefixes).toContain("J44");
   });
 
   it("falls back to additional_icd_prefixes when indication unknown", async () => {

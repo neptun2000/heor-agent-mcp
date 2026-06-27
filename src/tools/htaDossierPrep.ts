@@ -236,6 +236,37 @@ import { contentToDocx } from "../formatters/docx.js";
 import { saveReport } from "../knowledge/index.js";
 import { saveDossier } from "../knowledge/index.js";
 
+type DossierAudit = ReturnType<typeof createAuditRecord>;
+
+async function persistDossierDraft(
+  audit: DossierAudit,
+  params: Pick<
+    DossierParams,
+    "project" | "hta_body" | "submission_type" | "drug_name" | "indication"
+  >,
+  textContent: string,
+): Promise<{ audit: DossierAudit; contentSuffix: string }> {
+  if (!params.project) return { audit, contentSuffix: "" };
+  try {
+    await saveDossier(
+      params.project,
+      params.hta_body,
+      params.submission_type,
+      { drug_name: params.drug_name, indication: params.indication },
+      textContent,
+    );
+    return { audit, contentSuffix: "" };
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e);
+    const warning = `Failed to save dossier draft to project knowledge base (${params.project}): ${detail}`;
+    console.error(`[hta.dossier] ${warning}`);
+    return {
+      audit: addWarning(audit, warning),
+      contentSuffix: `\n\n> ⚠️ **Knowledge-base save failed:** ${warning}\n`,
+    };
+  }
+}
+
 const NICE_STA_SECTIONS = [
   "Population",
   "Intervention",
@@ -1026,19 +1057,11 @@ async function handleJCADossier(
   );
 
   const outputFormat = params.output_format ?? "text";
-  const jcaTextContent = lines.join("\n");
+  let jcaTextContent = lines.join("\n");
 
-  if (params.project) {
-    try {
-      await saveDossier(
-        params.project,
-        params.hta_body,
-        params.submission_type,
-        { drug_name: params.drug_name, indication: params.indication },
-        jcaTextContent,
-      );
-    } catch {}
-  }
+  const persisted = await persistDossierDraft(audit, params, jcaTextContent);
+  audit = persisted.audit;
+  jcaTextContent += persisted.contentSuffix;
 
   if (outputFormat === "docx") {
     const base64 = await contentToDocx(
@@ -1050,7 +1073,9 @@ async function handleJCADossier(
     const savedPath = await saveReport(base64, filenameStem, params.project);
     const sizeKb = Math.round(base64.length / 1024);
     return {
-      content: `## DOCX Report Generated\n\n**File:** \`${savedPath}\`\n**Size:** ${sizeKb} KB\n**Type:** JCA ${params.submission_type.toUpperCase()} Dossier\n**Drug:** ${params.drug_name}\n**Indication:** ${params.indication}\n\nOpen with: \`open "${savedPath}"\``,
+      content:
+        `## DOCX Report Generated\n\n**File:** \`${savedPath}\`\n**Size:** ${sizeKb} KB\n**Type:** JCA ${params.submission_type.toUpperCase()} Dossier\n**Drug:** ${params.drug_name}\n**Indication:** ${params.indication}\n\nOpen with: \`open "${savedPath}"\`` +
+        persisted.contentSuffix,
       audit,
     };
   }
@@ -1601,19 +1626,11 @@ export async function handleHtaDossierPrep(
     }),
   );
 
-  const dossierTextContent = lines.join("\n");
+  let dossierTextContent = lines.join("\n");
 
-  if (params.project) {
-    try {
-      await saveDossier(
-        params.project,
-        params.hta_body,
-        params.submission_type,
-        { drug_name: params.drug_name, indication: params.indication },
-        dossierTextContent,
-      );
-    } catch {}
-  }
+  const persisted = await persistDossierDraft(audit, params, dossierTextContent);
+  audit = persisted.audit;
+  dossierTextContent += persisted.contentSuffix;
 
   if (outputFormat === "docx") {
     const base64 = await contentToDocx(
@@ -1625,7 +1642,9 @@ export async function handleHtaDossierPrep(
     const savedPath = await saveReport(base64, filenameStem, params.project);
     const sizeKb = Math.round(base64.length / 1024);
     return {
-      content: `## DOCX Report Generated\n\n**File:** \`${savedPath}\`\n**Size:** ${sizeKb} KB\n**Type:** ${params.hta_body.toUpperCase()} ${params.submission_type.toUpperCase()}\n**Drug:** ${params.drug_name}\n**Indication:** ${params.indication}\n\nOpen with: \`open "${savedPath}"\``,
+      content:
+        `## DOCX Report Generated\n\n**File:** \`${savedPath}\`\n**Size:** ${sizeKb} KB\n**Type:** ${params.hta_body.toUpperCase()} ${params.submission_type.toUpperCase()}\n**Drug:** ${params.drug_name}\n**Indication:** ${params.indication}\n\nOpen with: \`open "${savedPath}"\`` +
+        persisted.contentSuffix,
       audit,
     };
   }

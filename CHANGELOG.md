@@ -2,6 +2,15 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.26.1 (2026-06-27) — bug-scan hardening (provider trap, ICD matching, claims lock, dossier save)
+
+### Fixed
+
+- **`HEOR_API_KEY` no longer breaks literature search** — `HostedProvider` (Phase 2) is still unimplemented; when the env var is set the server now falls back to `DirectProvider` with a one-time stderr warning instead of throwing on every search.
+- **`data.query_agent` ICD resolution** — removed bidirectional substring matching that mapped short tokens to wrong codes (e.g. `"mi"` → AMI `I21/I22`). Resolution is now exact match, token match, or phrase containment (≥4 chars) only.
+- **`data.claims_query` DuckDB timeout** — on the 90s lock timeout the in-flight query is interrupted so the serialized lock releases instead of blocking all claims traffic until the scan finishes.
+- **`hta.dossier` knowledge-base save** — `saveDossier()` failures are logged, recorded in the audit trail, and surfaced in tool output instead of being swallowed by empty `catch {}`.
+
 ## v1.26.0 (2026-06-26) — `rwe.social_collect` (social-listening live collection: Bluesky + Reddit)
 
 ### Added

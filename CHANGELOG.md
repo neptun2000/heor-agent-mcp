@@ -2,6 +2,12 @@
 
 All notable changes to HEORAgent MCP Server.
 
+## v1.27.0 (2026-06-27) — `search.strategy_build` (SIGN filter templates + PRISMA strategy builder)
+
+### Added
+
+- **`search.strategy_build`** — generates a formal PRISMA-ready SLR search strategy from a research question / PICOS. Per review strand (economic, clinical, HRQoL, epidemiology) it emits numbered Embase + PubMed syntax blocks with **real PubMed/MEDLINE per-line counts** (NCBI E-utilities) and a blank Embase count column for the licensed run. Methodological filters are sourced verbatim from **SIGN search filter templates** (https://www.sign.ac.uk/using-our-guidelines/methodology/search-filters/). Embase Emtree terms are emitted as **DRAFT — verify in Emtree**; optional colleague Embase fixture overrides for economic/HRQoL/epidemiology strands. Output `pipeline_inputs` pre-fills the `literature_search` + `screen_abstracts` steps. Design log #44.
+
 ## v1.26.1 (2026-06-27) — bug-scan hardening (provider trap, ICD matching, claims lock, dossier save)
 
 ### Fixed

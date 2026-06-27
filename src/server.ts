@@ -91,6 +91,10 @@ import {
   verifyCitationsToolSchema,
 } from "./tools/verifyCitations.js";
 import {
+  handleSearchStrategyBuild,
+  searchStrategyBuildToolSchema,
+} from "./tools/searchStrategyBuild.js";
+import {
   handleConfounderIdentification,
   confounderIdentificationToolSchema,
 } from "./tools/confounderIdentification.js";
@@ -382,6 +386,7 @@ function createMcpServer(
       riskOfBiasToolSchema,
       validateLinksToolSchema,
       verifyCitationsToolSchema,
+      searchStrategyBuildToolSchema,
       confounderIdentificationToolSchema,
       confounderExpertTemplateToolSchema,
       utilityValueSetToolSchema,
@@ -482,6 +487,9 @@ function createMcpServer(
           break;
         case "utils.verify_citations":
           result = await handleVerifyCitations(args);
+          break;
+        case "search.strategy_build":
+          result = await handleSearchStrategyBuild(args);
           break;
         case "evidence.confounder_identification":
           result = await handleConfounderIdentification(args);

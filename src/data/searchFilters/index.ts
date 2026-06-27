@@ -1,4 +1,7 @@
 import type { Database, FilterBlock, StrandId } from "../../search/types.js";
+import { getEmbaseOverrideBlock, getEmbaseStrandOverride } from "./embaseOverrides.js";
+import { getAgeLimit, type AgeLimitGroup } from "./ageLimits.js";
+import { getExclusionFilter } from "./exclusions.js";
 import {
   SIGN_FILTERS,
   SIGN_PAGE_URL,
@@ -6,6 +9,7 @@ import {
   type SignFilterId,
   type SignFilterLine,
 } from "./signCatalog.js";
+import { collapseSignFilterToOrLine } from "./signFilterUtils.js";
 
 /** HEORAgent review strand → SIGN methodological filter template. */
 export const STRAND_SIGN_FILTER_MAP: Record<StrandId, SignFilterId> = {
@@ -68,9 +72,31 @@ export function getFilter(strand: StrandId, database: Database = "pubmed"): Filt
   return { ...block, strand };
 }
 
+/**
+ * Single-line strand filter for the outer numbered-line assembler.
+ * Embase: colleague fixture override when available, else collapsed SIGN Embase terms.
+ * PubMed: collapsed SIGN Medline searchable terms (Ovid boolean lines excluded).
+ */
+export function getStrandFilterForAssembly(
+  strand: StrandId,
+  database: Database,
+): string[] {
+  if (database === "embase") {
+    const override = getEmbaseStrandOverride(strand);
+    if (override) return [override];
+  }
+  const signLines = getFilter(strand, database).lines;
+  return [collapseSignFilterToOrLine(signLines)];
+}
+
 export function getSignFilterIdForStrand(strand: StrandId): SignFilterId {
   return STRAND_SIGN_FILTER_MAP[strand];
 }
+
+export { getAgeLimit, type AgeLimitGroup } from "./ageLimits.js";
+export { getExclusionFilter } from "./exclusions.js";
+export { getEmbaseOverrideBlock, getEmbaseStrandOverride } from "./embaseOverrides.js";
+export { collapseSignFilterToOrLine, isSignBooleanLine } from "./signFilterUtils.js";
 
 export {
   SIGN_FILTERS,

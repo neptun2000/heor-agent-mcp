@@ -1,5 +1,7 @@
 # HEORAgent MCP Server
 
+[![MCP Toplist](https://mcptoplist.com/badge/io.github.neptun2000%2Fheor-agent.svg)](https://mcptoplist.com/server/io.github.neptun2000%2Fheor-agent)
+
 [![npm version](https://img.shields.io/npm/v/heor-agent-mcp.svg)](https://www.npmjs.com/package/heor-agent-mcp)
 [![license](https://img.shields.io/npm/l/heor-agent-mcp.svg)](./LICENSE)
 [![node](https://img.shields.io/node/v/heor-agent-mcp.svg)](https://nodejs.org)
